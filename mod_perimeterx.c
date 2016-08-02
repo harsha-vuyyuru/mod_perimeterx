@@ -245,7 +245,6 @@ request_context* create_context(request_rec *req, char *ip_header_key) {
     }
 
     status = ap_cookie_read(req, "_pxCaptcha", &px_captcha_cookie, 0);
-    INFO(req->server, "PXCaptcha cookie was found: %s", px_captcha_cookie);
     if (status != APR_SUCCESS) {
         px_captcha_cookie = NULL;
     }
@@ -479,7 +478,6 @@ bool px_should_handle_request(request_rec *r, px_config *conf) {
     }
     return true;
 }
-
 
 static int perimeterx_handler(request_rec *r) {
     bool request_valid = true;

@@ -287,4 +287,3 @@ char *do_request(const char *url, const char *payload, const char *auth_header, 
     }
     return NULL;
 }
-
