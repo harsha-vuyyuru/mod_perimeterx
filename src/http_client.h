@@ -8,7 +8,6 @@ const char *RISK_API_URL = "http://collector.perimeterx.net/api/v1/risk";
 const char *CAPTHCA_API_URL = "http://collector.perimeterx.net/api/v1/risk/captcha";
 const char *ACTIVITIES_URL = "http://collector.perimeterx.net/api/v1/collector/s2s";
 
-// TODO: change name
 struct response_t {
     char* data;
     size_t size;

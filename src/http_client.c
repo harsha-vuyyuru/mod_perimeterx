@@ -4,6 +4,7 @@
 #include <jansson.h>
 #include <jansson_config.h>
 
+#include "apr_strings.h"
 #include "types.h"
 #include "http_client.h"
 
@@ -172,14 +173,17 @@ char *create_activity(char *activity_type, px_config *conf, request_context *ctx
 
     json_t *details = json_pack("{s:i, s:s, s:s, s:s, s:s}", "block_score", ctx->score, "block_reason", block_reason_string(ctx->block_reason), "http_method", ctx->http_method, "http_version", ctx->http_version, "module_version", conf->module_version);
 
-    json_object_set(activity, "deatils", details);
+    json_object_set(activity, "details", details);
 
     j_headers = json_object();
+    void **ptrs = apr_palloc(ctx->r->pool, sizeof(void*) *header_arr->nelts);
+    int i;
     // Extract all headers and jsonfy it
-    for (int i = 0; i < header_arr->nelts; i++) {
+    for (i = 0; i < header_arr->nelts; i++) {
         h = APR_ARRAY_IDX(header_arr, i, apr_table_entry_t);
         json_t *j_header = json_string(h.val);
         json_object_set(j_headers, h.key, j_header);
+        ptrs[i] = j_header;
     }
 
     header_arr = apr_table_elts(ctx->headers);
@@ -188,6 +192,9 @@ char *create_activity(char *activity_type, px_config *conf, request_context *ctx
 
     if (j_vid) {
         free(j_vid);
+    }
+    for (i = 0; i < header_arr->nelts; i++) {
+        free(ptrs[i]);
     }
     free(j_headers);
     free(details);

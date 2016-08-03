@@ -39,8 +39,6 @@ int decode_base64(char *s, unsigned char **o, int *len, apr_pool_t *p) {
     BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
     *len = BIO_read(bio, *o, l);
     BIO_free_all(b64);
-    /*BIO_set_close();*/
-    //BIO_free(bio);//
     return 0;
 }
 
@@ -70,21 +68,19 @@ void digest(risk_cookie *cookie, request_context *ctx, const char *cookie_key, c
         HMAC_Update(&hmac, cookie->vid, strlen(cookie->vid));
     }
 
-    int i = 0;
+    int i;
     for (i = 0; i < sign_fields_size; i++) {
         HMAC_Update(&hmac, signing_fields[i], strlen(signing_fields[i]));
     }
 
     HMAC_Final(&hmac, hash, &len);
 
-    for(int i = 0; i < 32; i++) {
+    for(i = 0; i < 32; i++) {
         sprintf(buffer + (i * 2), "%02x", hash[i]);
     }
-    //HMAC_CTX_cleanup(&ctx);
 }
 
 validation_result_t validate_cookie(risk_cookie *cookie, request_context *ctx, const char *cookie_key) {
-    //INFO(" in validate cookie " );
     if (cookie == NULL) {
         INFO(ctx->r->server, "cookie validation: NO COOKIE");
         return NULL_COOKIE;
@@ -150,7 +146,7 @@ risk_cookie *parse_risk_cookie(const char *raw_cookie, request_context *ctx) {
 
     cookie->a = apr_psprintf(ctx->r->pool, "%d", a_val);
     cookie->b = apr_psprintf(ctx->r->pool, "%d", a_val);
-    cookie->timestamp = apr_psprintf(ctx->r->pool, "%lld", ts);
+    cookie->timestamp = apr_psprintf(ctx->r->pool, "%ld", ts);
 
     INFO(ctx->r->server,"cookie data: timestamp %s, vid %s, uuid %s hash %s scores: a %s b %s", cookie->timestamp, cookie->vid, cookie->uuid, cookie->hash, cookie->a, cookie->b);
 
@@ -162,6 +158,12 @@ risk_cookie *parse_risk_cookie(const char *raw_cookie, request_context *ctx) {
     free(j_cookie);
 
     return cookie;
+}
+
+void handle_error(request_context *r_ctx, EVP_CIPHER_CTX *ctx, const char *phase) {
+    ERROR(r_ctx->r->server, "Decryption failed in: %s", phase);
+    ERR_free_strings();
+    EVP_CIPHER_CTX_free(ctx);
 }
 
 risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, request_context *r_ctx) {
@@ -210,25 +212,21 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
     memcpy((void*)iv, pbdk2_out+sizeof(key), sizeof(iv));
 
     // decrypt aes-256-cbc
-    // TODO: clean everything after error!!
     EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
     if (EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv) != 1) {
-        ERROR(r_ctx->r->server, "EVP_DecryptInit_ex failed!");
-        EVP_CIPHER_CTX_free(ctx);
+        handle_error(r_ctx, ctx, "Init");
         return NULL;
     }
     unsigned char *dpayload = apr_palloc(r_ctx->r->pool, payload_len);
     int len;
     int dpayload_len;
     if (EVP_DecryptUpdate(ctx, dpayload, &len, payload, payload_len) != 1) {
-        ERROR(r_ctx->r->server, "EVP_DecryptUpdate failed!");
-        EVP_CIPHER_CTX_free(ctx);
+        handle_error(r_ctx, ctx, "Update");
         return NULL;
     }
     dpayload_len = len;
     if (EVP_DecryptFinal_ex(ctx, dpayload + len, &len) != 1) {
-        ERROR(r_ctx->r->server, "EVP_DecryptFinal_ex failed!");
-        EVP_CIPHER_CTX_free(ctx);
+        handle_error(r_ctx, ctx, "Final");
         return NULL;
     }
 

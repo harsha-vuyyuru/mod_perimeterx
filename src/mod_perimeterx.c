@@ -261,8 +261,7 @@ request_context* create_context(request_rec *req, const char *ip_header_key) {
     if (px_captcha_cookie) {
         INFO(req->server, "PXCaptcha cookie was found");
         char *saveptr;
-        px_captcha_cookie = (char*) px_captcha_cookie;
-        ctx->px_captcha = (const char*)apr_strtok(px_captcha_cookie, ":", &saveptr);
+        ctx->px_captcha = apr_strtok(px_captcha_cookie, ":", &saveptr);
         ctx->vid = (const char*)apr_strtok(NULL, "", &saveptr);
     }
 
@@ -297,7 +296,9 @@ risk_response* risk_api_verify(const request_context *ctx, const px_config *conf
 
     risk_response = parse_risk_response(risk_response_str, ctx);
 
-    free(risk_response_str);
+    if (risk_response_str) {
+        free(risk_response_str);
+    }
     return risk_response;
 }
 
@@ -384,7 +385,10 @@ bool verify_captcha(const request_context *ctx, px_config *conf) {
     char *payload = create_captcha_payload(ctx, conf);
     char *response_str = captcha_validation_request(payload, conf->auth_header, ctx->r, conf->curl);
     captcha_response *c = parse_captcha_response(response_str, ctx);
-    free(response_str);
+
+    if (response_str) {
+        free(response_str);
+    }
 
     /*if (ap_cookie_write(ctx->r, "_pxCaptcha", "", NULL,  0L, NULL) != APR_SUCCESS) {
         ERROR(ctx->r->server, "Could not write _pxCaptcha empty value");
