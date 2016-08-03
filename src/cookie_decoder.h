@@ -15,7 +15,7 @@
 #include "types.h"
 
 validation_result_t validate_cookie(risk_cookie *cookie, request_context *ctx, const char *cookie_key);
-risk_cookie *decode_cookie(const char *px_cookie, char *cookie_key, request_context *ctx); // check if request conetxt is needed
+risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, request_context *ctx); // check if request conetxt is needed
 void free_cookie(risk_cookie *cookie);
 
 #endif

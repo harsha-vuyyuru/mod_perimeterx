@@ -11,7 +11,7 @@ typedef struct px_config_t {
     const char *app_id;
     const char *cookie_key;
     const char *auth_token;
-    char *ip_header_key;
+    const char *ip_header_key;
     char *auth_header;
     bool module_enabled;
     bool captcha_enabled;
@@ -21,7 +21,6 @@ typedef struct px_config_t {
     bool send_page_activities;
     CURL* curl;
     char *module_version;
-    const char *block_page;
 } px_config;
 
 typedef enum {
@@ -66,24 +65,24 @@ typedef struct risk_response_t {
 
 typedef struct captcha_response_t {
     int status;
-    char *uuid;
-    char *vid;
-    char *cid;
+    const char *uuid;
+    const char *vid;
+    const char *cid;
 } captcha_response;
 
 typedef struct request_context_t {
-    char *px_cookie;
-    char *px_captcha;
-    char *ip;
-    char *vid;
+    const char *px_cookie;
+    const char *px_captcha;
+    const char *ip;
+    const char *vid;
     char * uuid;
     apr_table_t *headers;
-    char *hostname;
+    const char *hostname;
     char *uri;
-    char *useragent;
-    char *full_url;
-    char *http_method;
-    char *http_version;
+    const char *useragent;
+    const char *full_url;
+    const char *http_method;
+    const char *http_version;
     int   score;
     block_reason_t block_reason;
     s2s_call_reason_t call_reason;

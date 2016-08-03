@@ -28,7 +28,8 @@
     ap_log_error(APLOG_MARK, APLOG_ERR, 0, server_rec, \
             "[mod_perimeterx]:" __VA_ARGS__)
 
-int decode_base64(const char *s, unsigned char **o, int *len, apr_pool_t *p) {
+
+int decode_base64(char *s, unsigned char **o, int *len, apr_pool_t *p) {
     int l = strlen(s);
     *o = (unsigned char*)apr_palloc(p, (l * 3 + 1));
     BIO *bio = BIO_new_mem_buf(s, -1);
@@ -43,7 +44,7 @@ int decode_base64(const char *s, unsigned char **o, int *len, apr_pool_t *p) {
     return 0;
 }
 
-void digest(risk_cookie *cookie, request_context *ctx, char *cookie_key, char **signing_fields, int sign_fields_size, char buffer[65]) {
+void digest(risk_cookie *cookie, request_context *ctx, const char *cookie_key, const char **signing_fields, int sign_fields_size, char buffer[65]) {
     unsigned char hash[32];
 
     HMAC_CTX hmac;
@@ -83,6 +84,7 @@ void digest(risk_cookie *cookie, request_context *ctx, char *cookie_key, char **
 }
 
 validation_result_t validate_cookie(risk_cookie *cookie, request_context *ctx, const char *cookie_key) {
+    //INFO(" in validate cookie " );
     if (cookie == NULL) {
         INFO(ctx->r->server, "cookie validation: NO COOKIE");
         return NULL_COOKIE;
@@ -102,7 +104,7 @@ validation_result_t validate_cookie(risk_cookie *cookie, request_context *ctx, c
     }
 
     char signature[65];
-    char *signing_fields[2] = { ctx->useragent } ;
+    const char *signing_fields[1] = { ctx->useragent } ;
     digest(cookie, ctx, cookie_key, signing_fields, 1, signature);
 
     if (memcmp(signature, cookie->hash, 64) != 0) {
@@ -148,17 +150,9 @@ risk_cookie *parse_risk_cookie(const char *raw_cookie, request_context *ctx) {
 
     cookie->a = apr_psprintf(ctx->r->pool, "%d", a_val);
     cookie->b = apr_psprintf(ctx->r->pool, "%d", a_val);
-    cookie->timestamp = apr_psprintf(ctx->r->pool, "%ld", ts);
+    cookie->timestamp = apr_psprintf(ctx->r->pool, "%lld", ts);
 
-    INFO(ctx->r->server,"COOKIE DUMP");
-    INFO(ctx->r->server,"timestamp %s", cookie->timestamp);
-    INFO(ctx->r->server,"ts %ld", cookie->ts);
-    INFO(ctx->r->server,"vid %s", cookie->vid);
-    INFO(ctx->r->server,"uuid %s", cookie->uuid);
-    INFO(ctx->r->server,"hash %s", cookie->hash);
-    INFO(ctx->r->server,"a %s", cookie->a);
-    INFO(ctx->r->server,"b %s", cookie->b);
-    INFO(ctx->r->server,"END COOKIE DUMP");
+    INFO(ctx->r->server,"cookie data: timestamp %s, vid %s, uuid %s hash %s scores: a %s b %s", cookie->timestamp, cookie->vid, cookie->uuid, cookie->hash, cookie->a, cookie->b);
 
     free(h);
     free(v);
@@ -170,7 +164,7 @@ risk_cookie *parse_risk_cookie(const char *raw_cookie, request_context *ctx) {
     return cookie;
 }
 
-risk_cookie *decode_cookie(const char *px_cookie, char *cookie_key, request_context *r_ctx) {
+risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, request_context *r_ctx) {
 
     if (px_cookie == NULL) {
         return NULL;

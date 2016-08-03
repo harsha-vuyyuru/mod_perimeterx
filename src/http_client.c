@@ -10,7 +10,7 @@
 #define JSON_CONTENT_TYPE "Content-Type: application/json"
 #define EXPECT_HEADER "Expect:"
 
-char *do_request(const char *url, const char *payload, const char *auth_header, request_rec *r, CURL *curl); 
+char *do_request(const char *url, char *payload, char *auth_header, request_rec *r, CURL *curl); 
 
 static const char *s2s_call_reason_string(s2s_call_reason_t r) {
     static const char *call_reasons[] = { "none", "no_cookie", "expired_cookie", "invalid_cookie"};
@@ -46,7 +46,7 @@ json_t *header_to_json(const char *key, const char *value) {
     return h;
 }
 
-json_t *headers_to_json(apr_array_header_t *arr) {
+json_t *headers_to_json(const apr_array_header_t *arr) {
     int i;
     json_t *j_headers;
     apr_table_entry_t h;
@@ -73,12 +73,12 @@ void free_headers_json(json_t *j_headers) {
     }
 }
 
-char *create_captcha_payload(const request_context *ctx, const px_config *conf) {
+char *create_captcha_payload(const request_context *ctx, px_config *conf) {
     json_t *j_vid = NULL, *j_pxcaptcha = NULL, *j_hostname = NULL;
 
     json_t *root = json_object();
     json_t *request = json_pack("{s:s, s:s , s:s}", "ip", ctx->ip, "uri", ctx->uri, "url", ctx->full_url);
-    apr_array_header_t *header_arr = apr_table_elts(ctx->headers);
+    const apr_array_header_t *header_arr = apr_table_elts(ctx->headers);
     json_t *j_headers = headers_to_json(header_arr);
     json_object_set(request, "headers", j_headers);
     json_object_set(root, "request", request);
@@ -116,13 +116,13 @@ char *create_captcha_payload(const request_context *ctx, const px_config *conf) 
     return payload;
 }
 
-char* create_risk_payload(const request_context *ctx, const px_config *conf) {
+char *create_risk_payload(const request_context *ctx, const px_config *conf) {
     json_t *j_headers, *j_data, *request, *j_header, *j_vid = NULL, *j_additional, *j_px_cookie = NULL;
 
     j_data = json_pack("{s:s,s:s,s:s}" , "ip", ctx->ip, "uri", ctx->uri, "url", ctx->full_url);
     request = json_object();
 
-    apr_array_header_t *header_arr = apr_table_elts(ctx->headers);
+    const apr_array_header_t *header_arr = apr_table_elts(ctx->headers);
     j_headers = headers_to_json(header_arr);
     json_object_set(request, "request", j_data);
     json_object_set(j_data, "headers", j_headers);
@@ -157,13 +157,12 @@ char* create_risk_payload(const request_context *ctx, const px_config *conf) {
     return request_str;
 }
 
-char *create_activity(const char *activity_type, const px_config *conf, request_context *ctx) {
+char *create_activity(char *activity_type, px_config *conf, request_context *ctx) {
     apr_table_entry_t h;
     json_t *j_vid = NULL, *j_headers;
     // TODO: headers could be generated only once and saved on the struct
-    apr_array_header_t *header_arr = apr_table_elts(ctx->headers);
+    const apr_array_header_t *header_arr = apr_table_elts(ctx->headers);
 
-    // TODO: Filter headers
     json_t *activity = json_pack("{s:s, s:s, s:s, s:s}", "type", activity_type, "socket_ip", ctx->ip, "url", ctx->full_url, "px_app_id", conf->app_id);
 
     if (ctx->vid) {
@@ -177,11 +176,9 @@ char *create_activity(const char *activity_type, const px_config *conf, request_
 
     j_headers = json_object();
     // Extract all headers and jsonfy it
-    char *j_ptrs = apr_palloc(ctx->r->pool, header_arr->nelts * sizeof(char*));
     for (int i = 0; i < header_arr->nelts; i++) {
         h = APR_ARRAY_IDX(header_arr, i, apr_table_entry_t);
         json_t *j_header = json_string(h.val);
-        j_ptrs[i] = j_header;
         json_object_set(j_headers, h.key, j_header);
     }
 
@@ -198,7 +195,7 @@ char *create_activity(const char *activity_type, const px_config *conf, request_
     return request_str;
 }
 
-captcha_response *parse_captcha_response(const char* captcha_response_str, const request_context *ctx) {
+captcha_response *parse_captcha_response(char* captcha_response_str, const request_context *ctx) {
     json_error_t j_error;
 
     json_t *j_response = json_loads(captcha_response_str, JSON_DECODE_ANY, &j_error);
@@ -210,15 +207,15 @@ captcha_response *parse_captcha_response(const char* captcha_response_str, const
     json_t *j_vid = json_object_get(j_response, "vid");
     json_t *j_cid = json_object_get(j_response, "cid");
 
-    parsed_response->uuid = json_string(j_uuid);
-    parsed_response->status = json_string(j_status);
-    parsed_response->vid = json_string(j_vid);
-    parsed_response->cid = json_string(j_cid);
+    parsed_response->uuid = json_string_value(j_uuid);
+    parsed_response->status = json_integer_value(j_status);
+    parsed_response->vid = json_string_value(j_vid);
+    parsed_response->cid = json_string_value(j_cid);
 
     return parsed_response;
 }
 
-risk_response* parse_risk_response(const char* risk_response_str, const request_context *ctx) {
+risk_response* parse_risk_response(char* risk_response_str, const request_context *ctx) {
     json_error_t j_error;
 
     // TODO : check error
@@ -244,22 +241,22 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
     return parsed_response;
 }
 
-char* risk_api_request(const char *risk_payload, const char *auth_header, request_rec *r, CURL *curl) {
+char* risk_api_request(char *risk_payload, char *auth_header, request_rec *r, CURL *curl) {
     return do_request(RISK_API_URL, risk_payload, auth_header, r, curl);
 }
 
-int send_activity(const char* activity, const char* auth_header, request_rec *r, CURL *curl) {
+int send_activity(char* activity, char* auth_header, request_rec *r, CURL *curl) {
     return do_request(ACTIVITIES_URL, activity, auth_header, r, curl) != NULL ? REQ_SUCCESS : REQ_FAILED;
 }
 
-char* captcha_validation_request(const char *captcha_payload, const char *auth_header,  request_rec *r, CURL *curl) {
+char* captcha_validation_request(char *captcha_payload, char *auth_header,  request_rec *r, CURL *curl) {
     return do_request(CAPTHCA_API_URL ,captcha_payload, auth_header, r, curl);
 }
 
 // General function to make http request to px servers
-char *do_request(const char *url, const char *payload, const char *auth_header, request_rec *r, CURL *curl) {
+char *do_request(const char *url, char *payload, char *auth_header, request_rec *r, CURL *curl) {
     struct response_t response;
-    struct curl_slit *headers = NULL;
+    struct curl_slist *headers = NULL;
     long status_code;
     CURLcode res;
 

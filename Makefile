@@ -9,4 +9,4 @@ clean:
 	rm -rf *.out
 
 mod:
-	apxs -i -a -c `pkg-config --cflags --libs jansson openssl` -lm -lcurl mod_perimeterx.c cookie_decoder.c
+	apxs -i -a -c `pkg-config --cflags --libs jansson openssl` -lm -lcurl src/mod_perimeterx.c src/cookie_decoder.c

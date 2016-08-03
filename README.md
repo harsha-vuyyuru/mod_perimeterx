@@ -27,6 +27,19 @@ $ cd mod_perimeterx
 $ make
 $ apache2ctl restart
 ```
+#####Verify installation by listing all installed modules:
+
+```shell
+$ apache2ctrl -M
+Loaded Modules:
+ core_module (static)
+ so_module (static)
+ watchdog_module (static)
+ http_module (static)
+ ...
+ perimeterx_module (shared)
+```
+
 ## Directives ##
 
 The directives should be under the server configuration.
@@ -45,6 +58,10 @@ configure the cookie key.
 configure perimeterx API auth token.
 ### `BlockingScore` ###
 Minimal score for blocking request, default to 70.
+
+### `Captcha` ###
+
+When On the blocking page served by this module will include captcha.
 
 ### `ReportPageRequest` ###
 
@@ -69,32 +86,4 @@ In order to extract the real client IP we can define a specific header key. If n
 	ReportPageRequest On
 	IPHeader X-Forwarded-For
 </IfModule>
-```
-
-## Block request ##
-
-To configure blocking request that are not validated by mod_perimeterx.
-
-##### $(apache_dir)/apach2.conf:
-```xml
-<Directory /var/www/> # For example
-     Options Indexes FollowSymLinks
-     AllowOverride None
-     Require all granted
-     SetEnvIf BLOCK true block # BLOCK is set by perimeterx module
-     Deny from env=block 		 # deny all requests marked BLOCK
-</Directory>
-```
-
-## Blocking page ##
-
-Under the virtual host you should define ```block.html``` as the perimeterx block page.
-
-##### sites-enables/your.site.config
-
-```xml
-<VirtualHost>
-	...
-	ErrorDocument 403 /block.html  # page should be copied to DocumentRoot 
-</VirtualHost>
 ```

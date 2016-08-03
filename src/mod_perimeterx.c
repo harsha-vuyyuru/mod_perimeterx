@@ -9,6 +9,7 @@
 #include "ap_config.h"
 #include "ap_provider.h"
 #include "http_request.h"
+#include "util_cookies.h"
 
 #include "types.h"
 
@@ -64,7 +65,7 @@ static const command_rec px_directives[] = {
             OR_ALL,
             "Turn on mod_px"),
     AP_INIT_FLAG(
-            "CaptchaEnabled",
+            "Captcha",
             set_captcha_enabled,
             NULL,
             OR_ALL,
@@ -227,18 +228,16 @@ static const char *set_ip_header(cmd_parms *cmd, void *dir_config, const char *i
     return NULL;
 }
 
-request_context* create_context(request_rec *req, char *ip_header_key) {
+request_context* create_context(request_rec *req, const char *ip_header_key) {
 
     request_context *ctx;
-    char *px_cookie;
-    char *px_captcha_cookie;
-    char *useragent;
+    const char *px_cookie;
+    const char *px_captcha_cookie;
+    const char *useragent;
     char *captcha, *vid;
 
     ctx = (request_context*) apr_palloc(req->pool, sizeof(request_context));
-    memset(ctx, 0, sizeof(request_context));
     apr_status_t status = ap_cookie_read(req, "_px", &px_cookie, 0);
-    INFO(req->server, "PX Cookie: %s", px_cookie);
 
     if (status != APR_SUCCESS) {
         px_cookie = NULL;
@@ -262,13 +261,11 @@ request_context* create_context(request_rec *req, char *ip_header_key) {
     if (px_captcha_cookie) {
         INFO(req->server, "PXCaptcha cookie was found");
         char *saveptr;
-        ctx->px_captcha = apr_strtok(px_captcha_cookie, ":", &saveptr);
-        ctx->vid = apr_strtok(NULL, "", &saveptr);
-        INFO(req->server, "c: %s, vid: %", ctx->px_captcha, ctx->vid);
-        //init_captcha_cookie_and_vid(px_captcha_cookie, ctx->px_captcha, ctx->vid, req);
+        px_captcha_cookie = (char*) px_captcha_cookie;
+        ctx->px_captcha = (const char*)apr_strtok(px_captcha_cookie, ":", &saveptr);
+        ctx->vid = (const char*)apr_strtok(NULL, "", &saveptr);
     }
 
-    // TODO: change the way we are handling this, handle null case
     char *version = NULL;
     char *saveptr;
     char *delim = "/";
@@ -293,7 +290,7 @@ risk_response* risk_api_verify(const request_context *ctx, const px_config *conf
     risk_payload = create_risk_payload(ctx, conf);
 
     INFO(ctx->r->server, "risk payload: %s", risk_payload);
-    risk_response_str = risk_api_request(risk_payload, conf->auth_header, ctx->r->pool, conf->curl);
+    risk_response_str = risk_api_request(risk_payload, conf->auth_header, ctx->r, conf->curl);
     if (risk_response_str == NULL) {
         return NULL;
     }
@@ -318,79 +315,82 @@ void set_call_reason(request_context *ctx, validation_result_t vr) {
     }
 }
 
-char *get_blocking_page() {
-    return "<html lang='en'> \
-        <head> \
-        <link type='text/css' rel='stylesheet' media='screen, print' href='//fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800'> \
-        <meta charset='UTF-8'> \
-        <title>Access to This Page Has Been Blocked</title> \
-        <style> p { width: 60%; margin: 0 auto; font-size: 35px; } body { background-color: #a2a2a2; font-family: 'Open Sans'; margin: 5%; } img { width: 180px; } a { color: #2020B1; text-decoration: blink; } a:hover { color: #2b60c6; } </style> \
-        </head> \
-        <body cz-shortcut-listen='true'> \
-        <div><img src='http://storage.googleapis.com/instapage-thumbnails/035ca0ab/e94de863/1460594818-1523851-467x110-perimeterx.png'> </div> \
-        <span style='color: white; font-size: 34px;'>Access to This Page Has Been Blocked</span> \
-        <div style='font-size: 24px;color: #000042;'> \
-        <br> Access is blocked according to the site security policy.<br> Your browsing behaviour fingerprinting made us think you may be a bot. <br> <br> This may happen as a result of the following: <ul> \ 
-        <li>JavaScript is disabled or not running properly.</li> \
-        <li>Your browsing behaviour fingerprinting are not likely to be a regular user.</li> \
-        </ul> \
-        To read more about the bot defender solution: <a href='https://www.perimeterx.com/bot-defender'>https://www.perimeterx.com/bot-defender</a><br> If you think the blocking was done by mistake, contact the site administrator. <br> \
-        </div> \
-        </body> \
-        </html>";
+int get_blocking_page(request_context *ctx, char *buffer) {
+    return sprintf(buffer, "<html lang=\"en\">\n\
+               <head>\n\
+                  <link type=\"text/css\" rel=\"stylesheet\" media=\"screen, print\" href=\"//fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800\">\n\
+                  <meta charset=\"UTF-8\">\n\
+                  <title>Access to This Page Has Been Blocked</title>\n\
+                  <style> p { width: 60%; margin: 0 auto; font-size: 35px; } body { background-color: #a2a2a2; font-family: \"Open Sans\"; margin: 5%; } img { width: 180px; } a { color: #2020B1; text-decoration: blink; } a:hover { color: #2b60c6; } </style>\n\
+               </head>\n\
+               <body cz-shortcut-listen=\"true\">\n\
+                  <div><img src=\"http://storage.googleapis.com/instapage-thumbnails/035ca0ab/e94de863/1460594818-1523851-467x110-perimeterx.png\"> </div>\n \
+                  <span style=\"color: white; font-size: 34px;\">Access to This Page Has Been Blocked</span> \n\
+                  <div style=\"font-size: 24px;color: #000042;\">\n\
+                     <br> Access to '%s' is blocked according to the site security policy.<br> Your browsing behaviour fingerprinting made us think you may be a bot. <br> <br> This may happen as a result of the following: \n\
+                     <ul>\n\
+                        <li>JavaScript is disabled or not running properly.</li>\n\
+                        <li>Your browsing behaviour fingerprinting are not likely to be a regular user.</li>\n\
+                     </ul>\n\
+                     To read more about the bot defender solution: <a href=\"https://www.perimeterx.com/bot-defender\">https://www.perimeterx.com/bot-defender</a><br> If you think the blocking was done by mistake, contact the site administrator. <br> \n\
+                     <br><span style=\"font-size: 20px;\">Block Reference: <span style=\"color: #525151;\">#'%s'</span></span> \n\
+                  </div>\n\
+               </body>\n\
+            </html>", ctx->full_url, ctx->uuid);
 }
 
-// TODO: read from file on module load
-void get_captcha_blocking_page(request_context *ctx, char *buffer) {
-    return sprintf(buffer, "<html lang=\"en\">\n \ 
-           <head>\n \
-              <link type=\"text/css\" rel=\"stylesheet\" media=\"screen, print\" href=\"//fonts.googleapis.com/css?family=Open\Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800\">\n\
-              <meta charset=\"UTF-8\">\n \
-              <title>Access to This Page Has Been Blocked</title>\n \
-              <style> p { width: 60%; margin: 0 auto; font-size: 35px; } body { background-color: #a2a2a2; font-family: \"Open Sans\"; margin: 5%; } img { width: 180px; } a { color: #2020B1; text-decoration: blink; } a:hover { color: #2b60c6; } </style>\n \
-              <script src=\"https://www.google.com/recaptcha/api.js\"></script> \
-              <script> \
-                   window.px_vid = '%s';\n \
-                   function handleCaptcha(response) { \n \
-                       var name = '_pxCaptcha';\n \
-                       var expiryUtc = new Date(Date.now() + 1000 * 10).toUTCString();\n \
-                       var cookieParts = [name, '=', response + ':' + window.px_vid, '; expires=', expiryUtc, '; path=/'];\n \
-                       document.cookie = cookieParts.join('');\n \
-                       location.reload();\n \
-                   }\n \
-           </script> \n \
-           </head>\n \
-           <body cz-shortcut-listen=\"true\">\n \
-              <div><img src=\"http://storage.googleapis.com/instapage-thumbnails/035ca0ab/e94de863/1460594818-1523851-467x110-perimeterx.png\"> </div>\n \
-              <span style=\"color: white; font-size: 34px;\">Access to This Page Has Been Blocked</span> \n \
-              <div style=\"font-size: 24px;color: #000042;\">\n \
-                 <br> Access to '%s' is blocked according to the site security policy.<br> Your browsing behaviour fingerprinting made us think you may be a bot. <br> <br> This may happen as a result of the following: \n \
-                 <ul>\n \
+int get_captcha_blocking_page(request_context *ctx, char *buffer) {
+    return sprintf(buffer, "<html lang=\"en\">\n \
+            <head>\n \
+                <link type=\"text/css\" rel=\"stylesheet\" media=\"screen, print\" href=\"//fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800\">\n\
+                <meta charset=\"UTF-8\">\n \
+                <title>Access to This Page Has Been Blocked</title>\n \
+                <style> p { width: 60%; margin: 0 auto; font-size: 35px; } body { background-color: #a2a2a2; font-family: \"Open Sans\"; margin: 5%; } img { width: 180px; } a { color: #2020B1; text-decoration: blink; } a:hover { color: #2b60c6; } </style>\n \
+                <script src=\"https://www.google.com/recaptcha/api.js\"></script> \
+                <script> \
+                    window.px_vid = '%s';\n \
+                    function handleCaptcha(response) { \n \
+                        var name = '_pxCaptcha';\n \
+                        var expiryUtc = new Date(Date.now() + 1000 * 10).toUTCString();\n \
+                        var cookieParts = [name, '=', response + ':' + window.px_vid, '; expires=', expiryUtc, '; path=/'];\n \
+                        document.cookie = cookieParts.join('');\n \
+                        location.reload();\n \
+                    }\n \
+                </script> \n \
+            </head>\n \
+                <body cz-shortcut-listen=\"true\">\n \
+                <div><img src=\"http://storage.googleapis.com/instapage-thumbnails/035ca0ab/e94de863/1460594818-1523851-467x110-perimeterx.png\"> </div>\n \
+                <span style=\"color: white; font-size: 34px;\">Access to This Page Has Been Blocked</span> \n \
+                <div style=\"font-size: 24px;color: #000042;\">\n \
+                <br> Access to '%s' is blocked according to the site security policy.<br> Your browsing behaviour fingerprinting made us think you may be a bot. <br> <br> This may happen as a result of the following: \n \
+                <ul>\n \
                     <li>JavaScript is disabled or not running properly.</li>\n \
                     <li>Your browsing behaviour fingerprinting are not likely to be a regular user.</li>\n \
-                 </ul>\n \
-                 To read more about the bot defender solution: <a href=\"https://www.perimeterx.com/bot-defender\">https://www.perimeterx.com/bot-defender</a><br> If you think the blocking was done by mistake, contact the site administrator. <br> \n \
-                 <div class=\"g-recaptcha\" data-sitekey=\"6Lcj-R8TAAAAABs3FrRPuQhLMbp5QrHsHufzLf7b\" data-callback=\"handleCaptcha\" data-theme=\"dark\"></div>\n \
-                 <br><span style=\"font-size: 20px;\">Block Reference: <span style=\"color: #525151;\">#' %s '</span></span> \n \
-              </div>\n \
-           </body>\n \
-        </html>", ctx->vid, ctx->full_url, ctx->uuid);
+                </ul>\n \
+                To read more about the bot defender solution: <a href=\"https://www.perimeterx.com/bot-defender\">https://www.perimeterx.com/bot-defender</a><br> If you think the blocking was done by mistake, contact the site administrator. <br> \n \
+                <div class=\"g-recaptcha\" data-sitekey=\"6Lcj-R8TAAAAABs3FrRPuQhLMbp5QrHsHufzLf7b\" data-callback=\"handleCaptcha\" data-theme=\"dark\"></div>\n \
+                <br><span style=\"font-size: 20px;\">Block Reference: <span style=\"color: #525151;\">#' %s '</span></span> \n \
+                </div>\n \
+            </body>\n \
+            </html>", ctx->vid, ctx->full_url, ctx->uuid);
 }
 
-bool verify_captcha(request_context *ctx, px_config *conf) {
+bool verify_captcha(const request_context *ctx, px_config *conf) {
     bool res = false;
-    // TODO: move init vid here
     if (!ctx->px_captcha) {
-        //TODO: change some
-        INFO(ctx->r->server, "NO px_captca found, returning false");
+        INFO(ctx->r->server, "NO _pxCaptca cookie found, captcha verification failed");
         return res;
     }
-    INFO(ctx->r->server, "Verifying this captcha: %s", ctx->px_captcha);
     char *payload = create_captcha_payload(ctx, conf);
     char *response_str = captcha_validation_request(payload, conf->auth_header, ctx->r, conf->curl);
     captcha_response *c = parse_captcha_response(response_str, ctx);
     free(response_str);
-    // TODO: should delete captcha cookie
+
+    /*if (ap_cookie_write(ctx->r, "_pxCaptcha", "", NULL,  0L, NULL) != APR_SUCCESS) {
+        ERROR(ctx->r->server, "Could not write _pxCaptcha empty value");
+    }*/
+
+    //INFO(ctx->r->server, "finished setting cookie new");
     if (c) {
         res = c->status == 0;
         INFO(ctx->r->server, "Cookie validation status: %d", res);
@@ -415,17 +415,20 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
     risk_response *risk_response;
 
     if (conf->captcha_enabled && ctx->px_captcha) {
-        if(verify_captcha(ctx, conf)) {
+        if (verify_captcha(ctx, conf)) {
             post_verification(ctx, conf, true);
             return request_valid;
         }
     }
 
+    validation_result_t vr = NULL_COOKIE;
     risk_cookie *c = decode_cookie(ctx->px_cookie, conf->cookie_key, ctx);
-    ctx->score = c->b_val;
-    ctx->vid = c->vid;
-    ctx->uuid = c->uuid;
-    validation_result_t vr = validate_cookie(c, ctx, conf->cookie_key);
+    if (c) {
+        ctx->score = c->b_val;
+        ctx->vid = c->vid;
+        ctx->uuid = c->uuid;
+        vr = validate_cookie(c, ctx, conf->cookie_key);
+    }
     switch (vr) {
         case VALID:
             request_valid = ctx->score < conf->blocking_score;
@@ -437,7 +440,7 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
         case INVALID:
         case EXPIRED:
             set_call_reason(ctx, vr);
-            risk_response = risk_api_verify(ctx, conf);
+            risk_response = risk_api_verify((const request_context*) ctx, conf);
             if (risk_response) {
                 ctx->score = risk_response->score;
                 request_valid = ctx->score < conf->blocking_score;
@@ -491,13 +494,17 @@ static int perimeterx_handler(request_rec *r) {
     }
 
     if (!request_valid) {
-        char *block_page = apr_palloc(r->pool, 2048);
-        get_captcha_blocking_page(ctx, block_page);
+        char *block_page = apr_palloc(r->pool, BUF_SIZE);
+        if (conf->captcha_enabled) {
+            get_captcha_blocking_page(ctx, block_page);
+        } else {
+            get_blocking_page(ctx, block_page);
+        }
         ap_rprintf(r, "%s", block_page);
         INFO(r->server, "Request Invalid");
         return DONE;
     }
-    INFO(r->server, "Request  Valid");
+    INFO(r->server, "Request Valid");
     return OK;
 }
 
@@ -522,6 +529,5 @@ static void *create_config(apr_pool_t *pool) {
     conf->captcha_enabled = false;
     conf->ip_header_key = NULL;
     conf->module_version = MODULE_ID;
-    conf->block_page = get_blocking_page();
     return conf;
 }
