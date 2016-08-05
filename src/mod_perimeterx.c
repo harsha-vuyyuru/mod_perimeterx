@@ -376,11 +376,11 @@ int get_captcha_blocking_page(request_context *ctx, char *buffer) {
             </html>", ctx->vid, ctx->full_url, ctx->uuid);
 }
 
-bool verify_captcha(const request_context *ctx, px_config *conf) {
-    bool res = false;
+bool verify_captcha(request_context *ctx, px_config *conf) {
+    bool captcha_verified = false;
     if (!ctx->px_captcha) {
         INFO(ctx->r->server, "NO _pxCaptca cookie found, captcha verification failed");
-        return res;
+        return captcha_verified;
     }
     char *payload = create_captcha_payload(ctx, conf);
     char *response_str = captcha_validation_request(payload, conf->auth_header, ctx->r, conf->curl);
@@ -394,12 +394,14 @@ bool verify_captcha(const request_context *ctx, px_config *conf) {
         ERROR(ctx->r->server, "Could not write _pxCaptcha empty value");
     }*/
 
-    //INFO(ctx->r->server, "finished setting cookie new");
     if (c) {
-        res = c->status == 0;
-        INFO(ctx->r->server, "Cookie validation status: %d", res);
+        captcha_verified = c->status == 0;
+        if (!captcha_verified) {
+            ctx->vid = NULL;
+        }
+        INFO(ctx->r->server, "Cookie validation status: %d", captcha_verified);
     }
-    return res;
+    return captcha_verified;
 }
 
 void post_verification(request_context *ctx, px_config *conf, bool request_valid) {
