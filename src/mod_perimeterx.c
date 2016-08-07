@@ -70,7 +70,7 @@ static const command_rec px_directives[] = {
             set_captcha_enabled,
             NULL,
             OR_ALL,
-            "Turn on mod_px"),
+            "Include captcha in the blocking page"),
     AP_INIT_TAKE1("AppID",
             set_app_id,
             NULL,
@@ -80,17 +80,12 @@ static const command_rec px_directives[] = {
             set_cookie_key,
             NULL,
             OR_ALL,
-            "PX Application ID"),
+            "Cookie decryption key"),
     AP_INIT_TAKE1("AuthToken",
             set_auth_token,
             NULL,
             OR_ALL,
-            "PX Application ID"),
-    AP_INIT_TAKE1("AuthToken",
-            set_auth_token,
-            NULL,
-            OR_ALL,
-            "PX Application ID"),
+            "Risk API auth token"),
     AP_INIT_TAKE1("BlockingScore",
             set_blocking_score,
             NULL,
@@ -100,7 +95,7 @@ static const command_rec px_directives[] = {
             set_api_timeout,
             NULL,
             OR_ALL,
-            "Set timeout for server to server request"),
+            "Set timeout for risk API request"),
     AP_INIT_FLAG( "ReportPageRequest",
             set_pagerequest_enabled,
             NULL,
@@ -304,11 +299,11 @@ risk_response* risk_api_verify(const request_context *ctx, const px_config *conf
 }
 
 
-bool verify_captcha(const request_context *ctx, px_config *conf) {
-    bool res = false;
+bool verify_captcha(request_context *ctx, px_config *conf) {
+    bool captcha_verified = false;
     if (!ctx->px_captcha) {
         INFO(ctx->r->server, "NO _pxCaptca cookie found, captcha verification failed");
-        return res;
+        return captcha_verified;
     }
     char *payload = create_captcha_payload(ctx, conf);
     char *response_str = captcha_validation_request(payload, conf->auth_header, ctx->r, conf->curl);
@@ -322,12 +317,14 @@ bool verify_captcha(const request_context *ctx, px_config *conf) {
         ERROR(ctx->r->server, "Could not write _pxCaptcha empty value");
     }*/
 
-    //INFO(ctx->r->server, "finished setting cookie new");
     if (c) {
-        res = c->status == 0;
-        INFO(ctx->r->server, "Cookie validation status: %d", res);
+        captcha_verified = c->status == 0;
+        if (!captcha_verified) {
+            ctx->vid = NULL;
+        }
+        INFO(ctx->r->server, "Cookie validation status: %d", captcha_verified);
     }
-    return res;
+    return captcha_verified;
 }
 
 static int perimeterx_handler(request_rec *r) {

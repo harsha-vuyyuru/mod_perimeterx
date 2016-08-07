@@ -75,7 +75,7 @@ typedef struct request_context_t {
     const char *px_cookie;
     const char *px_captcha;
     const char *ip;
-    const char *vid;
+    char *vid;
     char * uuid;
     apr_table_t *headers;
     const char *hostname;
