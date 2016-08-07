@@ -18,6 +18,14 @@
 #define ITERATIONS_UPPER_BOUND 10000
 #define ITERATIONS_LOWER_BOUND 0
 
+#define INFO(server_rec, ...) \
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server_rec, \
+            "[mod_perimeterx]: " __VA_ARGS__)
+
+#define ERROR(server_rec, ...) \
+    ap_log_error(APLOG_MARK, APLOG_ERR, 0, server_rec, \
+            "[mod_perimeterx]:" __VA_ARGS__)
+
 int decode_base64(char *s, unsigned char **o, int *len, apr_pool_t *p) {
     int l = strlen(s);
     *o = (unsigned char*)apr_palloc(p, (l * 3 + 1));

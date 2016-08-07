@@ -7,6 +7,16 @@ json_t *header_to_json(const char *key, const char *value);
 json_t *headers_to_json(const apr_array_header_t *arr);
 void free_headers_json(json_t *j_headers);
 
+static const char *s2s_call_reason_string(s2s_call_reason_t r) {
+    static const char *call_reasons[] = { "none", "no_cookie", "expired_cookie", "invalid_cookie"};
+    return call_reasons[r];
+}
+
+static const char *block_reason_string(block_reason_t r) {
+    static const char *block_reason[] = { "none", "cookie_high_score", "s2s_high_score" };
+    return block_reason[r];
+}
+
 char *create_captcha_payload(const request_context *ctx, px_config *conf) {
     json_t *j_vid = NULL, *j_pxcaptcha = NULL, *j_hostname = NULL;
 

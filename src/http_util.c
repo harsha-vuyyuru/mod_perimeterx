@@ -2,28 +2,35 @@
 #include <string.h>
 #include <curl/curl.h>
 
+#include "httpd.h"
+#include "http_config.h"
+#include "http_protocol.h"
+#include "ap_config.h"
+#include "ap_provider.h"
+#include "http_request.h"
+#include "http_log.h"
+#include "util_cookies.h"
 #include "apr_strings.h"
+
 #include "types.h"
 #include "http_util.h"
 
 #define JSON_CONTENT_TYPE "Content-Type: application/json"
 #define EXPECT_HEADER "Expect:"
 
+#define INFO(server_rec, ...) \
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server_rec, \
+            "[mod_perimeterx]: " __VA_ARGS__)
+
+#define ERROR(server_rec, ...) \
+    ap_log_error(APLOG_MARK, APLOG_ERR, 0, server_rec, \
+            "[mod_perimeterx]:" __VA_ARGS__)
+
 const char *RISK_API_URL = "http://collector.perimeterx.net/api/v1/risk";
 const char *CAPTHCA_API_URL = "http://collector.perimeterx.net/api/v1/risk/captcha";
 const char *ACTIVITIES_URL = "http://collector.perimeterx.net/api/v1/collector/s2s";
 
 char *do_request(const char *url, char *payload, char *auth_header, request_rec *r, CURL *curl);
-
-static const char *s2s_call_reason_string(s2s_call_reason_t r) {
-    static const char *call_reasons[] = { "none", "no_cookie", "expired_cookie", "invalid_cookie"};
-    return call_reasons[r];
-}
-
-static const char *block_reason_string(block_reason_t r) {
-    static const char *block_reason[] = { "none", "cookie_high_score", "s2s_high_score" };
-    return block_reason[r];
-}
 
 static size_t write_response_cb(void* contents, size_t size, size_t nmemb, void *stream) {
     size_t realsize = size * nmemb;

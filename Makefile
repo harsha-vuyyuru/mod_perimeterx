@@ -4,7 +4,7 @@ CFLAGS = -g -lm
 all: clean module
 
 module:
-	$(CC) -i -a -c `pkg-config --cflags --libs jansson` -I/usr/local/opt/openssl/include -L/usr/local/opt/openssl/lib -lm -lcurl src/mod_perimeterx.c src/cookie_decoder.c src/http_util.c src/json_util.c
+	$(CC) -i -a -c `pkg-config --cflags --libs jansson openssl libcurl` -lm src/mod_perimeterx.c src/perimeterx.c src/cookie_decoder.c src/http_util.c src/json_util.c 
 
 clean:
 	rm -rf *.o

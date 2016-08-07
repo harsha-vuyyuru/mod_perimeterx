@@ -4,27 +4,21 @@
 
 #include "httpd.h"
 #include "http_config.h"
-#include "http_log.h"
 #include "http_protocol.h"
 #include "ap_config.h"
 #include "ap_provider.h"
 #include "http_request.h"
 #include "util_cookies.h"
+#include "apr_strings.h"
+#include "http_log.h"
 
-#include "cookie_decoder.h"
+#include "perimeterx.h"
 #include "http_util.h"
 #include "json_util.h"
-#include "perimeterx.h"
 
 #ifndef APLOG_USE_MODULE
 APLOG_USE_MODULE(perimeterx);
 #endif
-
-#define BLOCKED_ACTIVITY_TYPE "block"
-#define PAGE_REQUESTED_ACTIVITY_TYPE "page_requested"
-#define EXT_ARR_SIZE 36
-#define MODULE_ID "Apache Module v1.0"
-#define BUF_SIZE 2048
 
 #define INFO(server_rec, ...) \
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server_rec, \
@@ -34,10 +28,9 @@ APLOG_USE_MODULE(perimeterx);
     ap_log_error(APLOG_MARK, APLOG_ERR, 0, server_rec, \
             "[mod_perimeterx]:" __VA_ARGS__)
 
+#define MODULE_ID "Apache Module v1.0"
 
 module AP_MODULE_DECLARE_DATA perimeterx_module;
-
-static bool px_verify_request(request_context *ctx, px_config *conf);
 
 static void *create_dir_config(apr_pool_t *pool, char *dirname);
 static void *create_server_config(apr_pool_t *pool, server_rec *s);
@@ -226,7 +219,7 @@ static const char *set_ip_header(cmd_parms *cmd, void *dir_config, const char *i
 
 static int perimeterx_handler(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
-    return px_handle_requset(r, conf);
+    return px_handle_request(r, conf);
 }
 
 static void *create_dir_config(apr_pool_t *pool, char *dir_name) {
