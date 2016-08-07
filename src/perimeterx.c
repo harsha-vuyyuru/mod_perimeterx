@@ -57,27 +57,20 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
 request_context* create_context(request_rec *req, const char *ip_header_key) {
 
     request_context *ctx;
-    const char *px_cookie;
-    const char *px_captcha_cookie;
+    const char *px_cookie = NULL;
+    const char *px_captcha_cookie = NULL;
     const char *useragent;
     char *captcha, *vid;
 
     ctx = (request_context*) apr_palloc(req->pool, sizeof(request_context));
 # if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 4
     apr_status_t status = ap_cookie_read(req, "_px", &px_cookie, 0);
-
-    if (status != APR_SUCCESS) {
-        px_cookie = NULL;
-    }
-
     status = ap_cookie_read(req, "_pxCaptcha", &px_captcha_cookie, 0);
-    if (status != APR_SUCCESS) {
-        px_captcha_cookie = NULL;
-    }
 
     // If specific header wes mentiond for ip extraction we will use it
     ctx->ip = ip_header_key ? apr_table_get(req->headers_in, ip_header_key) : req->useragent_ip;
 # else 
+    // If specific header wes mentiond for ip extraction we will use it
     ctx->ip = ip_header_key ? apr_table_get(req->headers_in, ip_header_key) : req->connection->remote_ip;
 
     char *cookie;
@@ -86,18 +79,18 @@ request_context* create_context(request_rec *req, const char *ip_header_key) {
     char *cookies = apr_pstrdup(req->pool, (char *) apr_table_get(req->headers_in, "Cookie"));
     cookie = apr_strtok(cookies, ";", &strtok_ctx);
 
-    while (cookie && (px_cookie == NULL && px_captcha_cookie == NULL)) {
+    while (cookie) {
         char *val_ctx;
         //trim leading space
         if (*cookie == ' ') {
             cookie ++;
         }
-        if (strncmp(cookie, "_px", 3) == 0) {
+        if (strncmp(cookie, "_pxCaptcha", 10) == 0) {
+            apr_pstrdup(req->pool, apr_strtok(cookie, "=", &val_ctx));
+            px_captcha_cookie = apr_pstrdup(req->pool, apr_strtok(NULL, "", &val_ctx));
+        } else if (strncmp(cookie, "_px", 3) == 0) {
             apr_strtok(cookie, "=", &val_ctx);
             px_cookie = apr_pstrdup(req->pool, apr_strtok(NULL, "", &val_ctx));
-        } else if (strncmp(cookie, "_pxCaptcha", 10) == 0) {
-            px_captcha_cookie = apr_pstrdup(req->pool, apr_strtok(cookie, "=", &val_ctx));
-            px_captcha_cookie = apr_pstrdup(req->pool, apr_strtok(NULL, "", &val_ctx));
         }
         cookie = apr_strtok(NULL, ";", &strtok_ctx);
     }
@@ -112,10 +105,10 @@ request_context* create_context(request_rec *req, const char *ip_header_key) {
     ctx->full_url = apr_pstrcat(req->pool, req->hostname, req->unparsed_uri, NULL);
 
     if (px_captcha_cookie) {
-        INFO(req->server, "PXCaptcha cookie was found");
         char *saveptr;
         ctx->px_captcha = apr_strtok(px_captcha_cookie, ":", &saveptr);
         ctx->vid = (const char*)apr_strtok(NULL, "", &saveptr);
+        INFO(req->server, "PXCaptcha cookie was found: %s", ctx->px_captcha);
     }
 
     char *version = NULL;
@@ -206,7 +199,6 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
         case EXPIRED:
             set_call_reason(ctx, vr);
             risk_response = risk_api_verify((const request_context*) ctx, conf);
-            INFO(ctx->r->server, "We got ther esponse here");
             if (risk_response) {
                 ctx->score = risk_response->score;
                 request_valid = ctx->score < conf->blocking_score;
@@ -223,7 +215,6 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
     }
 
     post_verification(ctx, conf, request_valid);
-    INFO(ctx->r->server, "We are goiung to return the REQUEST_VALUE");
     return request_valid;
 }
 
@@ -257,20 +248,19 @@ int px_handle_request(request_rec *r, px_config *conf) {
         ctx = create_context(r, conf->ip_header_key);
         request_valid = px_verify_request(ctx, conf);
         apr_table_set(r->subprocess_env, "SCORE", apr_itoa(r->pool, ctx->score));
-        INFO(r->server, "WE are alreadh after the table set");
     }
 
     if (!request_valid) {
         char *block_page = apr_palloc(r->pool, BUF_SIZE);
-        INFO(r->server, "we are allocation poaloc");
         if (conf->captcha_enabled) {
-            INFO(r->server, "Geting the blocking page");
             get_captcha_blocking_page(ctx, block_page);
-            INFO(r->server, "After getting the blocking page");
         } else {
             get_blocking_page(ctx, block_page);
         }
         ap_rprintf(r, "%s", block_page);
+# if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 2
+        ap_set_content_type(r, "text/html");
+# endif 
         INFO(r->server, "Request Invalid");
         return DONE;
     }

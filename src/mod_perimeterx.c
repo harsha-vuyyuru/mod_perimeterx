@@ -8,7 +8,6 @@
 #include "ap_config.h"
 #include "ap_provider.h"
 #include "http_request.h"
-#include "util_cookies.h"
 #include "apr_strings.h"
 #include "http_log.h"
 
@@ -16,7 +15,7 @@
 #include "http_util.h"
 #include "json_util.h"
 
-#ifndef APLOG_USE_MODULE
+#ifdef APLOG_USE_MODULE
 APLOG_USE_MODULE(perimeterx);
 #endif
 

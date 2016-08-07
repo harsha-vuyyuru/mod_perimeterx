@@ -9,7 +9,6 @@
 #include "ap_provider.h"
 #include "http_request.h"
 #include "http_log.h"
-#include "util_cookies.h"
 #include "apr_strings.h"
 
 #include "types.h"
