@@ -1,78 +1,11 @@
-#include <stdio.h>
-#include <string.h>
-#include <curl/curl.h>
 #include <jansson.h>
 #include <jansson_config.h>
 
-#include "apr_strings.h"
-#include "types.h"
-#include "http_client.h"
+#include "json_util.h"
 
-#define JSON_CONTENT_TYPE "Content-Type: application/json"
-#define EXPECT_HEADER "Expect:"
-
-char *do_request(const char *url, char *payload, char *auth_header, request_rec *r, CURL *curl); 
-
-static const char *s2s_call_reason_string(s2s_call_reason_t r) {
-    static const char *call_reasons[] = { "none", "no_cookie", "expired_cookie", "invalid_cookie"};
-    return call_reasons[r];
-}
-
-static const char *block_reason_string(block_reason_t r) {
-    static const char *block_reason[] = { "none", "cookie_high_score", "s2s_high_score" };
-    return block_reason[r];
-}
-
-static size_t write_response_cb(void* contents, size_t size, size_t nmemb, void *stream) {
-    size_t realsize = size * nmemb;
-    struct response_t *res = (struct response_t*)stream;
-    res->data = realloc(res->data, res->size + realsize + 1);
-    if (res->data == NULL) {
-        printf("Not enough memory (realloc returned NULL)\n");
-        return 0;
-    }
-    memcpy(&(res->data[res->size]), contents, realsize);
-    res->size += realsize;
-    res->data[res->size] = 0;
-
-    return realsize;
-}
-
-json_t *header_to_json(const char *key, const char *value) {
-    json_t *h = json_object();
-    json_t *j_key = json_string(key);
-    json_t *j_value = json_string(value);
-    json_object_set(h, "name", j_key);
-    json_object_set(h, "value", j_value);
-    return h;
-}
-
-json_t *headers_to_json(const apr_array_header_t *arr) {
-    int i;
-    json_t *j_headers;
-    apr_table_entry_t h;
-    json_t *j_header;
-
-    j_headers = json_array();
-    // Extract all headers and jsonfy it
-    for (i = 0; i < arr->nelts; i++) {
-        h = APR_ARRAY_IDX(arr, i, apr_table_entry_t);
-        j_header = header_to_json(h.key, h.val);
-        json_array_append(j_headers, j_header);
-    }
-
-    return j_headers;
-}
-
-void free_headers_json(json_t *j_headers) {
-    size_t index;
-    json_t *value;
-
-    // Free all headers
-    json_array_foreach(j_headers, index, value) {
-        free(value);
-    }
-}
+json_t *header_to_json(const char *key, const char *value);
+json_t *headers_to_json(const apr_array_header_t *arr);
+void free_headers_json(json_t *j_headers);
 
 char *create_captcha_payload(const request_context *ctx, px_config *conf) {
     json_t *j_vid = NULL, *j_pxcaptcha = NULL, *j_hostname = NULL;
@@ -248,46 +181,39 @@ risk_response* parse_risk_response(char* risk_response_str, const request_contex
     return parsed_response;
 }
 
-char* risk_api_request(char *risk_payload, char *auth_header, request_rec *r, CURL *curl) {
-    return do_request(RISK_API_URL, risk_payload, auth_header, r, curl);
+json_t *header_to_json(const char *key, const char *value) {
+    json_t *h = json_object();
+    json_t *j_key = json_string(key);
+    json_t *j_value = json_string(value);
+    json_object_set(h, "name", j_key);
+    json_object_set(h, "value", j_value);
+    return h;
 }
 
-int send_activity(char* activity, char* auth_header, request_rec *r, CURL *curl) {
-    return do_request(ACTIVITIES_URL, activity, auth_header, r, curl) != NULL ? REQ_SUCCESS : REQ_FAILED;
-}
+json_t *headers_to_json(const apr_array_header_t *arr) {
+    int i;
+    json_t *j_headers;
+    apr_table_entry_t h;
+    json_t *j_header;
 
-char* captcha_validation_request(char *captcha_payload, char *auth_header,  request_rec *r, CURL *curl) {
-    return do_request(CAPTHCA_API_URL ,captcha_payload, auth_header, r, curl);
-}
-
-// General function to make http request to px servers
-char *do_request(const char *url, char *payload, char *auth_header, request_rec *r, CURL *curl) {
-    struct response_t response;
-    struct curl_slist *headers = NULL;
-    long status_code;
-    CURLcode res;
-
-    response.data = malloc(1);
-    response.size = 0;
-
-    headers = curl_slist_append(headers, auth_header);
-    headers = curl_slist_append(headers, JSON_CONTENT_TYPE);
-    headers = curl_slist_append(headers, EXPECT_HEADER);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload); 
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_response_cb); 
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*) &response); 
-    res = curl_easy_perform(curl);
-    if (res == CURLE_OK) {
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
-        if (status_code  == 200) {
-            return response.data;
-        }
-        free(response.data);
-        ERROR(r->server, "PX server request returned status: %ld, body: %s", status_code, response.data);
-    } else {
-        ERROR(r->server, "curl_easy_perform() failed: %s", curl_easy_strerror(res));
+    j_headers = json_array();
+    // Extract all headers and jsonfy it
+    for (i = 0; i < arr->nelts; i++) {
+        h = APR_ARRAY_IDX(arr, i, apr_table_entry_t);
+        j_header = header_to_json(h.key, h.val);
+        json_array_append(j_headers, j_header);
     }
-    return NULL;
+
+    return j_headers;
 }
+
+void free_headers_json(json_t *j_headers) {
+    size_t index;
+    json_t *value;
+
+    // Free all headers
+    json_array_foreach(j_headers, index, value) {
+        free(value);
+    }
+}
+

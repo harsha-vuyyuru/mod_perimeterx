@@ -1,6 +1,7 @@
 #ifndef TYPES_H
 #define TYPES_H
 
+#include "httpd.h"
 #include <stdbool.h>
 #include <curl/curl.h>
 

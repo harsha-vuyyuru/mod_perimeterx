@@ -4,3 +4,4 @@
 *.slo
 unknown
 .libs
+**/*.o
