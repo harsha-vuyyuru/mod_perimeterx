@@ -1,4 +1,4 @@
-CC = /usr/local/apache2/bin/apxs
+CC = apxs
 CFLAGS = -g -lm
 
 all: clean module
