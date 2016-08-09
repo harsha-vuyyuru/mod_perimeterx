@@ -2,6 +2,7 @@
 #include "util_cookies.h"
 #endif
 
+#include <curl/curl.h>
 #include "apr_strings.h"
 #include "httpd.h"
 #include "http_protocol.h"
@@ -37,7 +38,7 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     }
 
     char *payload = create_captcha_payload(ctx, conf);
-    char *response_str = captcha_validation_request(payload, conf->auth_header, ctx->r, conf->curl);
+    char *response_str = captcha_validation_request(payload, conf->auth_header, ctx->r, ctx->curl);
     captcha_response *c = parse_captcha_response(response_str, ctx);
 
     if (response_str) {
@@ -54,7 +55,7 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     return captcha_verified;
 }
 
-request_context* create_context(request_rec *req, const char *ip_header_key) {
+request_context* create_context(request_rec *req, const px_config *conf) {
 
     request_context *ctx;
     const char *px_cookie = NULL;
@@ -62,13 +63,17 @@ request_context* create_context(request_rec *req, const char *ip_header_key) {
     const char *useragent;
     char *captcha, *vid;
 
+
     ctx = (request_context*) apr_palloc(req->pool, sizeof(request_context));
+    ctx->curl = curl_easy_init();
+    curl_easy_setopt(ctx->curl, CURLOPT_TCP_KEEPALIVE, 1l);
+    curl_easy_setopt(ctx->curl, CURLOPT_TIMEOUT, conf->api_timeout);
 # if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 4
     apr_status_t status = ap_cookie_read(req, "_px", &px_cookie, 0);
     status = ap_cookie_read(req, "_pxCaptcha", &px_captcha_cookie, 0);
 
     // If specific header wes mentiond for ip extraction we will use it
-    ctx->ip = ip_header_key ? apr_table_get(req->headers_in, ip_header_key) : req->useragent_ip;
+    ctx->ip = conf->ip_header_key ? apr_table_get(req->headers_in, conf->ip_header_key) : req->useragent_ip;
 # else 
     // If specific header wes mentiond for ip extraction we will use it
     ctx->ip = ip_header_key ? apr_table_get(req->headers_in, ip_header_key) : req->connection->remote_ip;
@@ -130,7 +135,7 @@ request_context* create_context(request_rec *req, const char *ip_header_key) {
 risk_response* risk_api_verify(const request_context *ctx, const px_config *conf) {
     char *risk_payload = create_risk_payload(ctx, conf);
 
-    char *risk_response_str = risk_api_request(risk_payload, conf->auth_header, ctx->r, conf->curl);
+    char *risk_response_str = risk_api_request(risk_payload, conf->auth_header, ctx->r, ctx->curl);
     if (risk_response_str == NULL) {
         return NULL;
     }
@@ -162,7 +167,7 @@ static void post_verification(request_context *ctx, px_config *conf, bool reques
     char *activity_type = request_valid ? PAGE_REQUESTED_ACTIVITY_TYPE : BLOCKED_ACTIVITY_TYPE;
     activity = create_activity(activity_type, conf, ctx);
     if (activity_type == BLOCKED_ACTIVITY_TYPE || conf->send_page_activities) {
-        if (send_activity(activity, conf->auth_header, ctx->r, conf->curl) != REQ_SUCCESS) {
+        if (send_activity(activity, conf->auth_header, ctx->r, ctx->curl) != REQ_SUCCESS) {
             ERROR(ctx->r->server, "Activity: %s send failed", activity_type);
         }
     }
@@ -207,11 +212,12 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
                 }
             } else {
                 ERROR(ctx->r->server, "Could not complete risk_api request");
+                return true;
             }
             break;
         default:
             ERROR(ctx->r->server, "Cookie decode failed returning valid result: %d", vr);
-            break;
+            return true;
     }
 
     post_verification(ctx, conf, request_valid);
@@ -245,9 +251,10 @@ int px_handle_request(request_rec *r, px_config *conf) {
     request_context *ctx;
 
     if (px_should_verify_request(r, conf)) {
-        ctx = create_context(r, conf->ip_header_key);
+        ctx = create_context(r, conf);
         request_valid = px_verify_request(ctx, conf);
         apr_table_set(r->subprocess_env, "SCORE", apr_itoa(r->pool, ctx->score));
+        curl_easy_cleanup(ctx->curl);
     }
 
     if (!request_valid) {

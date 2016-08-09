@@ -201,7 +201,7 @@ static const char *set_api_timeout(cmd_parms *cmd, void *dir_config, const char 
         return "ERROR in config load";
     }
     conf->api_timeout = atoi(api_timeout);
-    curl_easy_setopt(conf->curl, CURLOPT_TIMEOUT, conf->api_timeout);
+    //curl_easy_setopt(conf->curl, CURLOPT_TIMEOUT, conf->api_timeout);
 
     return NULL;
 }
@@ -232,8 +232,6 @@ static void *create_server_config(apr_pool_t *pool, server_rec *s) {
 static void *create_config(apr_pool_t *pool) {
     px_config *conf = apr_palloc(pool, sizeof(px_config));
     curl_global_init(CURL_GLOBAL_ALL);
-    conf->curl = curl_easy_init();
-    curl_easy_setopt(conf->curl, CURLOPT_TCP_KEEPALIVE, 1L);
     conf->module_enabled = false;
     conf->debug_level = false;
     conf->api_timeout = 0L;

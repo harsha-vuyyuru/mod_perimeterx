@@ -20,7 +20,6 @@ typedef struct px_config_t {
     long api_timeout;
     bool debug_level;
     bool send_page_activities;
-    CURL* curl;
     char *module_version;
 } px_config;
 
@@ -88,6 +87,7 @@ typedef struct request_context_t {
     block_reason_t block_reason;
     s2s_call_reason_t call_reason;
     request_rec *r;
+    CURL* curl;
 } request_context;
 
 #endif
