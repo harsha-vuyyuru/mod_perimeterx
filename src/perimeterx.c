@@ -73,7 +73,7 @@ request_context* create_context(request_rec *req, const px_config *conf) {
     ctx->ip = conf->ip_header_key ? apr_table_get(req->headers_in, conf->ip_header_key) : req->useragent_ip;
 # else
     // If specific header wes mentiond for ip extraction we will use it
-    ctx->ip = ip_header_key ? apr_table_get(req->headers_in, ip_header_key) : req->connection->remote_ip;
+    ctx->ip = conf->ip_header_key ? apr_table_get(req->headers_in, conf->ip_header_key) : req->connection->remote_ip;
 
     char *cookie;
     char *strtok_ctx;
@@ -138,8 +138,8 @@ risk_response* risk_api_verify(const request_context *ctx, const px_config *conf
         return NULL;
     }
 
+    INFO(ctx->r->server, "risk_api_verify: server response (%s)", risk_response_str);
     risk_response *risk_response = parse_risk_response(risk_response_str, ctx);
-    INFO(ctx->r->server, "risk_api_verify: server response (%s)", risk_response);
 
     if (risk_response_str) {
         free(risk_response_str);
@@ -237,8 +237,10 @@ static bool px_should_verify_request(request_rec *r, px_config *conf) {
     if (!file_ending || strcmp(file_ending, ".html") == 0) {
         return true;
     }
+    INFO(r->server, "px_should_verify_request: checking if should verify (%s)", r->uri);
     for (int i = 0; i < EXT_ARR_SIZE; i++ ) {
         if (strcmp(file_ending, file_ext_whitelist[i]) == 0) {
+            INFO(r->server, "px_should_verify_request: not verifying (%s) due to ending (%s)", r->uri);
             return false;
         }
     }
@@ -254,24 +256,27 @@ int px_handle_request(request_rec *r, px_config *conf) {
         request_valid = px_verify_request(ctx, conf);
         apr_table_set(r->subprocess_env, "SCORE", apr_itoa(r->pool, ctx->score));
         curl_easy_cleanup(ctx->curl);
-    }
 
-    if (!request_valid) {
-        char *block_page = apr_palloc(r->pool, BUF_SIZE);
-        if (conf->captcha_enabled) {
-            get_captcha_blocking_page(ctx, block_page);
-        } else {
-            get_blocking_page(ctx, block_page);
-        }
-        ap_rprintf(r, "%s", block_page);
+        if (!request_valid) {
+            char *block_page = apr_palloc(r->pool, BUF_SIZE);
+            if (conf->captcha_enabled) {
+                get_captcha_blocking_page(ctx, block_page);
+            } else {
+                get_blocking_page(ctx, block_page);
+            }
+            ap_rprintf(r, "%s", block_page);
 # if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 2
-        ap_set_content_type(r, "text/html");
+            ap_set_content_type(r, "text/html");
 # endif
-        INFO(r->server, "px_handle_request: request invalid");
-        return DONE;
+            INFO(r->server, "px_handle_request: request invalid");
+            return DONE;
     }
-    INFO(r->server, "px_handle_request: request valid");
-    return OK;
+        INFO(r->server, "px_handle_request: request valid");
+        return OK;
+    } else {
+        // skipping verification
+        return OK;
+    }
 }
 
 int get_blocking_page(request_context *ctx, char *buffer) {
