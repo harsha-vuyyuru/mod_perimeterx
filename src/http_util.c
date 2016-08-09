@@ -25,9 +25,9 @@
     ap_log_error(APLOG_MARK, APLOG_ERR, 0, server_rec, \
             "[mod_perimeterx]:" __VA_ARGS__)
 
-const char *RISK_API_URL = "http://collector.perimeterx.net/api/v1/risk";
-const char *CAPTHCA_API_URL = "http://collector.perimeterx.net/api/v1/risk/captcha";
-const char *ACTIVITIES_URL = "http://collector.perimeterx.net/api/v1/collector/s2s";
+const char *RISK_API_URL = "https://collector.perimeterx.net/api/v1/risk";
+const char *CAPTHCA_API_URL = "https://collector.perimeterx.net/api/v1/risk/captcha";
+const char *ACTIVITIES_URL = "https://collector.perimeterx.net/api/v1/collector/s2s";
 
 char *do_request(const char *url, char *payload, char *auth_header, request_rec *r, CURL *curl);
 

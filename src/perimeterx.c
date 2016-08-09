@@ -33,7 +33,6 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     bool captcha_verified = false;
 
     if (!ctx->px_captcha) {
-        INFO(ctx->r->server, "no _pxCaptca cookie found, captcha verification failed");
         return captcha_verified;
     }
 
@@ -50,19 +49,17 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
         if (!captcha_verified) {
             ctx->vid = NULL;
         }
-        INFO(ctx->r->server, "Cookie validation status: %d", captcha_verified);
+        INFO(ctx->r->server, "verify_captcha: cookie validation status (%d)", captcha_verified);
     }
     return captcha_verified;
 }
 
 request_context* create_context(request_rec *req, const px_config *conf) {
-
     request_context *ctx;
     const char *px_cookie = NULL;
     const char *px_captcha_cookie = NULL;
     const char *useragent;
     char *captcha, *vid;
-
 
     ctx = (request_context*) apr_palloc(req->pool, sizeof(request_context));
     ctx->curl = curl_easy_init();
@@ -74,7 +71,7 @@ request_context* create_context(request_rec *req, const px_config *conf) {
 
     // If specific header wes mentiond for ip extraction we will use it
     ctx->ip = conf->ip_header_key ? apr_table_get(req->headers_in, conf->ip_header_key) : req->useragent_ip;
-# else 
+# else
     // If specific header wes mentiond for ip extraction we will use it
     ctx->ip = ip_header_key ? apr_table_get(req->headers_in, ip_header_key) : req->connection->remote_ip;
 
@@ -129,18 +126,20 @@ request_context* create_context(request_rec *req, const px_config *conf) {
     ctx->call_reason = NONE;
     ctx->r = req;
 
+    INFO(req->server, "create_context: useragent: (%s), px_cookie: (%s), full_url: (%s), hostname: (%s) , http_method: (%s), http_version: (%s), uri: (%s), ip: (%s)", ctx->useragent, ctx->px_cookie, ctx->full_url, ctx->hostname, ctx->http_method, ctx->http_version, ctx->uri, ctx->ip);
+
     return ctx;
 }
 
 risk_response* risk_api_verify(const request_context *ctx, const px_config *conf) {
     char *risk_payload = create_risk_payload(ctx, conf);
-
     char *risk_response_str = risk_api_request(risk_payload, conf->auth_header, ctx->r, ctx->curl);
     if (risk_response_str == NULL) {
         return NULL;
     }
 
     risk_response *risk_response = parse_risk_response(risk_response_str, ctx);
+    INFO(ctx->r->server, "risk_api_verify: server response (%s)", risk_response);
 
     if (risk_response_str) {
         free(risk_response_str);
@@ -168,7 +167,7 @@ static void post_verification(request_context *ctx, px_config *conf, bool reques
     activity = create_activity(activity_type, conf, ctx);
     if (activity_type == BLOCKED_ACTIVITY_TYPE || conf->send_page_activities) {
         if (send_activity(activity, conf->auth_header, ctx->r, ctx->curl) != REQ_SUCCESS) {
-            ERROR(ctx->r->server, "Activity: %s send failed", activity_type);
+            ERROR(ctx->r->server, "post_verification: (%s) send failed", activity_type);
         }
     }
 }
@@ -211,12 +210,12 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
                     ctx->block_reason = SERVER;
                 }
             } else {
-                ERROR(ctx->r->server, "Could not complete risk_api request");
+                ERROR(ctx->r->server, "px_verify_request: could not complete risk_api request");
                 return true;
             }
             break;
         default:
-            ERROR(ctx->r->server, "Cookie decode failed returning valid result: %d", vr);
+            ERROR(ctx->r->server, "px_verify_request: cookie decode failed returning valid result (%d)", vr);
             return true;
     }
 
@@ -267,11 +266,11 @@ int px_handle_request(request_rec *r, px_config *conf) {
         ap_rprintf(r, "%s", block_page);
 # if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 2
         ap_set_content_type(r, "text/html");
-# endif 
-        INFO(r->server, "Request Invalid");
+# endif
+        INFO(r->server, "px_handle_request: request invalid");
         return DONE;
     }
-    INFO(r->server, "Request Valid");
+    INFO(r->server, "px_handle_request: request valid");
     return OK;
 }
 
