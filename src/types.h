@@ -5,9 +5,6 @@
 #include <stdbool.h>
 #include <curl/curl.h>
 
-#define REQ_FAILED 1
-#define REQ_SUCCESS 0
-
 typedef struct px_config_t {
     const char *app_id;
     const char *cookie_key;

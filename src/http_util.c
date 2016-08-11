@@ -29,11 +29,11 @@ const char *RISK_API_URL = "https://collector.perimeterx.net/api/v1/risk";
 const char *CAPTHCA_API_URL = "https://collector.perimeterx.net/api/v1/risk/captcha";
 const char *ACTIVITIES_URL = "https://collector.perimeterx.net/api/v1/collector/s2s";
 
-char *do_request(const char *url, char *payload, char *auth_header, request_rec *r, CURL *curl);
+char *do_request(const char *url, const char *payload, const char *auth_header, request_rec *r, CURL *curl);
 
 static size_t write_response_cb(void* contents, size_t size, size_t nmemb, void *stream) {
-    size_t realsize = size * nmemb;
     struct response_t *res = (struct response_t*)stream;
+    size_t realsize = size * nmemb;
     res->data = realloc(res->data, res->size + realsize + 1);
     if (res->data == NULL) {
         printf("Not enough memory (realloc returned NULL)\n");
@@ -50,8 +50,11 @@ char* risk_api_request(char *risk_payload, char *auth_header, request_rec *r, CU
     return do_request(RISK_API_URL, risk_payload, auth_header, r, curl);
 }
 
-int send_activity(char* activity, char* auth_header, request_rec *r, CURL *curl) {
-    return do_request(ACTIVITIES_URL, activity, auth_header, r, curl) != NULL ? REQ_SUCCESS : REQ_FAILED;
+bool send_activity(const char* activity, const char* auth_header, request_rec *r, CURL *curl) {
+    char *resp = do_request(ACTIVITIES_URL, activity, auth_header, r, curl);
+    bool success = (resp != NULL);
+    free(resp);
+    return success;
 }
 
 char* captcha_validation_request(char *captcha_payload, char *auth_header,  request_rec *r, CURL *curl) {
@@ -59,7 +62,7 @@ char* captcha_validation_request(char *captcha_payload, char *auth_header,  requ
 }
 
 // General function to make http request to px servers
-char *do_request(const char *url, char *payload, char *auth_header, request_rec *r, CURL *curl) {
+char *do_request(const char *url, const char *payload, const char *auth_header, request_rec *r, CURL *curl) {
     struct response_t response;
     struct curl_slist *headers = NULL;
     long status_code;
@@ -79,11 +82,11 @@ char *do_request(const char *url, char *payload, char *auth_header, request_rec 
     res = curl_easy_perform(curl);
     if (res == CURLE_OK) {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
-        if (status_code  == 200) {
+        if (status_code == 200) {
             return response.data;
         }
         free(response.data);
-        ERROR(r->server, "PX server request returned status: %ld, body: %s", status_code, response.data);
+        ERROR(r->server, "PX server request returned status: %ld, url: %s", status_code, response.data);
     } else {
         ERROR(r->server, "curl_easy_perform() failed: %s", curl_easy_strerror(res));
     }

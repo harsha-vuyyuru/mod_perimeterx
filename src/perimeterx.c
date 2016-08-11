@@ -38,6 +38,11 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
 
     char *payload = create_captcha_payload(ctx, conf);
     char *response_str = captcha_validation_request(payload, conf->auth_header, ctx->r, ctx->curl);
+    if (!response_str) {
+        INFO(ctx->r->server, "Failed to perform captcha_validation_request. url: (%s)", ctx->full_url);
+        return true;
+    }
+
     captcha_response *c = parse_captcha_response(response_str, ctx);
 
     if (response_str) {
@@ -69,7 +74,9 @@ request_context* create_context(request_rec *req, const px_config *conf) {
 # if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 4
     apr_status_t status = ap_cookie_read(req, "_px", &px_cookie, 0);
     status = ap_cookie_read(req, "_pxCaptcha", &px_captcha_cookie, 0);
-    captcha_cookie = apr_pstrdup(req->pool, px_captcha_cookie);
+    if (status == APR_SUCCESS) {
+        captcha_cookie = apr_pstrdup(req->pool, px_captcha_cookie);
+    }
 
     // If specific header wes mentiond for ip extraction we will use it
     ctx->ip = conf->ip_header_key ? apr_table_get(req->headers_in, conf->ip_header_key) : req->useragent_ip;
@@ -107,6 +114,7 @@ request_context* create_context(request_rec *req, const px_config *conf) {
     ctx->http_method = req->method;
     ctx->useragent = useragent;
     ctx->full_url = apr_pstrcat(req->pool, req->hostname, req->unparsed_uri, NULL);
+    ctx->vid = NULL;
 
     if (captcha_cookie) {
         char *saveptr;
@@ -133,19 +141,16 @@ request_context* create_context(request_rec *req, const px_config *conf) {
     return ctx;
 }
 
-risk_response* risk_api_verify(const request_context *ctx, const px_config *conf) {
+risk_response* risk_api_get(const request_context *ctx, const px_config *conf) {
     char *risk_payload = create_risk_payload(ctx, conf);
     char *risk_response_str = risk_api_request(risk_payload, conf->auth_header, ctx->r, ctx->curl);
     if (risk_response_str == NULL) {
         return NULL;
     }
 
-    INFO(ctx->r->server, "risk_api_verify: server response (%s)", risk_response_str);
+    INFO(ctx->r->server, "risk_api_get: server response (%s)", risk_response_str);
     risk_response *risk_response = parse_risk_response(risk_response_str, ctx);
-
-    if (risk_response_str) {
-        free(risk_response_str);
-    }
+    free(risk_response_str);
     return risk_response;
 }
 
@@ -168,7 +173,7 @@ static void post_verification(request_context *ctx, px_config *conf, bool reques
     char *activity_type = request_valid ? PAGE_REQUESTED_ACTIVITY_TYPE : BLOCKED_ACTIVITY_TYPE;
     activity = create_activity(activity_type, conf, ctx);
     if (activity_type == BLOCKED_ACTIVITY_TYPE || conf->send_page_activities) {
-        if (send_activity(activity, conf->auth_header, ctx->r, ctx->curl) != REQ_SUCCESS) {
+        if (!send_activity(activity, conf->auth_header, ctx->r, ctx->curl)) {
             ERROR(ctx->r->server, "post_verification: (%s) send failed", activity_type);
         }
     }
@@ -204,7 +209,7 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
         case INVALID:
         case EXPIRED:
             set_call_reason(ctx, vr);
-            risk_response = risk_api_verify((const request_context*) ctx, conf);
+            risk_response = risk_api_get(ctx, conf);
             if (risk_response) {
                 ctx->score = risk_response->score;
                 request_valid = ctx->score < conf->blocking_score;
@@ -268,15 +273,12 @@ int px_handle_request(request_rec *r, px_config *conf) {
 # if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 2
             ap_set_content_type(r, "text/html");
 # endif
-            INFO(r->server, "px_handle_request: request invalid");
+            INFO(r->server, "px_handle_request: request blocked");
             return DONE;
+        }
+        INFO(r->server, "px_handle_request: request passed");
     }
-        INFO(r->server, "px_handle_request: request valid");
-        return OK;
-    } else {
-        // skipping verification
-        return OK;
-    }
+    return OK;
 }
 
 int get_blocking_page(request_context *ctx, char *buffer) {
