@@ -72,7 +72,7 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf, boo
     json_object_set(j_data, "headers", j_headers);
 
     if (cookie_expired && ctx->uuid) {
-        j_uuid = json_string(j_uuid);
+        j_uuid = json_string(ctx->uuid);
         json_object_set(request, "uuid", j_uuid);
     }
 
