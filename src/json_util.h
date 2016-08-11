@@ -5,7 +5,7 @@
 
 risk_response *parse_risk_response(char* risk_response_str, const request_context *ctx);
 captcha_response *parse_captcha_response(char* captcha_response_str, const request_context *ctx);
-char *create_activity(char *activity_type, px_config *conf, request_context *ctx);
+char *create_activity(const char *activity_type, px_config *conf, request_context *ctx);
 char *create_risk_payload(const request_context *ctx, const px_config *conf, bool cookie_expired);
 char *create_captcha_payload(const request_context *ctx, px_config *conf);
 

@@ -72,7 +72,8 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf, boo
     json_object_set(j_data, "headers", j_headers);
 
     if (cookie_expired && ctx->uuid) {
-        j_uuid = json_string(requset, "uuid", j_uuid);
+        j_uuid = json_string(j_uuid);
+        json_object_set(request, "uuid", j_uuid);
     }
 
     j_additional = json_pack("{s:s, s:s, s:s, s:s}", "s2s_call_reason", s2s_call_reason_string(ctx->call_reason), "http_method", ctx->http_method, "http_version", ctx->http_version, "module_version", conf->module_version);
@@ -110,7 +111,7 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf, boo
 
 char *create_activity(const char *activity_type, px_config *conf, request_context *ctx) {
     apr_table_entry_t h;
-    json_t *j_vid = NULL, j_uuid = NULL, *j_headers;
+    json_t *j_vid = NULL, *j_uuid = NULL, *j_headers;
     // TODO: headers could be generated only once and saved on the struct
     const apr_array_header_t *header_arr = apr_table_elts(ctx->headers);
 
@@ -125,7 +126,7 @@ char *create_activity(const char *activity_type, px_config *conf, request_contex
 
     if (activity_type == "block" && ctx->uuid) {
         j_uuid = json_string(ctx->uuid);
-        json_object_set(detauls, "block_uuid", j_uuid);
+        json_object_set(details, "block_uuid", j_uuid);
     }
 
     json_object_set(activity, "details", details);
