@@ -60,8 +60,8 @@ char *create_captcha_payload(const request_context *ctx, px_config *conf) {
     return payload;
 }
 
-char *create_risk_payload(const request_context *ctx, const px_config *conf) {
-    json_t *j_headers, *j_data, *request, *j_header, *j_vid = NULL, *j_additional, *j_px_cookie = NULL;
+char *create_risk_payload(const request_context *ctx, const px_config *conf, bool cookie_expired) {
+    json_t *j_headers, *j_data, *request, *j_header, *j_uuid = NULL, *j_vid = NULL, *j_additional, *j_px_cookie = NULL;
 
     j_data = json_pack("{s:s,s:s,s:s}" , "ip", ctx->ip, "uri", ctx->uri, "url", ctx->full_url);
     request = json_object();
@@ -70,6 +70,10 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf) {
     j_headers = headers_to_json(header_arr);
     json_object_set(request, "request", j_data);
     json_object_set(j_data, "headers", j_headers);
+
+    if (cookie_expired && ctx->uuid) {
+        j_uuid = json_string(requset, "uuid", j_uuid);
+    }
 
     j_additional = json_pack("{s:s, s:s, s:s, s:s}", "s2s_call_reason", s2s_call_reason_string(ctx->call_reason), "http_method", ctx->http_method, "http_version", ctx->http_version, "module_version", conf->module_version);
     json_object_set(request, "additional", j_additional);
@@ -85,6 +89,9 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf) {
 
     char *request_str = json_dumps(request, JSON_ENCODE_ANY);
 
+    if (j_uuid) {
+        free(j_uuid);
+    }
     if (j_vid) {
         free(j_vid);
     }
@@ -101,9 +108,9 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf) {
     return request_str;
 }
 
-char *create_activity(char *activity_type, px_config *conf, request_context *ctx) {
+char *create_activity(const char *activity_type, px_config *conf, request_context *ctx) {
     apr_table_entry_t h;
-    json_t *j_vid = NULL, *j_headers;
+    json_t *j_vid = NULL, j_uuid = NULL, *j_headers;
     // TODO: headers could be generated only once and saved on the struct
     const apr_array_header_t *header_arr = apr_table_elts(ctx->headers);
 
@@ -115,6 +122,11 @@ char *create_activity(char *activity_type, px_config *conf, request_context *ctx
     }
 
     json_t *details = json_pack("{s:i, s:s, s:s, s:s, s:s}", "block_score", ctx->score, "block_reason", block_reason_string(ctx->block_reason), "http_method", ctx->http_method, "http_version", ctx->http_version, "module_version", conf->module_version);
+
+    if (activity_type == "block" && ctx->uuid) {
+        j_uuid = json_string(ctx->uuid);
+        json_object_set(detauls, "block_uuid", j_uuid);
+    }
 
     json_object_set(activity, "details", details);
 
@@ -135,6 +147,9 @@ char *create_activity(char *activity_type, px_config *conf, request_context *ctx
 
     if (j_vid) {
         free(j_vid);
+    }
+    if (j_uuid) {
+        free(j_uuid);
     }
     for (i = 0; i < header_arr->nelts; i++) {
         free(ptrs[i]);

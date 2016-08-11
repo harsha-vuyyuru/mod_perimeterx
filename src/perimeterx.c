@@ -67,7 +67,7 @@ request_context* create_context(request_rec *req, const px_config *conf) {
     const char *useragent;
     char *captcha, *vid;
 
-    ctx = (request_context*) apr_palloc(req->pool, sizeof(request_context));
+    ctx = (request_context*) apr_pcalloc(req->pool, sizeof(request_context));
     ctx->curl = curl_easy_init();
     curl_easy_setopt(ctx->curl, CURLOPT_TCP_KEEPALIVE, 1l);
     curl_easy_setopt(ctx->curl, CURLOPT_TIMEOUT, conf->api_timeout);
@@ -141,8 +141,8 @@ request_context* create_context(request_rec *req, const px_config *conf) {
     return ctx;
 }
 
-risk_response* risk_api_get(const request_context *ctx, const px_config *conf) {
-    char *risk_payload = create_risk_payload(ctx, conf);
+risk_response* risk_api_get(const request_context *ctx, const px_config *conf, bool expired) {
+    char *risk_payload = create_risk_payload(ctx, conf, expired);
     char *risk_response_str = risk_api_request(risk_payload, conf->auth_header, ctx->r, ctx->curl);
     if (risk_response_str == NULL) {
         return NULL;
@@ -180,6 +180,7 @@ static void post_verification(request_context *ctx, px_config *conf, bool reques
 }
 
 static bool px_verify_request(request_context *ctx, px_config *conf) {
+    bool expired = false;
     bool request_valid = true;
     risk_response *risk_response;
 
@@ -205,11 +206,12 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
                 ctx->block_reason = COOKIE;
             }
             break;
+        case EXPIRED:
+            expired = true;
         case NULL_COOKIE:
         case INVALID:
-        case EXPIRED:
             set_call_reason(ctx, vr);
-            risk_response = risk_api_get(ctx, conf);
+            risk_response = risk_api_get(ctx, conf, expired);
             if (risk_response) {
                 ctx->score = risk_response->score;
                 request_valid = ctx->score < conf->blocking_score;

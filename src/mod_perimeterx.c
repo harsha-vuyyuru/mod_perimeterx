@@ -230,7 +230,7 @@ static void *create_server_config(apr_pool_t *pool, server_rec *s) {
 }
 
 static void *create_config(apr_pool_t *pool) {
-    px_config *conf = apr_palloc(pool, sizeof(px_config));
+    px_config *conf = apr_pcalloc(pool, sizeof(px_config));
     curl_global_init(CURL_GLOBAL_ALL);
     conf->module_enabled = false;
     conf->debug_level = false;
@@ -238,7 +238,6 @@ static void *create_config(apr_pool_t *pool) {
     conf->send_page_activities = false;
     conf->blocking_score = 70;
     conf->captcha_enabled = false;
-    conf->ip_header_key = NULL;
     conf->module_version = MODULE_ID;
     return conf;
 }
