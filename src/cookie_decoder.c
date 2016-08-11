@@ -142,7 +142,7 @@ risk_cookie *parse_risk_cookie(const char *raw_cookie, request_context *ctx) {
     cookie->b_val = b_val;
 
     cookie->a = apr_psprintf(ctx->r->pool, "%d", a_val);
-    cookie->b = apr_psprintf(ctx->r->pool, "%d", a_val);
+    cookie->b = apr_psprintf(ctx->r->pool, "%d", b_val);
     cookie->timestamp = apr_psprintf(ctx->r->pool, "%lu", ts);
 
     INFO(ctx->r->server,"cookie data: timestamp %s, vid %s, uuid %s hash %s scores: a %s b %s", cookie->timestamp, cookie->vid, cookie->uuid, cookie->hash, cookie->a, cookie->b);
