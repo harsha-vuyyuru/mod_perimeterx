@@ -111,49 +111,43 @@ validation_result_t validate_cookie(risk_cookie *cookie, request_context *ctx, c
 
 
 risk_cookie *parse_risk_cookie(const char *raw_cookie, request_context *ctx) {
-
     int a_val, b_val;
     char *hash, *uuid, *vid;
     json_error_t error;
     json_int_t ts;
+    char buf[30] = {0};
 
     json_t *j_cookie = json_loads(raw_cookie, JSON_DECODE_ANY, &error);
-    risk_cookie *cookie = (risk_cookie*)apr_palloc(ctx->r->pool, sizeof(risk_cookie));
+    if (!j_cookie) {
+        ERROR(ctx->r->server, "cookie data: parse failed with error. raw_cookie (%s), text (%s)", raw_cookie, error.text);
+        return NULL;
+    }
 
-    json_unpack(j_cookie, "{s:s ,s:s,s:s}", "h", &hash, "v", &vid, "u", &uuid);
-
-    json_t *h = json_object_get(j_cookie, "h");
-    json_t *v = json_object_get(j_cookie, "v");
-    json_t *t = json_object_get(j_cookie, "t");
-    ts = json_integer_value(t);
-    json_t *u = json_object_get(j_cookie, "u");
-    json_t *s = json_object_get(j_cookie, "s");
-
-    cookie->hash = hash;
-    cookie->vid = vid;
-    cookie->uuid = uuid;
-    cookie->ts = ts;
-    int n_digits = floor(log10(cookie->ts)) + 1;
-    cookie->timestamp = apr_palloc(ctx->r->pool, (n_digits + 1) * sizeof(char));
-
-    json_unpack(s, "{s:i, s:i}", "a", &a_val, "b", &b_val);
-
-    cookie->a_val = a_val;
-    cookie->b_val = b_val;
-
-    cookie->a = apr_psprintf(ctx->r->pool, "%d", a_val);
-    cookie->b = apr_psprintf(ctx->r->pool, "%d", a_val);
-    cookie->timestamp = apr_psprintf(ctx->r->pool, "%lu", ts);
-
-    INFO(ctx->r->server,"cookie data: timestamp %s, vid %s, uuid %s hash %s scores: a %s b %s", cookie->timestamp, cookie->vid, cookie->uuid, cookie->hash, cookie->a, cookie->b);
-
-    free(h);
-    free(v);
-    free(t);
-    free(u);
-    free(s);
+    if (!json_unpack(j_cookie, "{s:s,s:s,s:{s:i,s:i},s:i,s:s,}", "v", &vid, "u", &uuid, "s", "a", &a_val, "b", &b_val, "t", &ts, "h", &hash)) {
+        ERROR(ctx->r->server, "cookie data: unpack json failed. raw_cookie (%s)", raw_cookie);
+        free(j_cookie);
+        return NULL;
+    }
     free(j_cookie);
 
+
+
+    risk_cookie *cookie = (risk_cookie*)apr_palloc(ctx->r->pool, sizeof(risk_cookie));
+    snprintf(buf, sizeof(buf), "%"JSON_INTEGER_FORMAT, ts);
+    INFO(ctx->r->server, "cookie data: raw_cookie >%s<", raw_cookie);
+    INFO(ctx->r->server, "cookie data: >%s< >%s< >%s< >%s< >%d< >%d<", hash, vid, uuid, buf, a_val, b_val);
+
+    cookie->timestamp = apr_pstrdup(ctx->r->pool, buf);
+    cookie->ts = ts;
+    cookie->hash = hash;
+    cookie->uuid = uuid;
+    cookie->vid = vid;
+    cookie->a_val = a_val;
+    cookie->b_val = b_val;
+    cookie->a = apr_psprintf(ctx->r->pool, "%d", a_val);
+    cookie->b = apr_psprintf(ctx->r->pool, "%d", b_val);
+
+    INFO(ctx->r->server,"cookie data: timestamp %s, vid %s, uuid %s hash %s scores: a %s b %s", cookie->timestamp, cookie->vid, cookie->uuid, cookie->hash, cookie->a, cookie->b);
     return cookie;
 }
 
@@ -164,7 +158,6 @@ void handle_error(request_context *r_ctx, EVP_CIPHER_CTX *ctx, const char *phase
 }
 
 risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, request_context *r_ctx) {
-
     if (px_cookie == NULL) {
         return NULL;
     }
