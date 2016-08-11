@@ -1,4 +1,6 @@
-# if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 4
+#include <httpd.h>
+
+#if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 4
 #include "util_cookies.h"
 #endif
 
@@ -18,12 +20,10 @@
 #define EXT_ARR_SIZE 36
 
 #define INFO(server_rec, ...) \
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server_rec, \
-            "[mod_perimeterx]: " __VA_ARGS__)
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server_rec, "[mod_perimeterx]: " __VA_ARGS__)
 
 #define ERROR(server_rec, ...) \
-    ap_log_error(APLOG_MARK, APLOG_ERR, 0, server_rec, \
-            "[mod_perimeterx]:" __VA_ARGS__)
+    ap_log_error(APLOG_MARK, APLOG_ERR, 0, server_rec, "[mod_perimeterx]:" __VA_ARGS__)
 
 static bool px_verify_request(request_context *ctx, px_config *conf);
 int get_captcha_blocking_page(request_context *ctx, char *buffer);
@@ -58,6 +58,7 @@ request_context* create_context(request_rec *req, const px_config *conf) {
     request_context *ctx;
     const char *px_cookie = NULL;
     const char *px_captcha_cookie = NULL;
+    char *captcha_cookie = NULL;
     const char *useragent;
     char *captcha, *vid;
 
@@ -68,6 +69,7 @@ request_context* create_context(request_rec *req, const px_config *conf) {
 # if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 4
     apr_status_t status = ap_cookie_read(req, "_px", &px_cookie, 0);
     status = ap_cookie_read(req, "_pxCaptcha", &px_captcha_cookie, 0);
+    captcha_cookie = apr_pstrdup(req->pool, px_captcha_cookie);
 
     // If specific header wes mentiond for ip extraction we will use it
     ctx->ip = conf->ip_header_key ? apr_table_get(req->headers_in, conf->ip_header_key) : req->useragent_ip;
@@ -89,7 +91,7 @@ request_context* create_context(request_rec *req, const px_config *conf) {
         }
         if (strncmp(cookie, "_pxCaptcha", 10) == 0) {
             apr_pstrdup(req->pool, apr_strtok(cookie, "=", &val_ctx));
-            px_captcha_cookie = apr_pstrdup(req->pool, apr_strtok(NULL, "", &val_ctx));
+            captcha_cookie = apr_pstrdup(req->pool, apr_strtok(NULL, "", &val_ctx));
         } else if (strncmp(cookie, "_px", 3) == 0) {
             apr_strtok(cookie, "=", &val_ctx);
             px_cookie = apr_pstrdup(req->pool, apr_strtok(NULL, "", &val_ctx));
@@ -106,10 +108,10 @@ request_context* create_context(request_rec *req, const px_config *conf) {
     ctx->useragent = useragent;
     ctx->full_url = apr_pstrcat(req->pool, req->hostname, req->unparsed_uri, NULL);
 
-    if (px_captcha_cookie) {
+    if (captcha_cookie) {
         char *saveptr;
-        ctx->px_captcha = apr_strtok(px_captcha_cookie, ":", &saveptr);
-        ctx->vid = (const char*)apr_strtok(NULL, "", &saveptr);
+        ctx->px_captcha = apr_strtok(captcha_cookie, ":", &saveptr);
+        ctx->vid = apr_strtok(NULL, "", &saveptr);
         INFO(req->server, "PXCaptcha cookie was found: %s", ctx->px_captcha);
     }
 
@@ -237,10 +239,8 @@ static bool px_should_verify_request(request_rec *r, px_config *conf) {
     if (!file_ending || strcmp(file_ending, ".html") == 0) {
         return true;
     }
-    INFO(r->server, "px_should_verify_request: checking if should verify (%s)", r->uri);
     for (int i = 0; i < EXT_ARR_SIZE; i++ ) {
         if (strcmp(file_ending, file_ext_whitelist[i]) == 0) {
-            INFO(r->server, "px_should_verify_request: not verifying (%s) due to ending (%s)", r->uri);
             return false;
         }
     }
@@ -285,7 +285,7 @@ int get_blocking_page(request_context *ctx, char *buffer) {
             <link type=\"text/css\" rel=\"stylesheet\" media=\"screen, print\" href=\"//fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800\">\n\
             <meta charset=\"UTF-8\">\n\
             <title>Access to This Page Has Been Blocked</title>\n\
-            <style> p { width: 60%; margin: 0 auto; font-size: 35px; } body { background-color: #a2a2a2; font-family: \"Open Sans\"; margin: 5%; } img { width: 180px; } a { color: #2020B1; text-decoration: blink; } a:hover { color: #2b60c6; } </style>\n\
+            <style> p { width: 60%%; margin: 0 auto; font-size: 35px; } body { background-color: #a2a2a2; font-family: \"Open Sans\"; margin: 5%%; } img { width: 180px; } a { color: #2020B1; text-decoration: blink; } a:hover { color: #2b60c6; } </style>\n\
             </head>\n\
             <body cz-shortcut-listen=\"true\">\n\
             <div><img src=\"http://storage.googleapis.com/instapage-thumbnails/035ca0ab/e94de863/1460594818-1523851-467x110-perimeterx.png\"> </div>\n \
@@ -309,7 +309,7 @@ int get_captcha_blocking_page(request_context *ctx, char *buffer) {
             <link type=\"text/css\" rel=\"stylesheet\" media=\"screen, print\" href=\"//fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800\">\n\
             <meta charset=\"UTF-8\">\n \
             <title>Access to This Page Has Been Blocked</title>\n \
-            <style> p { width: 60%; margin: 0 auto; font-size: 35px; } body { background-color: #a2a2a2; font-family: \"Open Sans\"; margin: 5%; } img { width: 180px; } a { color: #2020B1; text-decoration: blink; } a:hover { color: #2b60c6; } </style>\n \
+            <style> p { width: 60%%; margin: 0 auto; font-size: 35px; } body { background-color: #a2a2a2; font-family: \"Open Sans\"; margin: 5%%; } img { width: 180px; } a { color: #2020B1; text-decoration: blink; } a:hover { color: #2b60c6; } </style>\n \
             <script src=\"https://www.google.com/recaptcha/api.js\"></script> \
             <script> \
             window.px_vid = '%s';\n \
