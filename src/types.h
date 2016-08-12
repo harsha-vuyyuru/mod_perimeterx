@@ -43,7 +43,7 @@ typedef enum {
 
 typedef struct risk_cookie_t {
     char *timestamp;
-    long ts;
+    long long ts;
     char *hash;
     char *uuid;
     char *vid;

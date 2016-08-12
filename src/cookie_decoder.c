@@ -117,37 +117,38 @@ risk_cookie *parse_risk_cookie(const char *raw_cookie, request_context *ctx) {
     json_int_t ts;
     char buf[30] = {0};
 
-    json_t *j_cookie = json_loads(raw_cookie, JSON_DECODE_ANY, &error);
+    json_t *j_cookie = json_loads(raw_cookie, 0, &error);
     if (!j_cookie) {
         ERROR(ctx->r->server, "cookie data: parse failed with error. raw_cookie (%s), text (%s)", raw_cookie, error.text);
         return NULL;
     }
 
-    if (!json_unpack(j_cookie, "{s:s,s:s,s:{s:i,s:i},s:i,s:s,}", "v", &vid, "u", &uuid, "s", "a", &a_val, "b", &b_val, "t", &ts, "h", &hash)) {
+    if (json_unpack(j_cookie, "{s:s,s:s,s:{s:i,s:i},s:I,s:s,}", "v", &vid, "u", &uuid, "s", "a", &a_val, "b", &b_val, "t", &ts, "h", &hash)) {
         ERROR(ctx->r->server, "cookie data: unpack json failed. raw_cookie (%s)", raw_cookie);
-        free(j_cookie);
+        json_decref(j_cookie);
         return NULL;
     }
-    free(j_cookie);
-
-
 
     risk_cookie *cookie = (risk_cookie*)apr_palloc(ctx->r->pool, sizeof(risk_cookie));
-    snprintf(buf, sizeof(buf), "%"JSON_INTEGER_FORMAT, ts);
-    INFO(ctx->r->server, "cookie data: raw_cookie >%s<", raw_cookie);
-    INFO(ctx->r->server, "cookie data: >%s< >%s< >%s< >%s< >%d< >%d<", hash, vid, uuid, buf, a_val, b_val);
+    if (!cookie) {
+        ERROR(ctx->r->server, "cookie data: failed to allocate risk cookie struct. raw_cookie (%s)", raw_cookie);
+        json_decref(j_cookie);
+        return NULL;
+    }
 
+    snprintf(buf, sizeof(buf), "%"JSON_INTEGER_FORMAT, ts);
     cookie->timestamp = apr_pstrdup(ctx->r->pool, buf);
     cookie->ts = ts;
-    cookie->hash = hash;
-    cookie->uuid = uuid;
-    cookie->vid = vid;
+    cookie->hash = apr_pstrdup(ctx->r->pool, hash);
+    cookie->uuid = apr_pstrdup(ctx->r->pool, uuid);
+    cookie->vid = apr_pstrdup(ctx->r->pool, vid);
     cookie->a_val = a_val;
     cookie->b_val = b_val;
     cookie->a = apr_psprintf(ctx->r->pool, "%d", a_val);
     cookie->b = apr_psprintf(ctx->r->pool, "%d", b_val);
 
     INFO(ctx->r->server,"cookie data: timestamp %s, vid %s, uuid %s hash %s scores: a %s b %s", cookie->timestamp, cookie->vid, cookie->uuid, cookie->hash, cookie->a, cookie->b);
+    json_decref(j_cookie);
     return cookie;
 }
 
