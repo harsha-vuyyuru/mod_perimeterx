@@ -2,10 +2,10 @@
 #include <jansson_config.h>
 
 #include "json_util.h"
+#include "apr_strings.h"
 
 json_t *header_to_json(const char *key, const char *value);
 json_t *headers_to_json(const apr_array_header_t *arr);
-void free_headers_json(json_t *j_headers);
 
 static const char *s2s_call_reason_string(s2s_call_reason_t r) {
     static const char *call_reasons[] = { "none", "no_cookie", "expired_cookie", "invalid_cookie"};
@@ -142,10 +142,10 @@ captcha_response *parse_captcha_response(char* captcha_response_str, const reque
     json_t *j_vid = json_object_get(j_response, "vid");
     json_t *j_cid = json_object_get(j_response, "cid");
 
-    parsed_response->uuid = json_string_value(j_uuid);
+    parsed_response->uuid = apr_pstrdup(ctx->r->pool, json_string_value(j_uuid));
     parsed_response->status = json_integer_value(j_status);
-    parsed_response->vid = json_string_value(j_vid);
-    parsed_response->cid = json_string_value(j_cid);
+    parsed_response->vid = apr_pstrdup(ctx->r->pool, json_string_value(j_vid));
+    parsed_response->cid = apr_pstrdup(ctx->r->pool, json_string_value(j_cid));
 
     json_decref(j_response);
 
@@ -165,7 +165,7 @@ risk_response* parse_risk_response(char* risk_response_str, const request_contex
     json_t *j_scores = json_object_get(j_response, "scores");
     json_t *j_non_human = json_object_get(j_scores, "non_human");
 
-    parsed_response->uuid = json_string_value(j_uuid);
+    parsed_response->uuid = apr_pstrdup(ctx->r->pool, json_string_value(j_uuid));
     parsed_response->status = json_integer_value(j_status);
     parsed_response->score = json_integer_value(j_non_human);
 
