@@ -49,7 +49,8 @@ static const char *set_blocking_score(cmd_parms *cmd, void *config, const char *
 static const char *set_ip_header(cmd_parms *cmd, void *config, const char *ip_header);
 
 static const px_config *get_config(cmd_parms *cmd, void *dir_config);
-
+static apr_status_t px_child_exit(void *data);
+static void px_child_init(apr_pool_t *p, server_rec *s);
 static const command_rec px_directives[] = {
     AP_INIT_FLAG(
             "PXEnabled",
@@ -114,6 +115,19 @@ module AP_MODULE_DECLARE_DATA perimeterx_module =  {
 static void perimeterx_register_hooks(apr_pool_t *pool) {
     // TODO: working after x module
     ap_hook_post_read_request(perimeterx_handler, NULL, NULL, APR_HOOK_LAST);
+    ap_hook_child_init(px_child_init, NULL, NULL, APR_HOOK_MIDDLE);
+}
+
+static apr_status_t px_child_exit(void *data)
+{
+    curl_global_cleanup();
+    return APR_SUCCESS;
+}
+
+static void px_child_init(apr_pool_t *p, server_rec *s)
+{
+    curl_global_init(CURL_GLOBAL_ALL);
+    apr_pool_cleanup_register(p, s, px_child_exit, px_child_exit);
 }
 
 static const char *set_px_enabled(cmd_parms *cmd, void *dir_config, int arg) {
@@ -231,7 +245,6 @@ static void *create_server_config(apr_pool_t *pool, server_rec *s) {
 
 static void *create_config(apr_pool_t *pool) {
     px_config *conf = apr_pcalloc(pool, sizeof(px_config));
-    curl_global_init(CURL_GLOBAL_ALL);
     conf->module_enabled = false;
     conf->debug_level = false;
     conf->api_timeout = 0L;
