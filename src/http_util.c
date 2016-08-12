@@ -80,6 +80,9 @@ char *do_request(const char *url, const char *payload, const char *auth_header, 
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_response_cb);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*) &response);
     res = curl_easy_perform(curl);
+
+    curl_slist_free_all(headers);
+
     if (res == CURLE_OK) {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
         if (status_code == 200) {

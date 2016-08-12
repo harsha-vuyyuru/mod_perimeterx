@@ -49,6 +49,8 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
         free(response_str);
     }
 
+    free(payload);
+
     if (c) {
         captcha_verified = c->status == 0;
         if (!captcha_verified) {
@@ -151,6 +153,7 @@ risk_response* risk_api_get(const request_context *ctx, const px_config *conf, b
     INFO(ctx->r->server, "risk_api_get: server response (%s)", risk_response_str);
     risk_response *risk_response = parse_risk_response(risk_response_str, ctx);
     free(risk_response_str);
+    free(risk_payload);
     return risk_response;
 }
 
@@ -177,6 +180,7 @@ static void post_verification(request_context *ctx, px_config *conf, bool reques
             ERROR(ctx->r->server, "post_verification: (%s) send failed", activity_type);
         }
     }
+    free(activity);
 }
 
 static bool px_verify_request(request_context *ctx, px_config *conf) {

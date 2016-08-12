@@ -43,19 +43,20 @@ char *create_captcha_payload(const request_context *ctx, px_config *conf) {
     char *payload = json_dumps(root, JSON_ENCODE_ANY);
 
     if (j_vid) {
-        free(j_vid);
+        json_decref(j_vid);
+
     }
     if (j_hostname) {
-        free(j_hostname);
+        json_decref(j_hostname);
     }
     if (j_pxcaptcha) {
-        free(j_pxcaptcha);
+        json_decref(j_pxcaptcha);
     }
 
-    free(root);
+    json_decref(root);
     free_headers_json(j_headers);
-    free(j_headers);
-    free(request);
+    json_decref(j_headers);
+    json_decref(request);
 
     return payload;
 }
@@ -91,20 +92,20 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf, boo
     char *request_str = json_dumps(request, JSON_ENCODE_ANY);
 
     if (j_uuid) {
-        free(j_uuid);
+        json_decref(j_uuid);
     }
     if (j_vid) {
-        free(j_vid);
+        json_decref(j_vid);
     }
     if (j_px_cookie) {
-        free(j_px_cookie);
+        json_decref(j_px_cookie);
     }
 
     free_headers_json(j_headers);
-    free(j_headers);
-    free(j_data);
-    free(j_additional);
-    free(request);
+    json_decref(j_headers);
+    json_decref(j_data);
+    json_decref(j_additional);
+    json_decref(request);
 
     return request_str;
 }
@@ -147,17 +148,19 @@ char *create_activity(const char *activity_type, px_config *conf, request_contex
     char *request_str = json_dumps(activity, JSON_ENCODE_ANY);
 
     if (j_vid) {
-        free(j_vid);
+        json_decref(j_vid);
     }
     if (j_uuid) {
-        free(j_uuid);
+        json_decref(j_uuid);
     }
     for (i = 0; i < header_arr->nelts; i++) {
-        free(ptrs[i]);
+        json_decref(ptrs[i]);
     }
-    free(j_headers);
-    free(details);
-    free(activity);
+    
+    free_headers_json(j_headers);
+    json_decref(j_headers);
+    json_decref(details);
+    json_decref(activity);
     return request_str;
 }
 
@@ -177,6 +180,8 @@ captcha_response *parse_captcha_response(char* captcha_response_str, const reque
     parsed_response->status = json_integer_value(j_status);
     parsed_response->vid = json_string_value(j_vid);
     parsed_response->cid = json_string_value(j_cid);
+
+    json_decref(j_response);
 
     return parsed_response;
 }
@@ -198,11 +203,11 @@ risk_response* parse_risk_response(char* risk_response_str, const request_contex
     parsed_response->status = json_integer_value(j_status);
     parsed_response->score = json_integer_value(j_non_human);
 
-    free(j_response);
-    free(j_non_human);
-    free(j_scores);
-    free(j_status);
-    free(j_uuid);
+    json_decref(j_response);
+    json_decref(j_non_human);
+    json_decref(j_scores);
+    json_decref(j_status);
+    json_decref(j_uuid);
 
     return parsed_response;
 }
@@ -213,6 +218,8 @@ json_t *header_to_json(const char *key, const char *value) {
     json_t *j_value = json_string(value);
     json_object_set(h, "name", j_key);
     json_object_set(h, "value", j_value);
+    json_decref(j_key);
+    json_decref(j_value);
     return h;
 }
 
@@ -229,6 +236,8 @@ json_t *headers_to_json(const apr_array_header_t *arr) {
         j_header = header_to_json(h.key, h.val);
         json_array_append(j_headers, j_header);
     }
+    
+    json_decref(j_header);
 
     return j_headers;
 }
@@ -239,7 +248,7 @@ void free_headers_json(json_t *j_headers) {
 
     // Free all headers
     json_array_foreach(j_headers, index, value) {
-        free(value);
+        json_decref(value);
     }
 }
 
