@@ -2,10 +2,10 @@
 #include <jansson_config.h>
 
 #include "json_util.h"
+#include "apr_strings.h"
 
 json_t *header_to_json(const char *key, const char *value);
 json_t *headers_to_json(const apr_array_header_t *arr);
-void free_headers_json(json_t *j_headers);
 
 static const char *s2s_call_reason_string(s2s_call_reason_t r) {
     static const char *call_reasons[] = { "none", "no_cookie", "expired_cookie", "invalid_cookie"};
@@ -25,43 +25,32 @@ char *create_captcha_payload(const request_context *ctx, px_config *conf) {
     const apr_array_header_t *header_arr = apr_table_elts(ctx->headers);
     json_t *j_headers = headers_to_json(header_arr);
     json_object_set(request, "headers", j_headers);
-    json_object_set(root, "request", request);
+    json_object_set_new(root, "request", request);
 
     if (ctx->vid) {
         j_vid = json_string(ctx->vid);
-        json_object_set(root, "vid", j_vid);
+        json_object_set_new(root, "vid", j_vid);
     }
     if (ctx->px_captcha) {
         j_pxcaptcha = json_string(ctx->px_captcha);
-        json_object_set(root, "pxCaptcha", j_pxcaptcha);
+        json_object_set_new(root, "pxCaptcha", j_pxcaptcha);
     }
     if (ctx->hostname) {
         j_hostname = json_string(ctx->hostname);
-        json_object_set(root, "hostname", j_hostname);
+        json_object_set_new(root, "hostname", j_hostname);
     }
 
     char *payload = json_dumps(root, JSON_ENCODE_ANY);
 
-    if (j_vid) {
-        free(j_vid);
-    }
-    if (j_hostname) {
-        free(j_hostname);
-    }
-    if (j_pxcaptcha) {
-        free(j_pxcaptcha);
-    }
-
-    free(root);
-    free_headers_json(j_headers);
-    free(j_headers);
-    free(request);
+    json_decref(root);
+    json_array_clear(j_headers);
+    json_decref(j_headers);
 
     return payload;
 }
 
-char *create_risk_payload(const request_context *ctx, const px_config *conf) {
-    json_t *j_headers, *j_data, *request, *j_header, *j_vid = NULL, *j_additional, *j_px_cookie = NULL;
+char *create_risk_payload(const request_context *ctx, const px_config *conf, bool cookie_expired) {
+    json_t *j_headers, *j_data, *request, *j_header, *j_uuid = NULL, *j_vid = NULL, *j_additional, *j_px_cookie = NULL;
 
     j_data = json_pack("{s:s,s:s,s:s}" , "ip", ctx->ip, "uri", ctx->uri, "url", ctx->full_url);
     request = json_object();
@@ -70,6 +59,11 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf) {
     j_headers = headers_to_json(header_arr);
     json_object_set(request, "request", j_data);
     json_object_set(j_data, "headers", j_headers);
+
+    if (cookie_expired && ctx->uuid) {
+        j_uuid = json_string(ctx->uuid);
+        json_object_set_new(request, "uuid", j_uuid);
+    }
 
     j_additional = json_pack("{s:s, s:s, s:s, s:s}", "s2s_call_reason", s2s_call_reason_string(ctx->call_reason), "http_method", ctx->http_method, "http_version", ctx->http_version, "module_version", conf->module_version);
     json_object_set(request, "additional", j_additional);
@@ -85,25 +79,18 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf) {
 
     char *request_str = json_dumps(request, JSON_ENCODE_ANY);
 
-    if (j_vid) {
-        free(j_vid);
-    }
-    if (j_px_cookie) {
-        free(j_px_cookie);
-    }
-
-    free_headers_json(j_headers);
-    free(j_headers);
-    free(j_data);
-    free(j_additional);
-    free(request);
+    json_array_clear(j_headers);
+    json_decref(j_headers);
+    json_decref(j_data);
+    json_decref(j_additional);
+    json_decref(request);
 
     return request_str;
 }
 
-char *create_activity(char *activity_type, px_config *conf, request_context *ctx) {
+char *create_activity(const char *activity_type, px_config *conf, request_context *ctx) {
     apr_table_entry_t h;
-    json_t *j_vid = NULL, *j_headers;
+    json_t *j_vid = NULL, *j_uuid = NULL, *j_headers;
     // TODO: headers could be generated only once and saved on the struct
     const apr_array_header_t *header_arr = apr_table_elts(ctx->headers);
 
@@ -111,12 +98,17 @@ char *create_activity(char *activity_type, px_config *conf, request_context *ctx
 
     if (ctx->vid) {
         j_vid = json_string(ctx->vid);
-        json_object_set(activity, "vid", j_vid);
+        json_object_set_new(activity, "vid", j_vid);
     }
 
     json_t *details = json_pack("{s:i, s:s, s:s, s:s, s:s}", "block_score", ctx->score, "block_reason", block_reason_string(ctx->block_reason), "http_method", ctx->http_method, "http_version", ctx->http_version, "module_version", conf->module_version);
 
-    json_object_set(activity, "details", details);
+    if (activity_type == "block" && ctx->uuid) {
+        j_uuid = json_string(ctx->uuid);
+        json_object_set_new(details, "block_uuid", j_uuid);
+    }
+
+    json_object_set_new(activity, "details", details);
 
     j_headers = json_object();
     void **ptrs = apr_palloc(ctx->r->pool, sizeof(void*) *header_arr->nelts);
@@ -125,23 +117,16 @@ char *create_activity(char *activity_type, px_config *conf, request_context *ctx
     for (i = 0; i < header_arr->nelts; i++) {
         h = APR_ARRAY_IDX(header_arr, i, apr_table_entry_t);
         json_t *j_header = json_string(h.val);
-        json_object_set(j_headers, h.key, j_header);
-        ptrs[i] = j_header;
+        json_object_set_new(j_headers, h.key, j_header);
     }
 
     header_arr = apr_table_elts(ctx->headers);
     json_object_set(activity, "headers", j_headers);
     char *request_str = json_dumps(activity, JSON_ENCODE_ANY);
 
-    if (j_vid) {
-        free(j_vid);
-    }
-    for (i = 0; i < header_arr->nelts; i++) {
-        free(ptrs[i]);
-    }
-    free(j_headers);
-    free(details);
-    free(activity);
+    json_array_clear(j_headers);
+    json_decref(j_headers);
+    json_decref(activity);
     return request_str;
 }
 
@@ -157,10 +142,12 @@ captcha_response *parse_captcha_response(char* captcha_response_str, const reque
     json_t *j_vid = json_object_get(j_response, "vid");
     json_t *j_cid = json_object_get(j_response, "cid");
 
-    parsed_response->uuid = json_string_value(j_uuid);
+    parsed_response->uuid = apr_pstrdup(ctx->r->pool, json_string_value(j_uuid));
     parsed_response->status = json_integer_value(j_status);
-    parsed_response->vid = json_string_value(j_vid);
-    parsed_response->cid = json_string_value(j_cid);
+    parsed_response->vid = apr_pstrdup(ctx->r->pool, json_string_value(j_vid));
+    parsed_response->cid = apr_pstrdup(ctx->r->pool, json_string_value(j_cid));
+
+    json_decref(j_response);
 
     return parsed_response;
 }
@@ -178,15 +165,11 @@ risk_response* parse_risk_response(char* risk_response_str, const request_contex
     json_t *j_scores = json_object_get(j_response, "scores");
     json_t *j_non_human = json_object_get(j_scores, "non_human");
 
-    parsed_response->uuid = json_string_value(j_uuid);
+    parsed_response->uuid = apr_pstrdup(ctx->r->pool, json_string_value(j_uuid));
     parsed_response->status = json_integer_value(j_status);
     parsed_response->score = json_integer_value(j_non_human);
 
-    free(j_response);
-    free(j_non_human);
-    free(j_scores);
-    free(j_status);
-    free(j_uuid);
+    json_decref(j_response);
 
     return parsed_response;
 }
@@ -195,8 +178,8 @@ json_t *header_to_json(const char *key, const char *value) {
     json_t *h = json_object();
     json_t *j_key = json_string(key);
     json_t *j_value = json_string(value);
-    json_object_set(h, "name", j_key);
-    json_object_set(h, "value", j_value);
+    json_object_set_new(h, "name", j_key);
+    json_object_set_new(h, "value", j_value);
     return h;
 }
 
@@ -211,19 +194,8 @@ json_t *headers_to_json(const apr_array_header_t *arr) {
     for (i = 0; i < arr->nelts; i++) {
         h = APR_ARRAY_IDX(arr, i, apr_table_entry_t);
         j_header = header_to_json(h.key, h.val);
-        json_array_append(j_headers, j_header);
+        json_array_append_new(j_headers, j_header);
     }
 
     return j_headers;
 }
-
-void free_headers_json(json_t *j_headers) {
-    size_t index;
-    json_t *value;
-
-    // Free all headers
-    json_array_foreach(j_headers, index, value) {
-        free(value);
-    }
-}
-
