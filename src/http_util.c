@@ -85,10 +85,11 @@ char *do_request(const char *url, const char *payload, const char *auth_header, 
         if (status_code == 200) {
             return response.data;
         }
-        free(response.data);
+
         ERROR(r->server, "PX server request returned status: %ld, url: %s", status_code, response.data);
     } else {
         ERROR(r->server, "curl_easy_perform() failed: %s", curl_easy_strerror(res));
     }
+    free(response.data);
     return NULL;
 }
