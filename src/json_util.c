@@ -170,10 +170,6 @@ risk_response* parse_risk_response(char* risk_response_str, const request_contex
     parsed_response->score = json_integer_value(j_non_human);
 
     json_decref(j_response);
-    json_decref(j_non_human);
-    json_decref(j_scores);
-    json_decref(j_status);
-    json_decref(j_uuid);
 
     return parsed_response;
 }
