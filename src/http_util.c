@@ -84,7 +84,6 @@ char *do_request(const char *url, const char *payload, const char *auth_header, 
     if (res == CURLE_OK) {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
         if (status_code == 200) {
-            free(response.data);
             return response.data;
         }
 
