@@ -45,7 +45,7 @@ int parse_cookie() {
     int b_val = 0;
     int ts = 0;
     const char *hash = NULL;
-    if (json_unpack(j_cookie, "{s:s,s:s,s:{s:i,s:i},s:i,s:s,}", "v", &vid, "u", &uuid, "s", "a", &a_val, "b", &b_val, "t", &ts, "h", &hash)) {
+    if (json_unpack(j_cookie, "{s:s,s:s,s:{s:i,s:i},s:i,s:s}", "v", &vid, "u", &uuid, "s", "a", &a_val, "b", &b_val, "t", &ts, "h", &hash)) {
         fprintf(stderr, "cookie data: unpack json failed.\n");
         json_decref(j_cookie);
         return -2;
