@@ -277,9 +277,9 @@ char *post_request(const char *url, const char *payload, const char *auth_header
         if (status_code == 200) {
             return response.data;
         }
-        ERROR(r->server, "PX server request returned status: %ld, url: %s", status_code, response.data);
+        ERROR(r->server, "post_request: status: %ld, url: %s", status_code, url);
     } else {
-        ERROR(r->server, "curl_easy_perform() failed: %s", curl_easy_strerror(res));
+        ERROR(r->server, "post_request: failed: %s", curl_easy_strerror(res));
     }
     free(response.data);
     return NULL;
