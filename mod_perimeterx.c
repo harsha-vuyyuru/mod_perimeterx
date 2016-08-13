@@ -732,18 +732,27 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     return captcha_verified;
 }
 
+CURL *create_curl(const px_config *conf) {
+    CURL *curl = curl_easy_init();
+    if (curl) {
+        curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1l);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, conf->api_timeout);
+    }
+    return curl;
+}
+
 request_context* create_context(request_rec *req, const px_config *conf) {
-    request_context *ctx;
+    CURL *curl = create_curl(conf);
+    if (!curl) {
+        return NULL;
+    }
+
+    request_context *ctx = (request_context*) apr_pcalloc(req->pool, sizeof(request_context));
+    ctx->curl = curl;
+
     const char *px_cookie = NULL;
     const char *px_captcha_cookie = NULL;
     char *captcha_cookie = NULL;
-    const char *useragent;
-    char *captcha, *vid;
-
-    ctx = (request_context*) apr_pcalloc(req->pool, sizeof(request_context));
-    ctx->curl = curl_easy_init();
-    curl_easy_setopt(ctx->curl, CURLOPT_TCP_KEEPALIVE, 1l);
-    curl_easy_setopt(ctx->curl, CURLOPT_TIMEOUT, conf->api_timeout);
 # if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 4
     apr_status_t status = ap_cookie_read(req, "_px", &px_cookie, 0);
     status = ap_cookie_read(req, "_pxCaptcha", &px_captcha_cookie, 0);
@@ -780,12 +789,11 @@ request_context* create_context(request_rec *req, const px_config *conf) {
     }
 #endif
 
-    useragent = apr_table_get(req->headers_in, "User-Agent");
     ctx->px_cookie = px_cookie;
     ctx->uri = req->uri;
     ctx->hostname = req->hostname;
     ctx->http_method = req->method;
-    ctx->useragent = useragent;
+    ctx->useragent = apr_table_get(req->headers_in, "User-Agent");
     // TODO(barak): fill_url is missing the protocol like http:// or https://
     ctx->full_url = apr_pstrcat(req->pool, req->hostname, req->unparsed_uri, NULL);
     ctx->vid = NULL;
@@ -798,12 +806,11 @@ request_context* create_context(request_rec *req, const px_config *conf) {
     }
 
     // TODO(barak): parse withou strtok
-    char *version = NULL;
     char *saveptr;
-    char *delim = "/";
-    char *protocol_cpy = apr_pstrmemdup(req->pool, req->protocol, strlen(req->protocol));
+    const char *delim = "/";
+    char *protocol_cpy = apr_pstrdup(req->pool, req->protocol);
     apr_strtok(protocol_cpy , delim, &saveptr);
-    version = apr_strtok(NULL, delim, &saveptr);
+    const char *version = apr_strtok(NULL, delim, &saveptr);
 
     ctx->http_version = version;
     ctx->headers = req->headers_in;
@@ -944,21 +951,23 @@ int px_handle_request(request_rec *r, px_config *conf) {
     }
 
     request_context *ctx = create_context(r, conf);
-    bool request_valid = px_verify_request(ctx, conf);
-    apr_table_set(r->subprocess_env, "SCORE", apr_itoa(r->pool, ctx->score));
-    curl_easy_cleanup(ctx->curl);
+    if (ctx) {
+        bool request_valid = px_verify_request(ctx, conf);
+        apr_table_set(r->subprocess_env, "SCORE", apr_itoa(r->pool, ctx->score));
+        curl_easy_cleanup(ctx->curl);
 
-    if (!request_valid) {
-        if (conf->captcha_enabled) {
-            rprintf_captcha_blocking_page(r, ctx);
-        } else {
-            rprintf_blocking_page(r, ctx);
-        }
+        if (!request_valid) {
+            if (conf->captcha_enabled) {
+                rprintf_captcha_blocking_page(r, ctx);
+            } else {
+                rprintf_blocking_page(r, ctx);
+            }
 # if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 2
-        ap_set_content_type(r, "text/html");
+            ap_set_content_type(r, "text/html");
 # endif
-        INFO(r->server, "px_handle_request: request blocked. captcha (%d)", conf->captcha_enabled);
-        return DONE;
+            INFO(r->server, "px_handle_request: request blocked. captcha (%d)", conf->captcha_enabled);
+            return DONE;
+        }
     }
     INFO(r->server, "px_handle_request: request passed");
     return OK;
