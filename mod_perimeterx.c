@@ -659,7 +659,6 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
     EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
     if (EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv) != 1) {
         ERROR(r_ctx->r->server, "Decryption failed in: Init");
-        ERR_free_strings();
         return NULL;
     }
     unsigned char *dpayload = apr_palloc(r_ctx->r->pool, payload_len);
@@ -667,13 +666,11 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
     int dpayload_len;
     if (EVP_DecryptUpdate(ctx, dpayload, &len, payload, payload_len) != 1) {
         ERROR(r_ctx->r->server, "Decryption failed in: Update");
-        ERR_free_strings();
         return NULL;
     }
     dpayload_len = len;
     if (EVP_DecryptFinal_ex(ctx, dpayload + len, &len) != 1) {
         ERROR(r_ctx->r->server, "Decryption failed in: Final");
-        ERR_free_strings();
         return NULL;
     }
 
@@ -685,7 +682,6 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
 
     // clean memory
     EVP_CIPHER_free(ctx);
-    ERR_free_strings();
     return c;
 }
 
@@ -980,6 +976,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
 
 static apr_status_t px_child_exit(void *data) {
     curl_global_cleanup();
+    ERR_free_strings();
     return APR_SUCCESS;
 }
 
@@ -1155,7 +1152,6 @@ static const command_rec px_directives[] = {
 };
 
 static void perimeterx_register_hooks(apr_pool_t *pool) {
-    // TODO: working after x module
     ap_hook_post_read_request(px_hook_post_request, NULL, NULL, APR_HOOK_LAST);
     ap_hook_child_init(px_hook_child_init, NULL, NULL, APR_HOOK_MIDDLE);
     ap_hook_pre_config(px_hook_pre_config, NULL, NULL, APR_HOOK_MIDDLE);
