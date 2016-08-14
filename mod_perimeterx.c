@@ -136,6 +136,7 @@ typedef struct px_config_t {
     bool send_page_activities;
     const char *module_version;
     curl_pool *curl_pool;
+    int curl_pool_size;
 } px_config;
 
 typedef enum {
@@ -976,7 +977,7 @@ static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
     curl_global_init(CURL_GLOBAL_ALL);
 
     px_config *conf = ap_get_module_config(s->module_config, &perimeterx_module);
-    conf->curl_pool = curl_pool_create(p, 40);
+    conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
     apr_pool_cleanup_register(p, s, px_child_exit, px_child_exit);
 }
 
@@ -1081,6 +1082,15 @@ static const char *set_ip_header(cmd_parms *cmd, void *dir_config, const char *i
     return NULL;
 }
 
+static const char *set_curl_pool_size(cmd_parms *cmd, void *dir_config, const char *curl_pool_size) {
+    px_config *conf = get_config(cmd, dir_config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->curl_pool_size = atoi(curl_pool_size);
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     return px_handle_request(r, conf);
@@ -1094,6 +1104,7 @@ static void *create_config(apr_pool_t *pool) {
     conf->blocking_score = 70;
     conf->captcha_enabled = false;
     conf->module_version = "Apache Module v1.0";
+    conf->curl_pool_size = 40;
     return conf;
 }
 
@@ -1143,6 +1154,11 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "This header will be used to get the request real IP"),
+    AP_INIT_TAKE1("CurlPoolSize",
+            set_curl_pool_size,
+            NULL,
+            OR_ALL,
+            "Determines number of curl active handles"),
     { NULL }
 };
 
