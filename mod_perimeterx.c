@@ -25,6 +25,8 @@
 #include "http_log.h"
 #include "apr_strings.h"
 
+#include "curl_pool.h"
+
 #if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 4
 #include "util_cookies.h"
 #endif
@@ -42,7 +44,7 @@ APLOG_USE_MODULE(perimeterx);
     ap_log_error(APLOG_MARK, APLOG_ERR, 0, server_rec, "[mod_perimeterx]:" __VA_ARGS__)
 
 static const char *RISK_API_URL = "https://collector.perimeterx.net/api/v1/risk";
-static const char *CAPTHCA_API_URL = "https://collector.perimeterx.net/api/v1/risk/captcha";
+static const char *CAPTCHA_API_URL = "https://collector.perimeterx.net/api/v1/risk/captcha";
 static const char *ACTIVITIES_URL = "https://collector.perimeterx.net/api/v1/collector/s2s";
 
 // constatns
@@ -133,6 +135,8 @@ typedef struct px_config_t {
     long api_timeout;
     bool send_page_activities;
     const char *module_version;
+    curl_pool *curl_pool;
+    int curl_pool_size;
 } px_config;
 
 typedef enum {
@@ -222,7 +226,6 @@ typedef struct request_context_t {
     block_reason_t block_reason;
     s2s_call_reason_t call_reason;
     request_rec *r;
-    CURL* curl;
 } request_context;
 
 
@@ -252,9 +255,10 @@ static size_t write_response_cb(void* contents, size_t size, size_t nmemb, void 
 
 // http post request
 //
-char *post_request(const char *url, const char *payload, const char *auth_header, request_rec *r, CURL *curl) {
+char *post_request(const char *url, const char *payload, const char *auth_header, request_rec *r, curl_pool *curl_pool) {
+    CURL *curl = curl_pool_get(curl_pool);
     struct response_t response;
-    struct curl_slist *headers;
+    struct curl_slist *headers = NULL;
     long status_code;
     CURLcode res;
 
@@ -275,12 +279,14 @@ char *post_request(const char *url, const char *payload, const char *auth_header
     if (res == CURLE_OK) {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
         if (status_code == 200) {
+            curl_pool_put(curl_pool, curl);
             return response.data;
         }
         ERROR(r->server, "post_request: status: %ld, url: %s", status_code, url);
     } else {
         ERROR(r->server, "post_request: failed: %s", curl_easy_strerror(res));
     }
+    curl_pool_put(curl_pool, curl);
     free(response.data);
     return NULL;
 }
@@ -660,7 +666,6 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
     if (EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv) != 1) {
         ERROR(r_ctx->r->server, "Decryption failed in: Init");
         EVP_CIPHER_CTX_free(ctx);
-        ERR_free_strings();
         return NULL;
     }
     unsigned char *dpayload = apr_palloc(r_ctx->r->pool, payload_len);
@@ -669,14 +674,12 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
     if (EVP_DecryptUpdate(ctx, dpayload, &len, payload, payload_len) != 1) {
         ERROR(r_ctx->r->server, "Decryption failed in: Update");
         EVP_CIPHER_CTX_free(ctx);
-        ERR_free_strings();
         return NULL;
     }
     dpayload_len = len;
     if (EVP_DecryptFinal_ex(ctx, dpayload + len, &len) != 1) {
         ERROR(r_ctx->r->server, "Decryption failed in: Final");
         EVP_CIPHER_CTX_free(ctx);
-        ERR_free_strings();
         return NULL;
     }
 
@@ -688,7 +691,6 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
 
     // clean memory
     EVP_CIPHER_CTX_free(ctx);
-    ERR_free_strings();
     return c;
 }
 
@@ -716,7 +718,7 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
         return true;
     }
 
-    char *response_str = post_request(CAPTHCA_API_URL, payload, conf->auth_header, ctx->r, ctx->curl);
+    char *response_str = post_request(CAPTCHA_API_URL, payload, conf->auth_header, ctx->r, conf->curl_pool);
     free(payload);
     if (!response_str) {
         INFO(ctx->r->server, "verify_captcha: failed to perform captcha validation request. url: (%s)", ctx->full_url);
@@ -737,23 +739,8 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     return captcha_verified;
 }
 
-CURL *create_curl(const px_config *conf) {
-    CURL *curl = curl_easy_init();
-    if (curl) {
-        curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1l);
-        curl_easy_setopt(curl, CURLOPT_TIMEOUT, conf->api_timeout);
-    }
-    return curl;
-}
-
 request_context* create_context(request_rec *req, const px_config *conf) {
-    CURL *curl = create_curl(conf);
-    if (!curl) {
-        return NULL;
-    }
-
     request_context *ctx = (request_context*) apr_pcalloc(req->pool, sizeof(request_context));
-    ctx->curl = curl;
 
     const char *px_cookie = NULL;
     const char *px_captcha_cookie = NULL;
@@ -810,7 +797,7 @@ request_context* create_context(request_rec *req, const px_config *conf) {
         INFO(req->server, "PXCaptcha cookie was found: %s", ctx->px_captcha);
     }
 
-    // TODO(barak): parse withou strtok
+    // TODO(barak): parse without strtok
     char *saveptr;
     const char *delim = "/";
     char *protocol_cpy = apr_pstrdup(req->pool, req->protocol);
@@ -833,7 +820,7 @@ risk_response* risk_api_get(const request_context *ctx, const px_config *conf, b
     if (!risk_payload) {
         return NULL;
     }
-    char *risk_response_str = post_request(RISK_API_URL , risk_payload, conf->auth_header, ctx->r, ctx->curl);
+    char *risk_response_str = post_request(RISK_API_URL , risk_payload, conf->auth_header, ctx->r, conf->curl_pool);
     free(risk_payload);
     if (!risk_response_str) {
         return NULL;
@@ -867,7 +854,7 @@ static void post_verification(request_context *ctx, px_config *conf, bool reques
             ERROR(ctx->r->server, "post_verification: (%s) create activity failed", activity_type);
             return;
         }
-        char *resp = post_request(ACTIVITIES_URL, activity, conf->auth_header, ctx->r, ctx->curl);
+        char *resp = post_request(ACTIVITIES_URL, activity, conf->auth_header, ctx->r, conf->curl_pool);
         free(activity);
         if (resp) {
             free(resp);
@@ -959,7 +946,6 @@ int px_handle_request(request_rec *r, px_config *conf) {
     if (ctx) {
         bool request_valid = px_verify_request(ctx, conf);
         apr_table_set(r->subprocess_env, "SCORE", apr_itoa(r->pool, ctx->score));
-        curl_easy_cleanup(ctx->curl);
 
         if (!request_valid) {
             if (conf->captcha_enabled) {
@@ -983,11 +969,15 @@ int px_handle_request(request_rec *r, px_config *conf) {
 
 static apr_status_t px_child_exit(void *data) {
     curl_global_cleanup();
+    ERR_free_strings();
     return APR_SUCCESS;
 }
 
 static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
     curl_global_init(CURL_GLOBAL_ALL);
+
+    px_config *conf = ap_get_module_config(s->module_config, &perimeterx_module);
+    conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
     apr_pool_cleanup_register(p, s, px_child_exit, px_child_exit);
 }
 
@@ -1092,6 +1082,15 @@ static const char *set_ip_header(cmd_parms *cmd, void *dir_config, const char *i
     return NULL;
 }
 
+static const char *set_curl_pool_size(cmd_parms *cmd, void *dir_config, const char *curl_pool_size) {
+    px_config *conf = get_config(cmd, dir_config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->curl_pool_size = atoi(curl_pool_size);
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     return px_handle_request(r, conf);
@@ -1105,6 +1104,7 @@ static void *create_config(apr_pool_t *pool) {
     conf->blocking_score = 70;
     conf->captcha_enabled = false;
     conf->module_version = "Apache Module v1.0";
+    conf->curl_pool_size = 40;
     return conf;
 }
 
@@ -1154,11 +1154,15 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "This header will be used to get the request real IP"),
+    AP_INIT_TAKE1("CurlPoolSize",
+            set_curl_pool_size,
+            NULL,
+            OR_ALL,
+            "Determines number of curl active handles"),
     { NULL }
 };
 
 static void perimeterx_register_hooks(apr_pool_t *pool) {
-    // TODO: working after x module
     ap_hook_post_read_request(px_hook_post_request, NULL, NULL, APR_HOOK_LAST);
     ap_hook_child_init(px_hook_child_init, NULL, NULL, APR_HOOK_MIDDLE);
     ap_hook_pre_config(px_hook_pre_config, NULL, NULL, APR_HOOK_MIDDLE);

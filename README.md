@@ -75,6 +75,10 @@ API calls timeout in seconds, default to 0 (no timeout).
 
 In order to extract the real client IP we can define a specific header key. If not defined the IP will be extracted from [```useragent_ip```](https://ci.apache.org/projects/httpd/trunk/doxygen/structrequest__rec.html#a335167cb50483f6015c43e727771c1af)
 
+### `CurlPoolSize` ###
+
+Determines the number of active curl handles for each server. 
+
 ### Example ###
 ```xml
 <IfModule mod_perimeterx.c>
@@ -84,6 +88,7 @@ In order to extract the real client IP we can define a specific header key. If n
 	AuthToken my_auth_token
 	BlockingScore 50
 	ReportPageRequest On
-	IPHeader X-Forwarded-For
+	IPHeader X-True-IP
+        CurlPoolSize 40
 </IfModule>
 ```
