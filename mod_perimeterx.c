@@ -659,6 +659,7 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
     EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
     if (EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv) != 1) {
         ERROR(r_ctx->r->server, "Decryption failed in: Init");
+        EVP_CIPHER_CTX_free(ctx);
         ERR_free_strings();
         return NULL;
     }
@@ -667,12 +668,14 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
     int dpayload_len;
     if (EVP_DecryptUpdate(ctx, dpayload, &len, payload, payload_len) != 1) {
         ERROR(r_ctx->r->server, "Decryption failed in: Update");
+        EVP_CIPHER_CTX_free(ctx);
         ERR_free_strings();
         return NULL;
     }
     dpayload_len = len;
     if (EVP_DecryptFinal_ex(ctx, dpayload + len, &len) != 1) {
         ERROR(r_ctx->r->server, "Decryption failed in: Final");
+        EVP_CIPHER_CTX_free(ctx);
         ERR_free_strings();
         return NULL;
     }
@@ -684,7 +687,7 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
     risk_cookie *c = parse_risk_cookie((const char*)dpayload, r_ctx);
 
     // clean memory
-    EVP_CIPHER_free(ctx);
+    EVP_CIPHER_CTX_free(ctx);
     ERR_free_strings();
     return c;
 }
