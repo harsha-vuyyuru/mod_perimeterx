@@ -525,6 +525,7 @@ void digest_cookie(const risk_cookie *cookie, request_context *ctx, const char *
 
     int len = 32;
     HMAC_Final(&hmac, hash, &len);
+    HMAC_CTX_cleanup(&hmac);
 
     for (int i = 0; i < 32; i++) {
         sprintf(buffer + (i * 2), "%02x", hash[i]);
@@ -578,8 +579,8 @@ risk_cookie *parse_risk_cookie(const char *raw_cookie, request_context *ctx) {
                 "v", &vid,
                 "u", &uuid,
                 "s",
-                    "a", &a_val,
-                    "b", &b_val,
+                "a", &a_val,
+                "b", &b_val,
                 "t", &ts,
                 "h", &hash)) {
         ERROR(ctx->r->server, "cookie data: unpack json failed. raw_cookie (%s)", raw_cookie);
@@ -683,6 +684,7 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
     risk_cookie *c = parse_risk_cookie((const char*)dpayload, r_ctx);
 
     // clean memory
+    EVP_CIPHER_free(ctx);
     ERR_free_strings();
     return c;
 }
