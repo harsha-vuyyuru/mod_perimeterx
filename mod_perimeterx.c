@@ -47,7 +47,7 @@ static const char *RISK_API_URL = "https://collector.perimeterx.net/api/v1/risk"
 static const char *CAPTCHA_API_URL = "https://collector.perimeterx.net/api/v1/risk/captcha";
 static const char *ACTIVITIES_URL = "https://collector.perimeterx.net/api/v1/collector/s2s";
 
-// constatns
+// constants
 //
 static const char *BLOCKED_ACTIVITY_TYPE = "block";
 static const char *PAGE_REQUESTED_ACTIVITY_TYPE = "page_requested";
@@ -324,6 +324,9 @@ char *create_activity(const char *activity_type, const px_config *conf, const re
             "details", details,
             "headers", j_headers);
 
+    json_decref(details);
+    json_decref(j_headers);
+
     if (ctx->vid) {
         json_object_set_new(activity, "vid", json_string(ctx->vid));
     }
@@ -360,6 +363,7 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf, boo
             "uri", ctx->uri,
             "url", ctx->full_url,
             "headers", j_headers);
+    json_decref(j_headers);
 
     // additional object
     json_t *j_additional = json_pack("{s:s, s:s, s:s, s:s}",
@@ -368,13 +372,16 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf, boo
             "http_version", ctx->http_version,
             "module_version", conf->module_version);
     if (ctx->px_cookie) {
-        json_object_set(j_additional, "px_cookie", json_string(ctx->px_cookie));
+        json_object_set_new(j_additional, "px_cookie", json_string(ctx->px_cookie));
     }
 
     // risk api object
     json_t *j_risk = json_pack("{s:O,s:O}",
             "request", j_request,
             "additional", j_additional);
+    json_decref(j_request);
+    json_decref(j_additional);
+
     if (ctx->vid) {
         json_object_set_new(j_risk, "vid", json_string(ctx->vid));
     }
@@ -399,6 +406,7 @@ char *create_captcha_payload(const request_context *ctx, const px_config *conf) 
             "uri", ctx->uri,
             "url", ctx->full_url,
             "headers", j_headers);
+    json_decref(j_headers);
 
     // captcha object
     json_t *j_captcha = json_object();
@@ -449,6 +457,7 @@ captcha_response *parse_captcha_response(const char* captcha_response_str, const
         parsed_response->vid = apr_pstrdup(ctx->r->pool, vid ? vid : "");
         parsed_response->cid = apr_pstrdup(ctx->r->pool, cid);
     }
+    json_decref(j_response);
     return parsed_response;
 }
 
@@ -969,7 +978,6 @@ int px_handle_request(request_rec *r, px_config *conf) {
 
 static apr_status_t px_child_exit(void *data) {
     curl_global_cleanup();
-    ERR_free_strings();
     return APR_SUCCESS;
 }
 
@@ -982,6 +990,7 @@ static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
 }
 
 static apr_status_t px_cleanup_pre_config(void *data) {
+    ERR_free_strings();
     EVP_cleanup();
     return APR_SUCCESS;
 }
