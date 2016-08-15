@@ -6,9 +6,9 @@
 Dependencies
 ----------------------------------------
 - [openssl 1.0.1] (https://www.openssl.org/source/) 
-- [libcurl](https://curl.haxx.se/docs/install.html) 
+- [libcurl >= 7.35.0] (https://curl.haxx.se/docs/install.html) 
 - [jansson 2.7](http://www.digip.org/jansson/)
-- apxs (installed with ```apache2-dev``` package)
+- [Apache Portable Runtime (APR) >=1.4.6](https://apr.apache.org/)
 
 You can install dependencies using linux package manager (```yum``` / ```debian``` packages) or install them manually.
 
@@ -24,13 +24,13 @@ Installation
 ```shell
 $ git clone https://github.com/PerimeterX/mod_perimeterx.git
 $ cd mod_perimeterx
-$ make
+$ sudo make
 $ apache2ctl restart
 ```
-#####Verify installation by listing all installed modules:
+##### Verify installation by listing all installed modules:
 
 ```shell
-$ apache2ctrl -M
+$ httpd -M
 Loaded Modules:
  core_module (static)
  so_module (static)
@@ -45,41 +45,107 @@ Loaded Modules:
 The directives should be under the server configuration.
 
 ### `PXEnabled` ###
+**description** : Enables the PerimeterX module
 
-when set to ```On``` the module will be applied on the requests.
+**required** : yes
+
+**default** : Off
+
+**values** : On|Off
+
+When set to ```On``` the module will be applied on webpage requests.
 
 ### `AppId` ###
-configure the application ID
+**description** : Unique application ID
+
+**required** : yes
+
+**default** : NULL
+
+**values** : string
 
 ### `CookieKey` ###
-configure the cookie key.
+**description** : Cookie signing key
+
+**required** : yes
+
+**default** : NULL
+
+**values** : string
 
 ### `AuthToken` ###
-configure perimeterx API auth token.
+**description** : Api authentication token
+
+**required** : yes
+
+**default** : NULL
+
+**values** : string
+
 ### `BlockingScore` ###
-Minimal score for blocking request, default to 70.
+**description** : Blocking score. When requests with a score of equal or higher value they will be blocked.
+
+**required** : No
+
+**default** : 70
+
+**values** : Integer between 0 and 100
 
 ### `Captcha` ###
 
-When set to ```On``` the blocking page served by this module will include captcha.
+**description** : Enable reCaptcha on the blocking page.
+
+**required** : No
+
+**default** : Off
+
+**values** : On | Off
 
 ### `ReportPageRequest` ###
 
-When set to ```On``` the server will send report perimeterx that a page was requested.
+**description** : Enables the ablity to report page requests and blocking activities to PerimeterX
+
+**required** : No
+
+**default** : Off
+
+**values** : On | Off
 
 ### `APITimeout` ###
+**description** : Timeout, in seconds, for API calles
 
-API calls timeout in seconds, default to 0 (no timeout).
+**required** : No
+
+**default** : 0 (no timeout)
+
+**values** : Integer between 0 and 3
 
 ### `IPHeader` ###
+**description** : HTTP header name that contains the real client IP address. Use this feature when your server is behind a CDN.
 
-In order to extract the real client IP we can define a specific header key. If not defined the IP will be extracted from [```useragent_ip```](https://ci.apache.org/projects/httpd/trunk/doxygen/structrequest__rec.html#a335167cb50483f6015c43e727771c1af)
+**required** : No
+
+**default** : NULL
+
+**values** : string
 
 ### `CurlPoolSize` ###
+**description** : The number of active curl handles for each server
 
-Determines the number of active curl handles for each server. 
+**required** : No
+
+**default** : 40
+
+**values** : Integer
 
 ### `BaseURL` ###
+**description** : PerimeterX API server URL
+
+**required** : No
+
+**default** : https://collector.perimeterx.net
+
+**values** : string
 
 Determines PerimeterX server base URL.
 
@@ -90,7 +156,7 @@ Determines PerimeterX server base URL.
     CookieKey my_key
     AppID my_app_id
     AuthToken my_auth_token
-    BlockingScore 50
+    BlockingScore 90
     ReportPageRequest On
     IPHeader X-True-IP
     CurlPoolSize 40
