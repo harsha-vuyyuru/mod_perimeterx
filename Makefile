@@ -1,10 +1,7 @@
 CC = apxs
 CFLAGS = -g
 
-all: clean module
-
-module:
-	$(CC) -i -a -Wc,-std=gnu99 -c `pkg-config --cflags --libs jansson openssl libcurl` -lm src/mod_perimeterx.c src/perimeterx.c src/cookie_decoder.c src/http_util.c src/json_util.c
+all: clean mod
 
 mod: mod_perimeterx.c
 	$(CC) -i -a -Wc,-std=gnu99 -c `pkg-config --cflags --libs jansson openssl libcurl` mod_perimeterx.c curl_pool.c

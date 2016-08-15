@@ -1002,15 +1002,15 @@ static int px_hook_pre_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp
     return OK;
 }
 
-static px_config *get_config(cmd_parms *cmd, void *dir_config) {
+static px_config *get_config(cmd_parms *cmd, void *config) {
     if (cmd->path) {
-        return dir_config;
+        return config;
     }
     return ap_get_module_config(cmd->server->module_config, &perimeterx_module);
 }
 
-static const char *set_px_enabled(cmd_parms *cmd, void *dir_config, int arg) {
-    px_config *conf = get_config(cmd, dir_config);
+static const char *set_px_enabled(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
@@ -1018,8 +1018,8 @@ static const char *set_px_enabled(cmd_parms *cmd, void *dir_config, int arg) {
     return NULL;
 }
 
-static const char *set_app_id(cmd_parms *cmd, void *dir_config, const char *app_id) {
-    px_config *conf = get_config(cmd, dir_config);
+static const char *set_app_id(cmd_parms *cmd, void *config, const char *app_id) {
+    px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
@@ -1027,8 +1027,8 @@ static const char *set_app_id(cmd_parms *cmd, void *dir_config, const char *app_
     return NULL;
 }
 
-static const char *set_cookie_key(cmd_parms *cmd, void *dir_config, const char *cookie_key) {
-    px_config *conf = get_config(cmd, dir_config);
+static const char *set_cookie_key(cmd_parms *cmd, void *config, const char *cookie_key) {
+    px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
@@ -1036,8 +1036,8 @@ static const char *set_cookie_key(cmd_parms *cmd, void *dir_config, const char *
     return NULL;
 }
 
-static const char *set_auth_token(cmd_parms *cmd, void *dir_config, const char *auth_token) {
-    px_config *conf = get_config(cmd, dir_config);
+static const char *set_auth_token(cmd_parms *cmd, void *config, const char *auth_token) {
+    px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
@@ -1046,8 +1046,8 @@ static const char *set_auth_token(cmd_parms *cmd, void *dir_config, const char *
     return NULL;
 }
 
-static const char *set_captcha_enabled(cmd_parms *cmd, void *dir_config, int arg) {
-    px_config *conf = get_config(cmd, dir_config);
+static const char *set_captcha_enabled(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
@@ -1055,8 +1055,8 @@ static const char *set_captcha_enabled(cmd_parms *cmd, void *dir_config, int arg
     return NULL;
 }
 
-static const char *set_pagerequest_enabled(cmd_parms *cmd, void *dir_config, int arg) {
-    px_config *conf = get_config(cmd, dir_config);
+static const char *set_pagerequest_enabled(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
@@ -1064,8 +1064,8 @@ static const char *set_pagerequest_enabled(cmd_parms *cmd, void *dir_config, int
     return NULL;
 }
 
-static const char *set_blocking_score(cmd_parms *cmd, void *dir_config, const char *blocking_score){
-    px_config *conf = get_config(cmd, dir_config);
+static const char *set_blocking_score(cmd_parms *cmd, void *config, const char *blocking_score){
+    px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
@@ -1073,8 +1073,8 @@ static const char *set_blocking_score(cmd_parms *cmd, void *dir_config, const ch
     return NULL;
 }
 
-static const char *set_api_timeout(cmd_parms *cmd, void *dir_config, const char *api_timeout) {
-    px_config *conf = get_config(cmd, dir_config);
+static const char *set_api_timeout(cmd_parms *cmd, void *config, const char *api_timeout) {
+    px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
@@ -1082,8 +1082,8 @@ static const char *set_api_timeout(cmd_parms *cmd, void *dir_config, const char 
     return NULL;
 }
 
-static const char *set_ip_header(cmd_parms *cmd, void *dir_config, const char *ip_header) {
-    px_config *conf = get_config(cmd, dir_config);
+static const char *set_ip_header(cmd_parms *cmd, void *config, const char *ip_header) {
+    px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
@@ -1091,8 +1091,8 @@ static const char *set_ip_header(cmd_parms *cmd, void *dir_config, const char *i
     return NULL;
 }
 
-static const char *set_curl_pool_size(cmd_parms *cmd, void *dir_config, const char *curl_pool_size) {
-    px_config *conf = get_config(cmd, dir_config);
+static const char *set_curl_pool_size(cmd_parms *cmd, void *config, const char *curl_pool_size) {
+    px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
@@ -1177,17 +1177,13 @@ static void perimeterx_register_hooks(apr_pool_t *pool) {
     ap_hook_pre_config(px_hook_pre_config, NULL, NULL, APR_HOOK_MIDDLE);
 }
 
-static void *create_dir_config(apr_pool_t *pool, char *dirname) {
-    return create_config(pool);
-}
-
 static void *create_server_config(apr_pool_t *pool, server_rec *s) {
     return create_config(pool);
 }
 
 module AP_MODULE_DECLARE_DATA perimeterx_module =  {
     STANDARD20_MODULE_STUFF,
-    create_dir_config,          /* create per-directory config structure */
+    NULL,                       /* create per-directory config structure */
     NULL,                       /* merge per-directory config structures */
     create_server_config,       /* create per-server config structure */
     NULL,                       /* merge per-server config structures */

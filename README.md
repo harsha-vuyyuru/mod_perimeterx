@@ -61,7 +61,7 @@ Minimal score for blocking request, default to 70.
 
 ### `Captcha` ###
 
-When On the blocking page served by this module will include captcha.
+When set to ```On``` the blocking page served by this module will include captcha.
 
 ### `ReportPageRequest` ###
 
