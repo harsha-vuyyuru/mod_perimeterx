@@ -773,8 +773,8 @@ request_context* create_context(request_rec *req, const px_config *conf) {
     // If specific header wes mentiond for ip extraction we will use it
     ctx->ip = conf->ip_header_key ? apr_table_get(req->headers_in, conf->ip_header_key) : req->connection->remote_ip;
 
-    char *cookie;
-    char *strtok_ctx;
+    char *cookie = NULL;
+    char *strtok_ctx = NULL;
 
     char *cookies = apr_pstrdup(req->pool, (char *) apr_table_get(req->headers_in, "Cookie"));
     cookie = apr_strtok(cookies, ";", &strtok_ctx);
@@ -1115,9 +1115,6 @@ static const char *set_base_url(cmd_parms *cmd, void *config, const char *base_u
         return ERROR_CONFIG_MISSING;
     }
     conf->base_url = base_url;
-    /*RISK_API_URL = apr_pstrcat(cmd->pool, base_url, RISK_API, NULL);
-    CAPTCHA_API_URL = apr_pstrcat(cmd->pool, base_url, CAPTCHA_API, NULL);
-    ACTIVITIES_API_URL = apr_pstrcat(cmd->pool, base_url, ACTIVITIES_API, NULL);*/
     return NULL;
 }
 
