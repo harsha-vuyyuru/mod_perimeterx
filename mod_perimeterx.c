@@ -43,9 +43,14 @@ APLOG_USE_MODULE(perimeterx);
 #define ERROR(server_rec, ...) \
     ap_log_error(APLOG_MARK, APLOG_ERR, 0, server_rec, "[mod_perimeterx]:" __VA_ARGS__)
 
-static const char *RISK_API_URL = "https://collector.perimeterx.net/api/v1/risk";
-static const char *CAPTCHA_API_URL = "https://collector.perimeterx.net/api/v1/risk/captcha";
-static const char *ACTIVITIES_URL = "https://collector.perimeterx.net/api/v1/collector/s2s";
+static const char *DEFAULT_BASE_URL = "https://collector.perimeterx.net";
+static const char *RISK_API = "/api/v1/risk";
+static const char *CAPTCHA_API = "/api/v1/risk/captcha";
+static const char *ACTIVITIES_API = "/api/v1/collector/s2s";
+
+static const char *RISK_API_URL;
+static const char *CAPTCHA_API_URL;
+static const char *ACTIVITIES_API_URL;
 
 // constants
 //
@@ -137,6 +142,7 @@ typedef struct px_config_t {
     const char *module_version;
     curl_pool *curl_pool;
     int curl_pool_size;
+    const char *base_url;
 } px_config;
 
 typedef enum {
@@ -863,7 +869,7 @@ static void post_verification(request_context *ctx, px_config *conf, bool reques
             ERROR(ctx->r->server, "post_verification: (%s) create activity failed", activity_type);
             return;
         }
-        char *resp = post_request(ACTIVITIES_URL, activity, conf->auth_header, ctx->r, conf->curl_pool);
+        char *resp = post_request(ACTIVITIES_API_URL, activity, conf->auth_header, ctx->r, conf->curl_pool);
         free(activity);
         if (resp) {
             free(resp);
@@ -983,10 +989,13 @@ static apr_status_t px_child_exit(void *data) {
 
 static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
     curl_global_init(CURL_GLOBAL_ALL);
-
     px_config *conf = ap_get_module_config(s->module_config, &perimeterx_module);
     conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
+    RISK_API_URL = apr_pstrcat(p, conf->base_url, RISK_API, NULL);
+    CAPTCHA_API_URL = apr_pstrcat(p, conf->base_url, CAPTCHA_API, NULL);
+    ACTIVITIES_API_URL = apr_pstrcat(p, conf->base_url, ACTIVITIES_API, NULL);
     apr_pool_cleanup_register(p, s, px_child_exit, px_child_exit);
+
 }
 
 static apr_status_t px_cleanup_pre_config(void *data) {
@@ -1100,6 +1109,18 @@ static const char *set_curl_pool_size(cmd_parms *cmd, void *config, const char *
     return NULL;
 }
 
+static const char *set_base_url(cmd_parms *cmd, void *config, const char *base_url) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->base_url = base_url;
+    /*RISK_API_URL = apr_pstrcat(cmd->pool, base_url, RISK_API, NULL);
+    CAPTCHA_API_URL = apr_pstrcat(cmd->pool, base_url, CAPTCHA_API, NULL);
+    ACTIVITIES_API_URL = apr_pstrcat(cmd->pool, base_url, ACTIVITIES_API, NULL);*/
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     return px_handle_request(r, conf);
@@ -1114,6 +1135,7 @@ static void *create_config(apr_pool_t *pool) {
     conf->captcha_enabled = false;
     conf->module_version = "Apache Module v1.0";
     conf->curl_pool_size = 40;
+    conf->base_url = DEFAULT_BASE_URL;
     return conf;
 }
 
@@ -1168,6 +1190,11 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Determines number of curl active handles"),
+    AP_INIT_TAKE1("BaseURL",
+            set_base_url,
+            NULL,
+            OR_ALL,
+            "PerimeterX server base URL"),
     { NULL }
 };
 

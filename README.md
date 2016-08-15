@@ -79,16 +79,20 @@ In order to extract the real client IP we can define a specific header key. If n
 
 Determines the number of active curl handles for each server. 
 
+### `BaseURL` ###
+
+Determines PerimeterX server base URL.
+
 ### Example ###
 ```xml
 <IfModule mod_perimeterx.c>
-	PXEnabled On
-	CookieKey my_key
-	AppID my_app_id
-	AuthToken my_auth_token
-	BlockingScore 50
-	ReportPageRequest On
-	IPHeader X-True-IP
-        CurlPoolSize 40
+    PXEnabled On
+    CookieKey my_key
+    AppID my_app_id
+    AuthToken my_auth_token
+    BlockingScore 50
+    ReportPageRequest On
+    IPHeader X-True-IP
+    CurlPoolSize 40
 </IfModule>
 ```
