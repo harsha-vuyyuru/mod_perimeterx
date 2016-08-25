@@ -944,7 +944,7 @@ static bool px_should_verify_request(request_rec *r, px_config *conf) {
 
     const char *file_ending = strrchr(r->uri, '.');
     if (file_ending) {
-        for (int i = 0; i < sizeof(FILE_EXT_WHITELIST)/sizeof(*FILE_EXT_WHITELIST) && file_ending; i++ ) {
+        for (int i = 0; i < sizeof(FILE_EXT_WHITELIST)/sizeof(*FILE_EXT_WHITELIST); i++ ) {
             if (strcmp(file_ending, FILE_EXT_WHITELIST[i]) == 0) {
                 return false;
             }
@@ -952,9 +952,9 @@ static bool px_should_verify_request(request_rec *r, px_config *conf) {
     }
 
     // checks if request is filtered using PXWhitelistRoutes
-    apr_array_header_t *routes = conf->routes_whitelist;
+    const apr_array_header_t *routes = conf->routes_whitelist;
     for (int i = 0; i < routes->nelts; i++) {
-        char *route = APR_ARRAY_IDX(routes, i, char*);
+        const char *route = APR_ARRAY_IDX(routes, i, const char*);
         if (strncmp(route, r->parsed_uri.path, strlen(route)) == 0) {
             return false;
         }
@@ -963,10 +963,10 @@ static bool px_should_verify_request(request_rec *r, px_config *conf) {
     // checks if request is filtered using PXWhitelistUserAgents
     const char *r_useragent = apr_table_get(r->headers_in, "User-Agent");
     if (r_useragent) {
-        apr_array_header_t *useragents = conf->useragents_whitelist;
+        const apr_array_header_t *useragents = conf->useragents_whitelist;
         for (int i = 0; i < useragents->nelts; i++) {
-            char *useragent = APR_ARRAY_IDX(useragents, i, char*);
-            if (strncmp(useragent, r_useragent, strlen(r_useragent)) == 0) {
+            const char *useragent = APR_ARRAY_IDX(useragents, i, const char*);
+            if (strcmp(useragent, r_useragent) == 0) {
                 return false;
             }
         }
@@ -1141,7 +1141,7 @@ static const char *set_base_url(cmd_parms *cmd, void *config, const char *base_u
     return NULL;
 }
 
-static const char *set_whitelist_routes(cmd_parms *cmd, void *config, const char *route) {
+static const char *add_route_to_whitelist(cmd_parms *cmd, void *config, const char *route) {
     const char *sep = ";";
     px_config *conf = get_config(cmd, config);
     if (!conf) {
@@ -1149,11 +1149,10 @@ static const char *set_whitelist_routes(cmd_parms *cmd, void *config, const char
     }
     const char **entry = apr_array_push(conf->routes_whitelist);
     *entry = route;
-
     return NULL;
 }
 
-static const char *set_whitelist_useragents(cmd_parms *cmd, void *config, const char *useragent) {
+static const char *add_useragent_to_whitelist(cmd_parms *cmd, void *config, const char *useragent) {
     px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
@@ -1175,7 +1174,7 @@ static void *create_config(apr_pool_t *p) {
     conf->send_page_activities = false;
     conf->blocking_score = 70;
     conf->captcha_enabled = false;
-    conf->module_version = "Apache Module v1.0";
+    conf->module_version = "Apache Module v1.0.1";
     conf->curl_pool_size = 40;
     conf->base_url = DEFAULT_BASE_URL;
     conf->routes_whitelist = apr_array_make(p, 0, sizeof(char*));
@@ -1240,12 +1239,12 @@ static const command_rec px_directives[] = {
             OR_ALL,
             "PerimeterX server base URL"),
     AP_INIT_ITERATE("PXWhitelistRoutes",
-            set_whitelist_routes,
+            add_route_to_whitelist,
             NULL,
             OR_ALL,
             "Whitelist by paths - this module will not apply on this path list"),
     AP_INIT_ITERATE("PXWhitelistUserAgents",
-            set_whitelist_useragents,
+            add_useragent_to_whitelist,
             NULL,
             OR_ALL,
             "Whitelist by User-Agents - this module will not apply on these user-agents"),

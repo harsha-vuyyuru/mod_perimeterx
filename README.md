@@ -149,6 +149,29 @@ When set to ```On``` the module will be applied on webpage requests.
 
 Determines PerimeterX server base URL.
 
+###`PXWhitelistRoutes`
+
+**descripotion** : Whitespace seperated list of paths that will not be examined by PX module. 
+
+**required** : No
+
+**default** : Empty list
+
+**values** : whitespace seperated list of string
+
+**example** : `/server-status /staging`
+
+### `PXWhitelistUserAgents`
+
+**description** : Whitespace seperated list of User-Agents that will not be examined by PX module.
+
+**required**: No
+
+**default** : Empty list
+
+**values** : backspace delimetered list of string
+
+
 ### Example ###
 ```xml
 <IfModule mod_perimeterx.c>
@@ -160,5 +183,7 @@ Determines PerimeterX server base URL.
     ReportPageRequest On
     IPHeader X-True-IP
     CurlPoolSize 40
+    PXWhitelistRoutes /server-status /staging
+    PXWhitelistUserAgents "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/534.34 (KHTML,  like Gecko) PhantomJS/1.9.0 (development) Safari/534.34"
 </IfModule>
 ```
