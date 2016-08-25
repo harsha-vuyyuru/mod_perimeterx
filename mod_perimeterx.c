@@ -951,7 +951,7 @@ static bool px_should_verify_request(request_rec *r, px_config *conf) {
         }
     }
 
-    // checks if request is filtered using PXFilterRoutes
+    // checks if request is filtered using PXWhitelistRoutes
     apr_array_header_t *routes = conf->routes_whitelist;
     for (int i = 0; i < routes->nelts; i++) {
         char *route = APR_ARRAY_IDX(routes, i, char*);
@@ -960,7 +960,7 @@ static bool px_should_verify_request(request_rec *r, px_config *conf) {
         }
     }
 
-    // checks if request is filtered using PXFilterUserAgents
+    // checks if request is filtered using PXWhitelistUserAgents
     const char *r_useragent = apr_table_get(r->headers_in, "User-Agent");
     if (r_useragent) {
         apr_array_header_t *useragents = conf->useragents_whitelist;
@@ -1158,7 +1158,6 @@ static const char *set_whitelist_useragents(cmd_parms *cmd, void *config, const 
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-
     const char** entry = apr_array_push(conf->useragents_whitelist);
     *entry = useragent;
     return NULL;
