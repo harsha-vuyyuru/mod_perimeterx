@@ -756,78 +756,80 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     return captcha_verified;
 }
 
-request_context* create_context(request_rec *req, const px_config *conf) {
-    request_context *ctx = (request_context*) apr_pcalloc(req->pool, sizeof(request_context));
+request_context* create_context(request_rec *r, const px_config *conf) {
+    request_context *ctx = (request_context*) apr_pcalloc(r->pool, sizeof(request_context));
 
     const char *px_cookie = NULL;
     const char *px_captcha_cookie = NULL;
     char *captcha_cookie = NULL;
 # if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 4
-    apr_status_t status = ap_cookie_read(req, "_px", &px_cookie, 0);
-    status = ap_cookie_read(req, "_pxCaptcha", &px_captcha_cookie, 0);
+    apr_status_t status = ap_cookie_read(r, "_px", &px_cookie, 0);
+    status = ap_cookie_read(r, "_pxCaptcha", &px_captcha_cookie, 0);
     if (status == APR_SUCCESS) {
-        captcha_cookie = apr_pstrdup(req->pool, px_captcha_cookie);
+        captcha_cookie = apr_pstrdup(r->pool, px_captcha_cookie);
     }
 
     // If specific header wes mentiond for ip extraction we will use it
-    ctx->ip = conf->ip_header_key ? apr_table_get(req->headers_in, conf->ip_header_key) : req->useragent_ip;
+    ctx->ip = conf->ip_header_key ? apr_table_get(r->headers_in, conf->ip_header_key) : r->useragent_ip;
 # else
     // If specific header wes mentiond for ip extraction we will use it
-    ctx->ip = conf->ip_header_key ? apr_table_get(req->headers_in, conf->ip_header_key) : req->connection->remote_ip;
+    ctx->ip = conf->ip_header_key ? apr_table_get(r->headers_in, conf->ip_header_key) : r->connection->remote_ip;
 
     char *cookie = NULL;
     char *strtok_ctx = NULL;
 
-    char *cookies = apr_pstrdup(req->pool, (char *) apr_table_get(req->headers_in, "Cookie"));
-    cookie = apr_strtok(cookies, ";", &strtok_ctx);
+    char *cookies = apr_pstrdup(r->pool, (char *) apr_table_get(r->headers_in, "Cookie"));
+    if (cookies) {
+        cookie = apr_strtok(cookies, ";", &strtok_ctx);
 
-    while (cookie) {
-        char *val_ctx;
-        //trim leading space
-        if (*cookie == ' ') {
-            cookie ++;
+        while (cookie) {
+            char *val_ctx;
+            //trim leading space
+            if (*cookie == ' ') {
+                cookie ++;
+            }
+            if (strncmp(cookie, "_pxCaptcha", 10) == 0) {
+                apr_pstrdup(r->pool, apr_strtok(cookie, "=", &val_ctx));
+                captcha_cookie = apr_pstrdup(r->pool, apr_strtok(NULL, "", &val_ctx));
+            } else if (strncmp(cookie, "_px", 3) == 0) {
+                apr_strtok(cookie, "=", &val_ctx);
+                px_cookie = apr_pstrdup(r->pool, apr_strtok(NULL, "", &val_ctx));
+            }
+            cookie = apr_strtok(NULL, ";", &strtok_ctx);
         }
-        if (strncmp(cookie, "_pxCaptcha", 10) == 0) {
-            apr_pstrdup(req->pool, apr_strtok(cookie, "=", &val_ctx));
-            captcha_cookie = apr_pstrdup(req->pool, apr_strtok(NULL, "", &val_ctx));
-        } else if (strncmp(cookie, "_px", 3) == 0) {
-            apr_strtok(cookie, "=", &val_ctx);
-            px_cookie = apr_pstrdup(req->pool, apr_strtok(NULL, "", &val_ctx));
-        }
-        cookie = apr_strtok(NULL, ";", &strtok_ctx);
     }
 #endif
 
     ctx->px_cookie = px_cookie;
-    ctx->uri = req->uri;
-    ctx->hostname = req->hostname;
-    ctx->http_method = req->method;
-    ctx->useragent = apr_table_get(req->headers_in, "User-Agent");
+    ctx->uri = r->uri;
+    ctx->hostname = r->hostname;
+    ctx->http_method = r->method;
+    ctx->useragent = apr_table_get(r->headers_in, "User-Agent");
     // TODO(barak): fill_url is missing the protocol like http:// or https://
-    ctx->full_url = apr_pstrcat(req->pool, req->hostname, req->unparsed_uri, NULL);
+    ctx->full_url = apr_pstrcat(r->pool, r->hostname, r->unparsed_uri, NULL);
     ctx->vid = NULL;
 
     if (captcha_cookie) {
         char *saveptr;
         ctx->px_captcha = apr_strtok(captcha_cookie, ":", &saveptr);
         ctx->vid = apr_strtok(NULL, "", &saveptr);
-        INFO(req->server, "PXCaptcha cookie was found: %s", ctx->px_captcha);
+        INFO(r->server, "PXCaptcha cookie was found: %s", ctx->px_captcha);
     }
 
     // TODO(barak): parse without strtok
     char *saveptr;
     const char *delim = "/";
-    char *protocol_cpy = apr_pstrdup(req->pool, req->protocol);
+    char *protocol_cpy = apr_pstrdup(r->pool, r->protocol);
     apr_strtok(protocol_cpy , delim, &saveptr);
     const char *version = apr_strtok(NULL, delim, &saveptr);
 
     ctx->http_version = version;
-    ctx->headers = req->headers_in;
+    ctx->headers = r->headers_in;
     ctx->block_reason = NO_BLOCKING;
     ctx->call_reason = NONE;
-    ctx->r = req;
+    ctx->r = r;
 
-    INFO(req->server, "create_context: useragent: (%s), px_cookie: (%s), full_url: (%s), hostname: (%s) , http_method: (%s), http_version: (%s), uri: (%s), ip: (%s)", ctx->useragent, ctx->px_cookie, ctx->full_url, ctx->hostname, ctx->http_method, ctx->http_version, ctx->uri, ctx->ip);
+    INFO(r->server, "create_context: useragent: (%s), px_cookie: (%s), full_url: (%s), hostname: (%s) , http_method: (%s), http_version: (%s), uri: (%s), ip: (%s)", ctx->useragent, ctx->px_cookie, ctx->full_url, ctx->hostname, ctx->http_method, ctx->http_version, ctx->uri, ctx->ip);
 
     return ctx;
 }
