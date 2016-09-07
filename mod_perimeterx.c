@@ -312,7 +312,7 @@ char *create_activity(const char *activity_type, const px_config *conf, const re
             "http_version", ctx->http_version,
             "module_version", conf->module_version);
 
-    if (strcmp(activity_type, "block") == 0 && ctx->uuid) {
+    if (strcmp(activity_type, BLOCKED_ACTIVITY_TYPE) == 0 && ctx->uuid) {
         json_object_set_new(details, "block_uuid", json_string(ctx->uuid));
     }
 
@@ -774,7 +774,6 @@ request_context* create_context(request_rec *r, const px_config *conf) {
 # else
     // If specific header wes mentiond for ip extraction we will use it
     ctx->ip = conf->ip_header_key ? apr_table_get(r->headers_in, conf->ip_header_key) : r->connection->remote_ip;
-
     char *cookie = NULL;
     char *strtok_ctx = NULL;
 
@@ -867,7 +866,7 @@ void set_call_reason(request_context *ctx, validation_result_t vr) {
 
 static void post_verification(request_context *ctx, px_config *conf, bool request_valid) {
     const char *activity_type = request_valid ? PAGE_REQUESTED_ACTIVITY_TYPE : BLOCKED_ACTIVITY_TYPE;
-    if (strcmp(activity_type, BLOCKED_ACTIVITY_TYPE) || conf->send_page_activities) {
+    if (strcmp(activity_type, BLOCKED_ACTIVITY_TYPE) == 0 || conf->send_page_activities) {
         char *activity = create_activity(activity_type, conf, ctx);
         if (!activity) {
             ERROR(ctx->r->server, "post_verification: (%s) create activity failed", activity_type);
