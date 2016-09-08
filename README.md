@@ -173,6 +173,9 @@ Determines PerimeterX server base URL.
 
 
 ### Example ###
+
+* Configuration for apache server
+
 ```xml
 <IfModule mod_perimeterx.c>
     PXEnabled On
@@ -186,4 +189,27 @@ Determines PerimeterX server base URL.
     PXWhitelistRoutes /server-status /staging
     PXWhitelistUserAgents "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/534.34 (KHTML,  like Gecko) PhantomJS/1.9.0 (development) Safari/534.34"
 </IfModule>
+```
+
+* Configuration for specific VirtuaHost
+
+```xml
+<VirtualHost *:80>
+        ServerAdmin webmaster@localhost
+        DocumentRoot /var/www/html
+        <IfModule mod_perimeterx.c>
+                CookieKey COOKIE_KEY
+                AppID PXJWbMQarC
+                PXEnabled On
+                AuthToken TOKEN
+                BlockingScore 30
+                ReportPageRequest On
+                Captcha On
+                CurlPoolSize 100
+        </IfModule>
+
+        ErrorLog ${APACHE_LOG_DIR}/error.log
+        CustomLog ${APACHE_LOG_DIR}/access.log combined
+
+</VirtualHost>
 ```
