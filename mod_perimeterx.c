@@ -1014,7 +1014,6 @@ static apr_status_t px_child_exit(void *data) {
 static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
     curl_global_init(CURL_GLOBAL_ALL);
     px_config *conf = ap_get_module_config(s->module_config, &perimeterx_module);
-    conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
     RISK_API_URL = apr_pstrcat(p, conf->base_url, RISK_API, NULL);
     CAPTCHA_API_URL = apr_pstrcat(p, conf->base_url, CAPTCHA_API, NULL);
     ACTIVITIES_API_URL = apr_pstrcat(p, conf->base_url, ACTIVITIES_API, NULL);
@@ -1130,6 +1129,10 @@ static const char *set_curl_pool_size(cmd_parms *cmd, void *config, const char *
         return ERROR_CONFIG_MISSING;
     }
     conf->curl_pool_size = atoi(curl_pool_size);
+    if (conf->curl_pool != NULL) {
+        curl_pool_destroy(conf->curl_pool);
+    }
+    conf->curl_pool = curl_pool_create(cmd->pool, conf->curl_pool_size);
     return NULL;
 }
 
@@ -1180,6 +1183,7 @@ static void *create_config(apr_pool_t *p) {
     conf->base_url = DEFAULT_BASE_URL;
     conf->routes_whitelist = apr_array_make(p, 0, sizeof(char*));
     conf->useragents_whitelist = apr_array_make(p, 0, sizeof(char*));
+    conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
     return conf;
 }
 
