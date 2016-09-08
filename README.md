@@ -198,14 +198,13 @@ Determines PerimeterX server base URL.
         ServerAdmin webmaster@localhost
         DocumentRoot /var/www/html
         <IfModule mod_perimeterx.c>
-                CookieKey COOKIE_KEY
-                AppID PXJWbMQarC
                 PXEnabled On
-                AuthToken TOKEN
+                CookieKey my_key
+                AppID my_app_id
+                AuthToken my_auth_token
                 BlockingScore 30
                 ReportPageRequest On
                 Captcha On
-                CurlPoolSize 100
         </IfModule>
 
         ErrorLog ${APACHE_LOG_DIR}/error.log
