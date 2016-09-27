@@ -510,7 +510,7 @@ int decode_base64(const char *s, unsigned char **o, int *len, apr_pool_t *p) {
     }
     int l = strlen(s);
     *o = (unsigned char*)apr_palloc(p, (l * 3 + 1));
-    BIO *bio = BIO_new_mem_buf(s, -1);
+    BIO *bio = BIO_new_mem_buf((void*)s, -1);
     BIO *b64 = BIO_new(BIO_f_base64());
     bio = BIO_push(b64, bio);
 
