@@ -7,7 +7,7 @@ Dependencies
 ----------------------------------------
 - [openssl 1.0.1] (https://www.openssl.org/source/) 
 - [libcurl >= 7.19.0] (https://curl.haxx.se/docs/install.html) 
-- [jansson 2.7](http://www.digip.org/jansson/)
+- [jansson 2.6](http://www.digip.org/jansson/)
 - [Apache Portable Runtime (APR) >=1.4.6](https://apr.apache.org/)
 
 You can install dependencies using linux package manager (```yum``` / ```debian``` packages) or install them manually.
