@@ -27,6 +27,11 @@ $ cd mod_perimeterx
 $ sudo make
 $ apache2ctl restart
 ```
+
+Make sure that this line is added to your configuration file: 
+
+`LoadModule perimeterx_module $MODULES_PATH/mod_perimeterx.so`
+
 ##### Verify installation by listing all installed modules:
 
 ```shell
