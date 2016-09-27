@@ -63,6 +63,7 @@ static const char* FILE_EXT_WHITELIST[] = {
     ".ico", ".pls", ".midi", ".svgz", ".class", ".png", ".ppt", ".mid", "webp", ".jar" };
 
 static const char *JSON_CONTENT_TYPE = "Content-Type: application/json";
+static const char *EXPECT = "Expect:";
 
 static const int ITERATIONS_UPPER_BOUND = 10000;
 static const int ITERATIONS_LOWER_BOUND = 0;
@@ -276,6 +277,7 @@ char *post_request(const char *url, const char *payload, const char *auth_header
 
     headers = curl_slist_append(headers, auth_header);
     headers = curl_slist_append(headers, JSON_CONTENT_TYPE);
+    headers = curl_slist_append(headers, EXPECT);
 
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_URL, url);
