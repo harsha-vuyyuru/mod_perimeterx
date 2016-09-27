@@ -43,7 +43,7 @@ APLOG_USE_MODULE(perimeterx);
 #define ERROR(server_rec, ...) \
     ap_log_error(APLOG_MARK, APLOG_ERR, 0, server_rec, "[mod_perimeterx]:" __VA_ARGS__)
 
-static const char *DEFAULT_BASE_URL = "https://collector.perimeterx.net";
+static const char *DEFAULT_BASE_URL = "https://sapi.perimeterx.net";
 static const char *RISK_API = "/api/v1/risk";
 static const char *CAPTCHA_API = "/api/v1/risk/captcha";
 static const char *ACTIVITIES_API = "/api/v1/collector/s2s";
@@ -799,6 +799,10 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     }
 #endif
 
+    if (!ctx->ip) {
+        ERROR(r->server, "Request IP is NULL");
+    }
+
     ctx->px_cookie = px_cookie;
     ctx->uri = r->uri;
     ctx->hostname = r->hostname;
@@ -1178,7 +1182,7 @@ static void *create_config(apr_pool_t *p) {
     conf->send_page_activities = false;
     conf->blocking_score = 70;
     conf->captcha_enabled = false;
-    conf->module_version = "Apache Module v1.0.4";
+    conf->module_version = "Apache Module v1.0.5";
     conf->curl_pool_size = 40;
     conf->base_url = DEFAULT_BASE_URL;
     conf->routes_whitelist = apr_array_make(p, 0, sizeof(char*));
