@@ -1,0 +1,19 @@
+BUILDDIR=/usr/build
+MODSDIR=/usr/modules
+
+all: build
+
+build: mod_perimeterx.la
+
+mod_perimeterx.la: mod_perimeterx.c curl_pool.c
+	$(BUILDDIR)/libtool --silent --mode=compile gcc -std=gnu99 -prefer-pic -m32  -DLINUX -D_REENTRANT -D_GNU_SOURCE -D_LARGEFILE64_SOURCE -pthread -I/usr/include  -I/usr/include   -I/usr/include   -c -o mod_perimeterx.lo mod_perimeterx.c && touch mod_perimeterx.slo
+	$(BUILDDIR)/libtool --silent --mode=compile gcc -std=gnu99 -prefer-pic -m32  -DLINUX -D_REENTRANT -D_GNU_SOURCE -D_LARGEFILE64_SOURCE -pthread -I/usr/include  -I/usr/include   -I/usr/include   -c -o curl_pool.lo curl_pool.c && touch curl_pool.slo
+	$(BUILDDIR)/libtool --silent --mode=link gcc -std=gnu99 -m32   -o mod_perimeterx.la  -rpath $(MODSDIR) -module -avoid-version    curl_pool.lo mod_perimeterx.lo -lcrypto -lcurl -ljansson
+
+
+install: build
+	$(BUILDDIR)/libtool --mode=install install mod_perimeterx.la $(MODSDIR)/
+
+clean:
+	rm -f mod_perimeterx.{o,lo,la,slo} curl_pool.{o,lo,la}
+
