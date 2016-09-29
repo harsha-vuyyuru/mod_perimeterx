@@ -1012,19 +1012,12 @@ int px_handle_request(request_rec *r, px_config *conf) {
 // --------------------------------------------------------------------------------
 
 
-static apr_status_t px_child_exit(void *data) {
-    curl_global_cleanup();
-    return APR_SUCCESS;
-}
-
 static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
     curl_global_init(CURL_GLOBAL_ALL);
     px_config *conf = ap_get_module_config(s->module_config, &perimeterx_module);
     RISK_API_URL = apr_pstrcat(p, conf->base_url, RISK_API, NULL);
     CAPTCHA_API_URL = apr_pstrcat(p, conf->base_url, CAPTCHA_API, NULL);
     ACTIVITIES_API_URL = apr_pstrcat(p, conf->base_url, ACTIVITIES_API, NULL);
-    apr_pool_cleanup_register(p, s, px_child_exit, px_child_exit);
-
 }
 
 static apr_status_t px_cleanup_pre_config(void *data) {
@@ -1177,6 +1170,11 @@ static int px_hook_post_request(request_rec *r) {
     return px_handle_request(r, conf);
 }
 
+apr_status_t kill_curl_pool(void *data) {
+    curl_pool_destroy((curl_pool*)data);
+}
+
+
 static void *create_config(apr_pool_t *p) {
     px_config *conf = apr_pcalloc(p, sizeof(px_config));
     conf->module_enabled = false;
@@ -1190,6 +1188,9 @@ static void *create_config(apr_pool_t *p) {
     conf->routes_whitelist = apr_array_make(p, 0, sizeof(char*));
     conf->useragents_whitelist = apr_array_make(p, 0, sizeof(char*));
     conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
+
+    apr_pool_cleanup_register(p, conf->curl_pool, kill_curl_pool, apr_pool_cleanup_null);
+
     return conf;
 }
 
