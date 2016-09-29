@@ -133,7 +133,6 @@ typedef struct px_config_t {
     const char *app_id;
     const char *cookie_key;
     const char *auth_token;
-    const char *ip_header_key;
     const char *base_url;
     char *auth_header;
     bool module_enabled;
@@ -146,6 +145,7 @@ typedef struct px_config_t {
     int curl_pool_size;
     apr_array_header_t *routes_whitelist;
     apr_array_header_t *useragents_whitelist;
+    apr_array_header_t *ip_header_keys;
 } px_config;
 
 typedef enum {
@@ -758,6 +758,22 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     return captcha_verified;
 }
 
+const char *get_request_ip(const request_rec *r, const px_config *conf) {
+    const apr_array_header_t *ip_header_keys = conf->ip_header_keys;
+    for (int i = 0; i < ip_header_keys->nelts; i++) {
+        const char *ip_header_key = APR_ARRAY_IDX(ip_header_keys, i, const char*);
+        const char *ip = apr_table_get(r->headers_in, ip_header_key);
+        if (ip) {
+            return ip;
+        }
+    }
+# if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 4
+    return r->useragent_ip;
+# else
+    return r->connection->remote_ip;
+#endif
+}
+
 request_context* create_context(request_rec *r, const px_config *conf) {
     request_context *ctx = (request_context*) apr_pcalloc(r->pool, sizeof(request_context));
 
@@ -771,11 +787,7 @@ request_context* create_context(request_rec *r, const px_config *conf) {
         captcha_cookie = apr_pstrdup(r->pool, px_captcha_cookie);
     }
 
-    // If specific header wes mentiond for ip extraction we will use it
-    ctx->ip = conf->ip_header_key ? apr_table_get(r->headers_in, conf->ip_header_key) : r->useragent_ip;
 # else
-    // If specific header wes mentiond for ip extraction we will use it
-    ctx->ip = conf->ip_header_key ? apr_table_get(r->headers_in, conf->ip_header_key) : r->connection->remote_ip;
     char *cookie = NULL;
     char *strtok_ctx = NULL;
 
@@ -801,6 +813,7 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     }
 #endif
 
+    ctx->ip = get_request_ip(r, conf);
     if (!ctx->ip) {
         ERROR(r->server, "Request IP is NULL");
     }
@@ -1113,12 +1126,13 @@ static const char *set_api_timeout(cmd_parms *cmd, void *config, const char *api
     return NULL;
 }
 
-static const char *set_ip_header(cmd_parms *cmd, void *config, const char *ip_header) {
+static const char *set_ip_headers(cmd_parms *cmd, void *config, const char *ip_header) {
     px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    conf->ip_header_key = ip_header;
+    const char** entry = apr_array_push(conf->ip_header_keys);
+    *entry = ip_header;
     return NULL;
 }
 
@@ -1188,7 +1202,7 @@ static void *create_config(apr_pool_t *p) {
     conf->routes_whitelist = apr_array_make(p, 0, sizeof(char*));
     conf->useragents_whitelist = apr_array_make(p, 0, sizeof(char*));
     conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
-
+    conf->ip_header_keys = apr_array_make(p, 0, sizeof(char*));
     apr_pool_cleanup_register(p, conf->curl_pool, kill_curl_pool, apr_pool_cleanup_null);
 
     return conf;
@@ -1235,11 +1249,16 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Enable page_request activities report"),
-    AP_INIT_TAKE1("IPHeader",
-            set_ip_header,
+    /*AP_INIT_TAKE1("IPHeader",*/
+            /*set_ip_header,*/
+            /*NULL,*/
+            /*OR_ALL,*/
+            /*"This header will be used to get the request real IP"),*/
+    AP_INIT_ITERATE("IPHeader",
+            set_ip_headers,
             NULL,
             OR_ALL,
-            "This header will be used to get the request real IP"),
+            "This headers will be used to get the request real IP, first header to get valid IP will be usesd"),
     AP_INIT_TAKE1("CurlPoolSize",
             set_curl_pool_size,
             NULL,
