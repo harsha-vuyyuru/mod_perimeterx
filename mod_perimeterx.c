@@ -1188,7 +1188,6 @@ apr_status_t kill_curl_pool(void *data) {
     curl_pool_destroy((curl_pool*)data);
 }
 
-
 static void *create_config(apr_pool_t *p) {
     px_config *conf = apr_pcalloc(p, sizeof(px_config));
     conf->module_enabled = false;
@@ -1203,7 +1202,7 @@ static void *create_config(apr_pool_t *p) {
     conf->useragents_whitelist = apr_array_make(p, 0, sizeof(char*));
     conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
     conf->ip_header_keys = apr_array_make(p, 0, sizeof(char*));
-    apr_pool_cleanup_register(p, conf->curl_pool, kill_curl_pool, apr_pool_cleanup_null);
+    /*apr_pool_cleanup_register(p, conf->curl_pool, kill_curl_pool, apr_pool_cleanup_null);*/
 
     return conf;
 }
