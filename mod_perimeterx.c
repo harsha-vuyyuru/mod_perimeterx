@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <arpa/inet.h>
 
 #include <jansson.h>
 
@@ -1249,11 +1250,6 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Enable page_request activities report"),
-    /*AP_INIT_TAKE1("IPHeader",*/
-            /*set_ip_header,*/
-            /*NULL,*/
-            /*OR_ALL,*/
-            /*"This header will be used to get the request real IP"),*/
     AP_INIT_ITERATE("IPHeader",
             set_ip_headers,
             NULL,
