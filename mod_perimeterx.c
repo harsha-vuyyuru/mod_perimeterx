@@ -964,6 +964,10 @@ static bool px_should_verify_request(request_rec *r, px_config *conf) {
         return false;
     }
 
+    if (strcmp(r->uri, conf->block_page_url) == 0) {
+        return false;
+    }
+
     const char *file_ending = strrchr(r->uri, '.');
     if (file_ending) {
         if (conf->custom_file_ext_whitelist) {
@@ -1181,11 +1185,7 @@ static const char *set_block_page_url(cmd_parms *cmd, void *config, const char *
     }
 
     conf->block_page_url = url;
-    // whitelisting the blocking page url to avoid endless loop
-    const char **entry = apr_array_push(conf->routes_whitelist);
-    *entry = url;
     return NULL;
-
 }
 
 static const char *add_route_to_whitelist(cmd_parms *cmd, void *config, const char *route) {
