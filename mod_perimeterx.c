@@ -248,11 +248,6 @@ struct response_t {
     server_rec *server;
 };
 
-static void add_header_to_request(request_rec *r, apr_table_t *headers,
-                             char *header, px_config *conf) {
-
-}
-
 // post request response callback
 //
 static size_t write_response_cb(void* contents, size_t size, size_t nmemb, void *stream) {
@@ -965,7 +960,6 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
 }
 
 static bool px_should_verify_request(request_rec *r, px_config *conf) {
-    ERROR(r->server, "The uri is : %s", r->uri);
     if (!conf->module_enabled) {
         return false;
     }
