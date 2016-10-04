@@ -24,6 +24,7 @@
 #include "http_request.h"
 #include "http_log.h"
 #include "apr_strings.h"
+#include "apr_escape.h"
 
 #include "curl_pool.h"
 
@@ -1024,7 +1025,18 @@ int px_handle_request(request_rec *r, px_config *conf) {
         if (!request_valid) {
             // redirecting to custom block page if exists
             if (conf->block_page_url) {
-                const char *redirect_url = apr_pstrcat(r->pool, conf->block_page_url, "?url=", r->uri, "&uuid=", ctx->uuid, "&vid=", ctx->vid,  NULL);
+                const char *redirect_url;
+                const char *url_arg = r->args
+                    ? apr_pstrcat(r->pool, r->uri, "?", r->args, NULL)
+                    : apr_pstrcat(r->pool, r->uri, NULL);
+                apr_size_t encoded_url_len = 0;
+                if (apr_escape_urlencoded(NULL, url_arg, APR_ESCAPE_STRING, &encoded_url_len) == APR_SUCCESS)   {
+                    char *encoded_url = apr_pcalloc(r->pool,encoded_url_len + 1);
+                    apr_escape_urlencoded(encoded_url, url_arg, APR_ESCAPE_STRING, NULL);
+                    redirect_url = apr_pstrcat(r->pool, conf->block_page_url, "?url=", encoded_url, "&uuid=", ctx->uuid, "&vid=", ctx->vid,  NULL);
+                } else {
+                    redirect_url = apr_pstrcat(r->pool, conf->block_page_url, "?url=", r->uri, "&uuid=", ctx->uuid, "&vid=", ctx->vid,  NULL);
+                }
                 apr_table_set(r->headers_out, "Location", redirect_url);
                 return TEMP_REDIRECT;
             }
