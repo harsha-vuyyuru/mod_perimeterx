@@ -67,6 +67,7 @@ static const char *EXPECT = "Expect:";
 
 static const int ITERATIONS_UPPER_BOUND = 10000;
 static const int ITERATIONS_LOWER_BOUND = 0;
+static const int TEMP_REDIRECT = 307;
 
 static const char *BLOCKING_PAGE_FMT = "<html lang=\"en\">\n\
             <head>\n\
@@ -124,7 +125,6 @@ static const char *CAPTCHA_BLOCKING_PAGE_FMT  = "<html lang=\"en\">\n \
             </body>\n \
             </html>";
 
-
 static const char *ERROR_CONFIG_MISSING = "mod_perimeterx: config structure not allocated";
 
 // px configuration
@@ -134,6 +134,7 @@ typedef struct px_config_t {
     const char *cookie_key;
     const char *auth_token;
     const char *base_url;
+    const char *block_page_url;
     char *auth_header;
     bool module_enabled;
     bool captcha_enabled;
@@ -246,6 +247,11 @@ struct response_t {
     size_t size;
     server_rec *server;
 };
+
+static void add_header_to_request(request_rec *r, apr_table_t *headers,
+                             char *header, px_config *conf) {
+
+}
 
 // post request response callback
 //
@@ -959,6 +965,7 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
 }
 
 static bool px_should_verify_request(request_rec *r, px_config *conf) {
+    ERROR(r->server, "The uri is : %s", r->uri);
     if (!conf->module_enabled) {
         return false;
     }
@@ -1016,17 +1023,19 @@ int px_handle_request(request_rec *r, px_config *conf) {
     request_context *ctx = create_context(r, conf);
     if (ctx) {
         bool request_valid = px_verify_request(ctx, conf);
-        apr_table_set(r->subprocess_env, "SCORE", apr_itoa(r->pool, ctx->score));
-
         if (!request_valid) {
+            // redirecting to custom block page if exists
+            if (conf->block_page_url) {
+                const char *redirect_url = apr_pstrcat(r->pool, conf->block_page_url, "?url=", r->uri, "&uuid=", ctx->uuid, "&vid=", ctx->vid,  NULL);
+                apr_table_set(r->headers_out, "Location", redirect_url);
+                return TEMP_REDIRECT;
+            }
             if (conf->captcha_enabled) {
                 rprintf_captcha_blocking_page(r, ctx);
             } else {
                 rprintf_blocking_page(r, ctx);
             }
-# if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 2
             ap_set_content_type(r, "text/html");
-# endif
             INFO(r->server, "px_handle_request: request blocked. captcha (%d)", conf->captcha_enabled);
             return DONE;
         }
@@ -1171,6 +1180,20 @@ static const char *set_base_url(cmd_parms *cmd, void *config, const char *base_u
     return NULL;
 }
 
+static const char *set_block_page_url(cmd_parms *cmd, void *config, const char *url) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+
+    conf->block_page_url = url;
+    // whitelisting the blocking page url to avoid endless loop
+    const char **entry = apr_array_push(conf->routes_whitelist);
+    *entry = url;
+    return NULL;
+
+}
+
 static const char *add_route_to_whitelist(cmd_parms *cmd, void *config, const char *route) {
     const char *sep = ";";
     px_config *conf = get_config(cmd, config);
@@ -1291,6 +1314,11 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "PerimeterX server base URL"),
+    AP_INIT_TAKE1("BlockpageURL",
+            set_block_page_url,
+            NULL,
+            OR_ALL,
+            "URL for custom blocking page"),
     AP_INIT_ITERATE("PXWhitelistRoutes",
             add_route_to_whitelist,
             NULL,
