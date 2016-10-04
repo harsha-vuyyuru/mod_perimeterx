@@ -145,6 +145,7 @@ typedef struct px_config_t {
     int curl_pool_size;
     apr_array_header_t *routes_whitelist;
     apr_array_header_t *useragents_whitelist;
+    apr_array_header_t *custom_file_ext_whitelist;
 } px_config;
 
 typedef enum {
@@ -508,7 +509,7 @@ int decode_base64(const char *s, unsigned char **o, int *len, apr_pool_t *p) {
     }
     int l = strlen(s);
     *o = (unsigned char*)apr_palloc(p, (l * 3 + 1));
-    BIO *bio = BIO_new_mem_buf(s, -1);
+    BIO *bio = BIO_new_mem_buf((void*)s, -1);
     BIO *b64 = BIO_new(BIO_f_base64());
     bio = BIO_push(b64, bio);
 
@@ -946,9 +947,21 @@ static bool px_should_verify_request(request_rec *r, px_config *conf) {
 
     const char *file_ending = strrchr(r->uri, '.');
     if (file_ending) {
-        for (int i = 0; i < sizeof(FILE_EXT_WHITELIST)/sizeof(*FILE_EXT_WHITELIST); i++ ) {
-            if (strcmp(file_ending, FILE_EXT_WHITELIST[i]) == 0) {
-                return false;
+        if (conf->custom_file_ext_whitelist) {
+            // using custom file extension whitelist
+            const apr_array_header_t *file_exts = conf->custom_file_ext_whitelist;
+            for (int i = 0; i < file_exts->nelts; i++) {
+                const char *file_ext = APR_ARRAY_IDX(file_exts, i, const char*);
+                if (strcmp(file_ending, file_ext) == 0) {
+                    return false;
+                }
+            }
+        } else {
+            // using default whitelist
+            for (int i = 0; i < sizeof(FILE_EXT_WHITELIST)/sizeof(*FILE_EXT_WHITELIST); i++ ) {
+                if (strcmp(file_ending, FILE_EXT_WHITELIST[i]) == 0) {
+                    return false;
+                }
             }
         }
     }
@@ -1164,6 +1177,19 @@ static const char *add_useragent_to_whitelist(cmd_parms *cmd, void *config, cons
     return NULL;
 }
 
+static const char *add_file_extension_whitelist(cmd_parms *cmd, void *config, const char *file_extension) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    if (!conf->custom_file_ext_whitelist) {
+        conf->custom_file_ext_whitelist = apr_array_make(cmd->pool, 0, sizeof(char*));
+    }
+    const char** entry = apr_array_push(conf->custom_file_ext_whitelist);
+    *entry = file_extension;
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     return px_handle_request(r, conf);
@@ -1181,6 +1207,7 @@ static void *create_config(apr_pool_t *p) {
     conf->base_url = DEFAULT_BASE_URL;
     conf->routes_whitelist = apr_array_make(p, 0, sizeof(char*));
     conf->useragents_whitelist = apr_array_make(p, 0, sizeof(char*));
+    conf->custom_file_ext_whitelist = NULL;
     return conf;
 }
 
@@ -1250,6 +1277,11 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Whitelist by User-Agents - this module will not apply on these user-agents"),
+    AP_INIT_ITERATE("ExtensionWhitelist",
+            add_file_extension_whitelist,
+            NULL,
+            OR_ALL,
+            "Whitelist by file extensions - this module will not apply on files with one of these file extensions"),
     { NULL }
 };
 
