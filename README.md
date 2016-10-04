@@ -1,4 +1,4 @@
-![image](https://843a2be0f3083c485676508ff87beaf088a889c0-www.googledrive.com/host/0B_r_WoIa581oY01QMWNVUElyM2M)
+![image](http://media.marketwire.com/attachments/201604/34215_PerimeterX_logo.jpg)
 
 [PerimeterX](http://www.perimeterx.com) Apache Module
 ===========================================
@@ -6,8 +6,8 @@
 Dependencies
 ----------------------------------------
 - [openssl 1.0.1] (https://www.openssl.org/source/) 
-- [libcurl >= 7.35.0] (https://curl.haxx.se/docs/install.html) 
-- [jansson 2.7](http://www.digip.org/jansson/)
+- [libcurl >= 7.19.0] (https://curl.haxx.se/docs/install.html) 
+- [jansson 2.6](http://www.digip.org/jansson/)
 - [Apache Portable Runtime (APR) >=1.4.6](https://apr.apache.org/)
 
 You can install dependencies using linux package manager (```yum``` / ```debian``` packages) or install them manually.
@@ -27,6 +27,11 @@ $ cd mod_perimeterx
 $ sudo make
 $ apache2ctl restart
 ```
+
+Make sure that this line is added to your configuration file: 
+
+`LoadModule perimeterx_module $MODULES_PATH/mod_perimeterx.so`
+
 ##### Verify installation by listing all installed modules:
 
 ```shell
@@ -173,6 +178,9 @@ Determines PerimeterX server base URL.
 
 
 ### Example ###
+
+* Configuration for apache server
+
 ```xml
 <IfModule mod_perimeterx.c>
     PXEnabled On
@@ -186,4 +194,26 @@ Determines PerimeterX server base URL.
     PXWhitelistRoutes /server-status /staging
     PXWhitelistUserAgents "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/534.34 (KHTML,  like Gecko) PhantomJS/1.9.0 (development) Safari/534.34"
 </IfModule>
+```
+
+* Configuration for specific VirtuaHost
+
+```xml
+<VirtualHost *:80>
+        ServerAdmin webmaster@localhost
+        DocumentRoot /var/www/html
+        <IfModule mod_perimeterx.c>
+                PXEnabled On
+                CookieKey my_key
+                AppID my_app_id
+                AuthToken my_auth_token
+                BlockingScore 30
+                ReportPageRequest On
+                Captcha On
+        </IfModule>
+
+        ErrorLog ${APACHE_LOG_DIR}/error.log
+        CustomLog ${APACHE_LOG_DIR}/access.log combined
+
+</VirtualHost>
 ```

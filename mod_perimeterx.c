@@ -43,7 +43,7 @@ APLOG_USE_MODULE(perimeterx);
 #define ERROR(server_rec, ...) \
     ap_log_error(APLOG_MARK, APLOG_ERR, 0, server_rec, "[mod_perimeterx]:" __VA_ARGS__)
 
-static const char *DEFAULT_BASE_URL = "https://collector.perimeterx.net";
+static const char *DEFAULT_BASE_URL = "https://sapi.perimeterx.net";
 static const char *RISK_API = "/api/v1/risk";
 static const char *CAPTCHA_API = "/api/v1/risk/captcha";
 static const char *ACTIVITIES_API = "/api/v1/collector/s2s";
@@ -63,6 +63,7 @@ static const char* FILE_EXT_WHITELIST[] = {
     ".ico", ".pls", ".midi", ".svgz", ".class", ".png", ".ppt", ".mid", "webp", ".jar" };
 
 static const char *JSON_CONTENT_TYPE = "Content-Type: application/json";
+static const char *EXPECT = "Expect:";
 
 static const int ITERATIONS_UPPER_BOUND = 10000;
 static const int ITERATIONS_LOWER_BOUND = 0;
@@ -132,7 +133,6 @@ typedef struct px_config_t {
     const char *app_id;
     const char *cookie_key;
     const char *auth_token;
-    const char *ip_header_key;
     const char *base_url;
     char *auth_header;
     bool module_enabled;
@@ -146,6 +146,7 @@ typedef struct px_config_t {
     apr_array_header_t *routes_whitelist;
     apr_array_header_t *useragents_whitelist;
     apr_array_header_t *custom_file_ext_whitelist;
+    apr_array_header_t *ip_header_keys;
 } px_config;
 
 typedef enum {
@@ -277,6 +278,7 @@ char *post_request(const char *url, const char *payload, const char *auth_header
 
     headers = curl_slist_append(headers, auth_header);
     headers = curl_slist_append(headers, JSON_CONTENT_TYPE);
+    headers = curl_slist_append(headers, EXPECT);
 
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_URL, url);
@@ -313,7 +315,7 @@ char *create_activity(const char *activity_type, const px_config *conf, const re
             "http_version", ctx->http_version,
             "module_version", conf->module_version);
 
-    if (strcmp(activity_type, "block") == 0 && ctx->uuid) {
+    if (strcmp(activity_type, BLOCKED_ACTIVITY_TYPE) == 0 && ctx->uuid) {
         json_object_set_new(details, "block_uuid", json_string(ctx->uuid));
     }
 
@@ -757,6 +759,22 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     return captcha_verified;
 }
 
+const char *get_request_ip(const request_rec *r, const px_config *conf) {
+    const apr_array_header_t *ip_header_keys = conf->ip_header_keys;
+    for (int i = 0; i < ip_header_keys->nelts; i++) {
+        const char *ip_header_key = APR_ARRAY_IDX(ip_header_keys, i, const char*);
+        const char *ip = apr_table_get(r->headers_in, ip_header_key);
+        if (ip) {
+            return ip;
+        }
+    }
+# if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 4
+    return r->useragent_ip;
+# else
+    return r->connection->remote_ip;
+#endif
+}
+
 request_context* create_context(request_rec *r, const px_config *conf) {
     request_context *ctx = (request_context*) apr_pcalloc(r->pool, sizeof(request_context));
 
@@ -770,12 +788,7 @@ request_context* create_context(request_rec *r, const px_config *conf) {
         captcha_cookie = apr_pstrdup(r->pool, px_captcha_cookie);
     }
 
-    // If specific header wes mentiond for ip extraction we will use it
-    ctx->ip = conf->ip_header_key ? apr_table_get(r->headers_in, conf->ip_header_key) : r->useragent_ip;
 # else
-    // If specific header wes mentiond for ip extraction we will use it
-    ctx->ip = conf->ip_header_key ? apr_table_get(r->headers_in, conf->ip_header_key) : r->connection->remote_ip;
-
     char *cookie = NULL;
     char *strtok_ctx = NULL;
 
@@ -800,6 +813,11 @@ request_context* create_context(request_rec *r, const px_config *conf) {
         }
     }
 #endif
+
+    ctx->ip = get_request_ip(r, conf);
+    if (!ctx->ip) {
+        ERROR(r->server, "Request IP is NULL");
+    }
 
     ctx->px_cookie = px_cookie;
     ctx->uri = r->uri;
@@ -868,7 +886,7 @@ void set_call_reason(request_context *ctx, validation_result_t vr) {
 
 static void post_verification(request_context *ctx, px_config *conf, bool request_valid) {
     const char *activity_type = request_valid ? PAGE_REQUESTED_ACTIVITY_TYPE : BLOCKED_ACTIVITY_TYPE;
-    if (strcmp(activity_type, BLOCKED_ACTIVITY_TYPE) || conf->send_page_activities) {
+    if (strcmp(activity_type, BLOCKED_ACTIVITY_TYPE) == 0 || conf->send_page_activities) {
         char *activity = create_activity(activity_type, conf, ctx);
         if (!activity) {
             ERROR(ctx->r->server, "post_verification: (%s) create activity failed", activity_type);
@@ -1020,20 +1038,12 @@ int px_handle_request(request_rec *r, px_config *conf) {
 // --------------------------------------------------------------------------------
 
 
-static apr_status_t px_child_exit(void *data) {
-    curl_global_cleanup();
-    return APR_SUCCESS;
-}
-
 static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
     curl_global_init(CURL_GLOBAL_ALL);
     px_config *conf = ap_get_module_config(s->module_config, &perimeterx_module);
-    conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
     RISK_API_URL = apr_pstrcat(p, conf->base_url, RISK_API, NULL);
     CAPTCHA_API_URL = apr_pstrcat(p, conf->base_url, CAPTCHA_API, NULL);
     ACTIVITIES_API_URL = apr_pstrcat(p, conf->base_url, ACTIVITIES_API, NULL);
-    apr_pool_cleanup_register(p, s, px_child_exit, px_child_exit);
-
 }
 
 static apr_status_t px_cleanup_pre_config(void *data) {
@@ -1129,12 +1139,13 @@ static const char *set_api_timeout(cmd_parms *cmd, void *config, const char *api
     return NULL;
 }
 
-static const char *set_ip_header(cmd_parms *cmd, void *config, const char *ip_header) {
+static const char *set_ip_headers(cmd_parms *cmd, void *config, const char *ip_header) {
     px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    conf->ip_header_key = ip_header;
+    const char** entry = apr_array_push(conf->ip_header_keys);
+    *entry = ip_header;
     return NULL;
 }
 
@@ -1144,6 +1155,10 @@ static const char *set_curl_pool_size(cmd_parms *cmd, void *config, const char *
         return ERROR_CONFIG_MISSING;
     }
     conf->curl_pool_size = atoi(curl_pool_size);
+    if (conf->curl_pool != NULL) {
+        curl_pool_destroy(conf->curl_pool);
+    }
+    conf->curl_pool = curl_pool_create(cmd->pool, conf->curl_pool_size);
     return NULL;
 }
 
@@ -1195,6 +1210,10 @@ static int px_hook_post_request(request_rec *r) {
     return px_handle_request(r, conf);
 }
 
+apr_status_t kill_curl_pool(void *data) {
+    curl_pool_destroy((curl_pool*)data);
+}
+
 static void *create_config(apr_pool_t *p) {
     px_config *conf = apr_pcalloc(p, sizeof(px_config));
     conf->module_enabled = false;
@@ -1202,12 +1221,17 @@ static void *create_config(apr_pool_t *p) {
     conf->send_page_activities = false;
     conf->blocking_score = 70;
     conf->captcha_enabled = false;
-    conf->module_version = "Apache Module v1.0.2";
+    conf->module_version = "Apache Module v1.0.5";
     conf->curl_pool_size = 40;
     conf->base_url = DEFAULT_BASE_URL;
     conf->routes_whitelist = apr_array_make(p, 0, sizeof(char*));
     conf->useragents_whitelist = apr_array_make(p, 0, sizeof(char*));
     conf->custom_file_ext_whitelist = NULL;
+    conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
+    conf->ip_header_keys = apr_array_make(p, 0, sizeof(char*));
+
+    /*apr_pool_cleanup_register(p, conf->curl_pool, kill_curl_pool, apr_pool_cleanup_null);*/
+
     return conf;
 }
 
@@ -1252,11 +1276,11 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Enable page_request activities report"),
-    AP_INIT_TAKE1("IPHeader",
-            set_ip_header,
+    AP_INIT_ITERATE("IPHeader",
+            set_ip_headers,
             NULL,
             OR_ALL,
-            "This header will be used to get the request real IP"),
+            "This headers will be used to get the request real IP, first header to get valid IP will be usesd"),
     AP_INIT_TAKE1("CurlPoolSize",
             set_curl_pool_size,
             NULL,
