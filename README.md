@@ -127,13 +127,17 @@ When set to ```On``` the module will be applied on webpage requests.
 **values** : Integer between 0 and 3
 
 ### `IPHeader` ###
-**description** : HTTP header name that contains the real client IP address. Use this feature when your server is behind a CDN.
+
+**description** : List of HTTP header names that contains the real client IP address. Use this feature when your server is behind a CDN.
 
 **required** : No
 
 **default** : NULL
 
-**values** : string
+**values** : List of strings
+
+***Note***: The order of headers in the configuration matters, the first header found with value will be taken as the IP
+
 
 ### `BlockpageURL`
 
@@ -141,7 +145,38 @@ Apache module allows you to customize your blocking page.
 
 Under this configuration you need to specify the uri to an blocking page html file (relative to servers `DocumentRoot`).
 
+This module will send a redirect response with the `Location` header in this format: 
+
+```
+$host/$blockpageURL?url=${original_request_url}&uuid=${uuid}&vid=${vid}
+```
+
+Visitor ID (vid) must be extracted from this URL for the captcha JS snippet use (see below for explanation and example).
+
+**required**: No, if not specified the default block page will be used.
+
+**default**: NULL
+
+**value**: String
+
+#### Blocked user example: 
+
+If I'm blocked when browsing to `http://www.mysite.com/coolpage`, and the server configuration is: 
+
+```xml
+BlockpageURL /block.html
+```
+
+Redirect URL will be: 
+
+```
+http://www.mysite.com/block.html&url=coolpage&uuid=uuid=e8e6efb0-8a59-11e6-815c-3bdad80c1d39&vid= 08320300-6516-11e6-9308-b9c827550d47
+```
+
+
 When captcha is enabled, the block page **must** include:
+
+###### Custom blockpage requirements:
 
 * Inside `<head>` section:
 
@@ -149,9 +184,10 @@ When captcha is enabled, the block page **must** include:
 <script src="https://www.google.com/recaptcha/api.js"></script>
 <script>
 function handleCaptcha(response) {
+    var vid = getQueryString("vid"); // getQueryString should be implemented 
     var name = '_pxCaptcha';
     var expiryUtc = new Date(Date.now() + 1000 * 10).toUTCString();
-    var cookieParts = [name, '=', response + ':@VID@', '; expires=', expiryUtc, '; path=/'];
+    var cookieParts = [name, '=', response + ':' + vid + '; expires=', expiryUtc, '; path=/'];
     document.cookie = cookieParts.join('');
     location.reload();
 }
@@ -170,7 +206,7 @@ function handleCaptcha(response) {
 ```xml
 <IfModule mod_perimeterx.c>
 	...
-	BlockpageLocation /var/www/blockpage.tmpl.html
+	BlockpageURL /blockpage.html
 	...
 </IfModule>
 ```
@@ -183,9 +219,10 @@ function handleCaptcha(response) {
         <script src="https://www.google.com/recaptcha/api.js"></script>
         <script>
         function handleCaptcha(response) {
+            var vid = getQueryString("vid");
             var name = '_pxCaptcha';
             var expiryUtc = new Date(Date.now() + 1000 * 10).toUTCString();
-            var cookieParts = [name, '=', response + ':@VID@', '; expires=', expiryUtc, '; path=/'];
+            var cookieParts = [name, '=', response + ':' + vid, '; expires=', expiryUtc, '; path=/'];
             document.cookie = cookieParts.join('');
             location.reload();
         }
