@@ -964,7 +964,7 @@ static bool px_should_verify_request(request_rec *r, px_config *conf) {
         return false;
     }
 
-    if (strcmp(r->uri, conf->block_page_url) == 0) {
+    if (conf->block_page_url && strcmp(r->uri, conf->block_page_url) == 0) {
         return false;
     }
 
