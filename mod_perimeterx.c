@@ -759,6 +759,21 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     return captcha_verified;
 }
 
+static const char* extract_first_ip(apr_pool_t *p, const char *ip) {
+    const char *first_ip = ip;
+    while (*first_ip == ' ') {
+        first_ip++;
+    }
+    const char *sep = first_ip;
+    while (*sep && *sep != ' ' && *sep != ',') {
+        sep++;
+    }
+    if (*sep) {
+        first_ip = apr_pstrndup(p, first_ip, sep - first_ip);
+    }
+    return first_ip;
+}
+
 const char *get_request_ip(const request_rec *r, const px_config *conf) {
 # if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 4
     const char* socket_ip =  r->useragent_ip;
@@ -771,10 +786,8 @@ const char *get_request_ip(const request_rec *r, const px_config *conf) {
         const char *ip_header_key = APR_ARRAY_IDX(ip_header_keys, i, const char*);
         const char *ip = apr_table_get(r->headers_in, ip_header_key);
         if (ip) {
-            char *ip_cpy = apr_pstrdup(r->pool, ip);
-            char *last = apr_palloc(r->pool, sizeof(char) * strlen(ip_cpy));
             // extracting the first ip if there header contains a list of ip separated by commas
-            const char *first_ip = apr_strtok(ip_cpy, ",", &last);
+            const char *first_ip = extract_first_ip(r->pool, ip);
             // validation ip
             in_addr_t addr;
             if (inet_pton(AF_INET, first_ip, &addr) == 1 || inet_pton(AF_INET6, first_ip, &addr) == 1) {
