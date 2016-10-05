@@ -48,10 +48,6 @@ static const char *RISK_API = "/api/v1/risk";
 static const char *CAPTCHA_API = "/api/v1/risk/captcha";
 static const char *ACTIVITIES_API = "/api/v1/collector/s2s";
 
-static const char *RISK_API_URL;
-static const char *CAPTCHA_API_URL;
-static const char *ACTIVITIES_API_URL;
-
 // constants
 //
 static const char *BLOCKED_ACTIVITY_TYPE = "block";
@@ -134,6 +130,9 @@ typedef struct px_config_t {
     const char *cookie_key;
     const char *auth_token;
     const char *base_url;
+    const char *risk_api_url;
+    const char *captcha_api_url;
+    const char *activities_api_url;
     char *auth_header;
     bool module_enabled;
     bool captcha_enabled;
@@ -738,7 +737,7 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
         return true;
     }
 
-    char *response_str = post_request(CAPTCHA_API_URL, payload, conf->auth_header, ctx->r, conf->curl_pool);
+    char *response_str = post_request(conf->captcha_api_url, payload, conf->auth_header, ctx->r, conf->curl_pool);
     free(payload);
     if (!response_str) {
         INFO(ctx->r->server, "verify_captcha: failed to perform captcha validation request. url: (%s)", ctx->full_url);
@@ -858,7 +857,7 @@ risk_response* risk_api_get(const request_context *ctx, const px_config *conf, b
     if (!risk_payload) {
         return NULL;
     }
-    char *risk_response_str = post_request(RISK_API_URL , risk_payload, conf->auth_header, ctx->r, conf->curl_pool);
+    char *risk_response_str = post_request(conf->risk_api_url , risk_payload, conf->auth_header, ctx->r, conf->curl_pool);
     free(risk_payload);
     if (!risk_response_str) {
         return NULL;
@@ -892,7 +891,7 @@ static void post_verification(request_context *ctx, px_config *conf, bool reques
             ERROR(ctx->r->server, "post_verification: (%s) create activity failed", activity_type);
             return;
         }
-        char *resp = post_request(ACTIVITIES_API_URL, activity, conf->auth_header, ctx->r, conf->curl_pool);
+        char *resp = post_request(conf->activities_api_url, activity, conf->auth_header, ctx->r, conf->curl_pool);
         free(activity);
         if (resp) {
             free(resp);
@@ -1040,10 +1039,6 @@ int px_handle_request(request_rec *r, px_config *conf) {
 
 static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
     curl_global_init(CURL_GLOBAL_ALL);
-    px_config *conf = ap_get_module_config(s->module_config, &perimeterx_module);
-    RISK_API_URL = apr_pstrcat(p, conf->base_url, RISK_API, NULL);
-    CAPTCHA_API_URL = apr_pstrcat(p, conf->base_url, CAPTCHA_API, NULL);
-    ACTIVITIES_API_URL = apr_pstrcat(p, conf->base_url, ACTIVITIES_API, NULL);
 }
 
 static apr_status_t px_cleanup_pre_config(void *data) {
@@ -1168,6 +1163,9 @@ static const char *set_base_url(cmd_parms *cmd, void *config, const char *base_u
         return ERROR_CONFIG_MISSING;
     }
     conf->base_url = base_url;
+    conf->risk_api_url = apr_pstrcat(cmd->pool, conf->base_url, RISK_API, NULL);
+    conf->captcha_api_url = apr_pstrcat(cmd->pool, conf->base_url, CAPTCHA_API, NULL);
+    conf->activities_api_url = apr_pstrcat(cmd->pool, conf->base_url, ACTIVITIES_API, NULL);
     return NULL;
 }
 
@@ -1216,22 +1214,25 @@ apr_status_t kill_curl_pool(void *data) {
 
 static void *create_config(apr_pool_t *p) {
     px_config *conf = apr_pcalloc(p, sizeof(px_config));
-    conf->module_enabled = false;
-    conf->api_timeout = 0L;
-    conf->send_page_activities = false;
-    conf->blocking_score = 70;
-    conf->captcha_enabled = false;
-    conf->module_version = "Apache Module v1.0.5";
-    conf->curl_pool_size = 40;
-    conf->base_url = DEFAULT_BASE_URL;
-    conf->routes_whitelist = apr_array_make(p, 0, sizeof(char*));
-    conf->useragents_whitelist = apr_array_make(p, 0, sizeof(char*));
-    conf->custom_file_ext_whitelist = NULL;
-    conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
-    conf->ip_header_keys = apr_array_make(p, 0, sizeof(char*));
-
-    /*apr_pool_cleanup_register(p, conf->curl_pool, kill_curl_pool, apr_pool_cleanup_null);*/
-
+    if (conf) {
+        conf->module_enabled = false;
+        conf->api_timeout = 0L;
+        conf->send_page_activities = false;
+        conf->blocking_score = 70;
+        conf->captcha_enabled = false;
+        conf->module_version = "Apache Module v1.0.5";
+        conf->curl_pool_size = 40;
+        conf->base_url = DEFAULT_BASE_URL;
+        conf->risk_api_url = apr_pstrcat(p, conf->base_url, RISK_API, NULL);
+        conf->captcha_api_url = apr_pstrcat(p, conf->base_url, CAPTCHA_API, NULL);
+        conf->activities_api_url = apr_pstrcat(p, conf->base_url, ACTIVITIES_API, NULL);
+        conf->routes_whitelist = apr_array_make(p, 0, sizeof(char*));
+        conf->useragents_whitelist = apr_array_make(p, 0, sizeof(char*));
+        conf->custom_file_ext_whitelist = NULL;
+        conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
+        conf->ip_header_keys = apr_array_make(p, 0, sizeof(char*));
+        /*apr_pool_cleanup_register(p, conf->curl_pool, kill_curl_pool, apr_pool_cleanup_null);*/
+    }
     return conf;
 }
 
