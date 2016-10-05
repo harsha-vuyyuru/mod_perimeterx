@@ -75,7 +75,7 @@ static const char *BLOCKING_PAGE_FMT = "<html lang=\"en\">\n\
             <div><img src=\"http://storage.googleapis.com/instapage-thumbnails/035ca0ab/e94de863/1460594818-1523851-467x110-perimeterx.png\"> </div>\n \
             <span style=\"color: white; font-size: 34px;\">Access to This Page Has Been Blocked</span> \n\
             <div style=\"font-size: 24px;color: #000042;\">\n\
-            <br> Access to '%s' is blocked according to the site security policy.<br> Your browsing behaviour fingerprinting made us think you may be a bot. <br> <br> This may happen as a result of the following: \n\
+            <br> Access to this page is blocked according to the site security policy.<br> Your browsing behaviour fingerprinting made us think you may be a bot. <br> <br> This may happen as a result of the following: \n\
             <ul>\n\
             <li>JavaScript is disabled or not running properly.</li>\n\
             <li>Your browsing behaviour fingerprinting are not likely to be a regular user.</li>\n\
@@ -108,7 +108,7 @@ static const char *CAPTCHA_BLOCKING_PAGE_FMT  = "<html lang=\"en\">\n \
             <div><img src=\"http://storage.googleapis.com/instapage-thumbnails/035ca0ab/e94de863/1460594818-1523851-467x110-perimeterx.png\"> </div>\n \
             <span style=\"color: white; font-size: 34px;\">Access to This Page Has Been Blocked</span> \n \
             <div style=\"font-size: 24px;color: #000042;\">\n \
-            <br> Access to '%s' is blocked according to the site security policy.<br> Your browsing behaviour fingerprinting made us think you may be a bot. <br> <br> This may happen as a result of the following: \n \
+            <br> Access to this page is blocked according to the site security policy.<br> Your browsing behaviour fingerprinting made us think you may be a bot. <br> <br> This may happen as a result of the following: \n \
             <ul>\n \
             <li>JavaScript is disabled or not running properly.</li>\n \
             <li>Your browsing behaviour fingerprinting are not likely to be a regular user.</li>\n \
@@ -717,12 +717,12 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
 // --------------------------------------------------------------------------------
 
 int rprintf_blocking_page(request_rec *r, const request_context *ctx) {
-    return ap_rprintf(r, BLOCKING_PAGE_FMT, ctx->full_url, ctx->uuid);
+    return ap_rprintf(r, BLOCKING_PAGE_FMT, ctx->uuid);
 }
 
 int rprintf_captcha_blocking_page(request_rec *r, const request_context *ctx) {
     const char *vid = ctx->vid ? ctx->vid : "";
-    return ap_rprintf(r, CAPTCHA_BLOCKING_PAGE_FMT, vid, ctx->full_url, ctx->uuid);
+    return ap_rprintf(r, CAPTCHA_BLOCKING_PAGE_FMT, vid, ctx->uuid);
 }
 
 bool verify_captcha(request_context *ctx, px_config *conf) {
