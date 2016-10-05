@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <arpa/inet.h>
 
 #include <jansson.h>
 
@@ -761,19 +762,30 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
 }
 
 const char *get_request_ip(const request_rec *r, const px_config *conf) {
+# if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 4
+    const char* socket_ip =  r->useragent_ip;
+# else
+    const char* socket_ip = r->connection->remote_ip;
+#endif
     const apr_array_header_t *ip_header_keys = conf->ip_header_keys;
+    // looking for the first valid ip address in the configured IPHeader list, stops at the first valid ip
     for (int i = 0; i < ip_header_keys->nelts; i++) {
         const char *ip_header_key = APR_ARRAY_IDX(ip_header_keys, i, const char*);
         const char *ip = apr_table_get(r->headers_in, ip_header_key);
         if (ip) {
-            return ip;
+            char *ip_cpy = apr_pstrdup(r->pool, ip);
+            char *last = apr_palloc(r->pool, sizeof(char) * strlen(ip_cpy));
+            // extracting the first ip if there is multiple ip seperated with comma
+            const char *first_ip = apr_strtok(ip_cpy, ",", &last) ;
+            // validation ip
+            in_addr_t addr;
+            if (inet_pton(AF_INET, first_ip, &addr) == 1 || inet_pton(AF_INET, first_ip, &addr) == 1) {
+                return ip;
+            }
         }
     }
-# if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 4
-    return r->useragent_ip;
-# else
-    return r->connection->remote_ip;
-#endif
+    // no valid ip found in IPHeader values using socket_ip as a fallback
+    return socket_ip;
 }
 
 request_context* create_context(request_rec *r, const px_config *conf) {
