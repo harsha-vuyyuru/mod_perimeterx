@@ -820,6 +820,7 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     }
 
     ctx->px_cookie = px_cookie;
+    ctx->px_cookie_decrypted = NULL;
     ctx->uri = r->uri;
     ctx->hostname = r->hostname;
     ctx->http_method = r->method;
