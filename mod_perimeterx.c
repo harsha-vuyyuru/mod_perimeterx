@@ -920,7 +920,7 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
         }
     }
     validation_result_t vr;
-    if (px_cookie == NULL) {
+    if (ctx->px_cookie == NULL) {
         vr = NULL_COOKIE;
     } else {
         risk_cookie *c = decode_cookie(ctx->px_cookie, conf->cookie_key, ctx);
