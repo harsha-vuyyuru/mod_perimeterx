@@ -144,7 +144,7 @@ When set to ```On``` the module will be applied on webpage requests.
 * If no valid IP address is found in the IP header list the - module will use [`useragent_ip`](https://httpd.apache.org/docs/2.4/developer/new_api_2_4.html) as the requet IP.
 
 
-### `BlockpageURL`
+### `BlockPageURL`
 
 Apache module allows you to customize your blocking page.
 
@@ -171,7 +171,7 @@ Visitor ID (vid) must be extracted from this URL for the captcha JS snippet use 
 If I'm blocked when browsing to `http://www.mysite.com/coolpage`, and the server configuration is: 
 
 ```xml
-BlockpageURL /block.html
+BlockPageURL /block.html
 ```
 
 Redirect URL will be: 
@@ -215,7 +215,7 @@ function handleCaptcha(response) {
 ```xml
 <IfModule mod_perimeterx.c>
 	...
-	BlockpageURL /blockpage.html
+	BlockPageURL /blockpage.html
 	...
 </IfModule>
 ```

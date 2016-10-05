@@ -1353,7 +1353,7 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "PerimeterX server base URL"),
-    AP_INIT_TAKE1("BlockpageURL",
+    AP_INIT_TAKE1("BlockPageURL",
             set_block_page_url,
             NULL,
             OR_ALL,
