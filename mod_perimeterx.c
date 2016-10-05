@@ -774,11 +774,11 @@ const char *get_request_ip(const request_rec *r, const px_config *conf) {
             char *ip_cpy = apr_pstrdup(r->pool, ip);
             char *last = apr_palloc(r->pool, sizeof(char) * strlen(ip_cpy));
             // extracting the first ip if there header contains a list of ip separated by commas
-            const char *first_ip = apr_strtok(ip_cpy, ",", &last) ;
+            const char *first_ip = apr_strtok(ip_cpy, ",", &last);
             // validation ip
             in_addr_t addr;
             if (inet_pton(AF_INET, first_ip, &addr) == 1 || inet_pton(AF_INET6, first_ip, &addr) == 1) {
-                return ip;
+                return first_ip;
             }
         }
     }
