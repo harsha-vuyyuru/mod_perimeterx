@@ -224,8 +224,20 @@ function handleCaptcha(response) {
             var expiryUtc = new Date(Date.now() + 1000 * 10).toUTCString();
             var cookieParts = [name, '=', response + ':' + vid, '; expires=', expiryUtc, '; path=/'];
             document.cookie = cookieParts.join('');
-            location.reload();
+            window.location.pathname = getQueryString("url");
         }
+       
+       // http://stackoverflow.com/questions/901115/how-can-i-get-query-string-values-in-javascript
+		function getQueryString(name, url) {
+		    if (!url) url = window.location.href;
+		    name = name.replace(/[\[\]]/g, "\\$&");
+		    var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
+		        results = regex.exec(url);
+		    if (!results) return null;
+		    if (!results[2]) return '';
+		    return decodeURIComponent(results[2].replace(/\+/g, " "));
+		}
+
         </script>
     </head>
     <body>
