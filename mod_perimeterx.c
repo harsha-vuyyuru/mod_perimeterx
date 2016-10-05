@@ -223,6 +223,7 @@ typedef struct captcha_response_t {
 
 typedef struct request_context_t {
     const char *px_cookie;
+    const char *px_cookie_decrypted;
     const char *px_captcha;
     const char *ip;
     const char *vid;
@@ -385,7 +386,7 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf, boo
             "http_version", ctx->http_version,
             "module_version", conf->module_version);
     if (ctx->px_cookie) {
-        json_object_set_new(j_additional, "px_cookie", json_string(ctx->px_cookie));
+        json_object_set_new(j_additional, "px_cookie", json_string(ctx->px_cookie_decrypted));
     }
 
     // risk api object
@@ -706,6 +707,7 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
 
     // parse cookie string to risk struct
     risk_cookie *c = parse_risk_cookie((const char*)dpayload, r_ctx);
+    r_ctx->px_cookie_decrypted = dpayload;
 
     // clean memory
     EVP_CIPHER_CTX_free(ctx);
