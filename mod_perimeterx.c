@@ -25,6 +25,7 @@
 #include "http_request.h"
 #include "http_log.h"
 #include "apr_strings.h"
+#include "apr_escape.h"
 
 #include "curl_pool.h"
 
@@ -64,6 +65,7 @@ static const char *EXPECT = "Expect:";
 
 static const int ITERATIONS_UPPER_BOUND = 10000;
 static const int ITERATIONS_LOWER_BOUND = 0;
+static const int TEMP_REDIRECT = 307;
 
 static const char *BLOCKING_PAGE_FMT = "<html lang=\"en\">\n\
             <head>\n\
@@ -130,6 +132,7 @@ typedef struct px_config_t {
     const char *app_id;
     const char *cookie_key;
     const char *auth_token;
+    const char *block_page_url;
     const char *base_url;
     const char *risk_api_url;
     const char *captcha_api_url;
@@ -987,6 +990,10 @@ static bool px_should_verify_request(request_rec *r, px_config *conf) {
         return false;
     }
 
+    if (conf->block_page_url && strcmp(r->uri, conf->block_page_url) == 0) {
+        return false;
+    }
+
     const char *file_ending = strrchr(r->uri, '.');
     if (file_ending) {
         if (conf->custom_file_ext_whitelist) {
@@ -1043,14 +1050,32 @@ int px_handle_request(request_rec *r, px_config *conf) {
         apr_table_set(r->subprocess_env, "SCORE", apr_itoa(r->pool, ctx->score));
 
         if (!request_valid) {
+            // redirecting GET requests to custom block page if exists and return 403 for invalid POST requests
+            if (conf->block_page_url) {
+                if (strcmp(r->method, "POST") == 0) {
+                    return HTTP_FORBIDDEN;
+                }
+                const char *redirect_url;
+                const char *url_arg = r->args
+                    ? apr_pstrcat(r->pool, r->uri, "?", r->args, NULL)
+                    : apr_pstrcat(r->pool, r->uri, NULL);
+                apr_size_t encoded_url_len = 0;
+                if (apr_escape_urlencoded(NULL, url_arg, APR_ESCAPE_STRING, &encoded_url_len) == APR_SUCCESS)   {
+                    char *encoded_url = apr_pcalloc(r->pool,encoded_url_len + 1);
+                    apr_escape_urlencoded(encoded_url, url_arg, APR_ESCAPE_STRING, NULL);
+                    redirect_url = apr_pstrcat(r->pool, conf->block_page_url, "?url=", encoded_url, "&uuid=", ctx->uuid, "&vid=", ctx->vid,  NULL);
+                } else {
+                    redirect_url = apr_pstrcat(r->pool, conf->block_page_url, "?url=", r->uri, "&uuid=", ctx->uuid, "&vid=", ctx->vid,  NULL);
+                }
+                apr_table_set(r->headers_out, "Location", redirect_url);
+                return TEMP_REDIRECT;
+            }
             if (conf->captcha_enabled) {
                 rprintf_captcha_blocking_page(r, ctx);
             } else {
                 rprintf_blocking_page(r, ctx);
             }
-# if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 2
             ap_set_content_type(r, "text/html");
-# endif
             INFO(r->server, "px_handle_request: request blocked. captcha (%d)", conf->captcha_enabled);
             return DONE;
         }
@@ -1194,6 +1219,16 @@ static const char *set_base_url(cmd_parms *cmd, void *config, const char *base_u
     return NULL;
 }
 
+static const char *set_block_page_url(cmd_parms *cmd, void *config, const char *url) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+
+    conf->block_page_url = url;
+    return NULL;
+}
+
 static const char *add_route_to_whitelist(cmd_parms *cmd, void *config, const char *route) {
     const char *sep = ";";
     px_config *conf = get_config(cmd, config);
@@ -1256,6 +1291,7 @@ static void *create_config(apr_pool_t *p) {
         conf->custom_file_ext_whitelist = NULL;
         conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
         conf->ip_header_keys = apr_array_make(p, 0, sizeof(char*));
+        conf->block_page_url = NULL;
         /*apr_pool_cleanup_register(p, conf->curl_pool, kill_curl_pool, apr_pool_cleanup_null);*/
     }
     return conf;
@@ -1317,6 +1353,11 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "PerimeterX server base URL"),
+    AP_INIT_TAKE1("BlockpageURL",
+            set_block_page_url,
+            NULL,
+            OR_ALL,
+            "URL for custom blocking page"),
     AP_INIT_ITERATE("PXWhitelistRoutes",
             add_route_to_whitelist,
             NULL,
