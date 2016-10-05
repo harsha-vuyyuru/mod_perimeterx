@@ -138,7 +138,10 @@ When set to ```On``` the module will be applied on webpage requests.
 
 **values** : List of strings
 
-***Note***: The order of headers in the configuration matters, the first header found with value will be taken as the IP
+***Note***: 
+
+* The order of headers in the configuration matters, the first header found with value will be taken as the IP
+* If no valid IP address is found in the IP header list the - module will use [`useragent_ip`](https://httpd.apache.org/docs/2.4/developer/new_api_2_4.html) as the requet IP.
 
 
 ### `BlockpageURL`
@@ -174,7 +177,7 @@ BlockpageURL /block.html
 Redirect URL will be: 
 
 ```
-http://www.mysite.com/block.html&url=coolpage&uuid=uuid=e8e6efb0-8a59-11e6-815c-3bdad80c1d39&vid= 08320300-6516-11e6-9308-b9c827550d47
+http://www.mysite.com/block.html&url=coolpage&uuid=uuid=e8e6efb0-8a59-11e6-815c-3bdad80c1d39&vid=08320300-6516-11e6-9308-b9c827550d47
 ```
 
 

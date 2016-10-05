@@ -1050,11 +1050,11 @@ int px_handle_request(request_rec *r, px_config *conf) {
         apr_table_set(r->subprocess_env, "SCORE", apr_itoa(r->pool, ctx->score));
 
         if (!request_valid) {
-            // redirecting GET requests to custom block page if exists and return 403 for invalid POST requests
+            if (strcmp(r->method, "POST") == 0) {
+                return HTTP_FORBIDDEN;
+            }
+            // redirecting requests to custom block page if exists
             if (conf->block_page_url) {
-                if (strcmp(r->method, "POST") == 0) {
-                    return HTTP_FORBIDDEN;
-                }
                 const char *redirect_url;
                 const char *url_arg = r->args
                     ? apr_pstrcat(r->pool, r->uri, "?", r->args, NULL)
