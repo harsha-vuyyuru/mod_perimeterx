@@ -61,7 +61,6 @@ The directives should be under the server configuration.
 When set to ```On``` the module will be applied on webpage requests.
 
 ### `AppId` ###
-
 **description** : Unique application ID
 
 **required** : yes
@@ -127,127 +126,13 @@ When set to ```On``` the module will be applied on webpage requests.
 **values** : Integer between 0 and 3
 
 ### `IPHeader` ###
-
-**description** : List of HTTP header names that contains the real client IP address. Use this feature when your server is behind a CDN.
+**description** : HTTP header name that contains the real client IP address. Use this feature when your server is behind a CDN.
 
 **required** : No
 
 **default** : NULL
 
-**values** : List of strings
-
-***Note***: The order of headers in the configuration matters, the first header found with value will be taken as the IP
-
-
-### `BlockpageURL`
-
-Apache module allows you to customize your blocking page.
-
-Under this configuration you need to specify the uri to an blocking page html file (relative to servers `DocumentRoot`).
-
-This module will send a redirect response with the `Location` header in this format: 
-
-```
-$host/$blockpageURL?url=${original_request_url}&uuid=${uuid}&vid=${vid}
-```
-
-Visitor ID (vid) must be extracted from this URL for the captcha JS snippet use (see below for explanation and example).
-
-**required**: No, if not specified the default block page will be used.
-
-**default**: NULL
-
-**value**: String
-
-#### Blocked user example: 
-
-If I'm blocked when browsing to `http://www.mysite.com/coolpage`, and the server configuration is: 
-
-```xml
-BlockpageURL /block.html
-```
-
-Redirect URL will be: 
-
-```
-http://www.mysite.com/block.html&url=coolpage&uuid=uuid=e8e6efb0-8a59-11e6-815c-3bdad80c1d39&vid= 08320300-6516-11e6-9308-b9c827550d47
-```
-
-
-When captcha is enabled, the block page **must** include:
-
-###### Custom blockpage requirements:
-
-* Inside `<head>` section:
-
-```html
-<script src="https://www.google.com/recaptcha/api.js"></script>
-<script>
-function handleCaptcha(response) {
-    var vid = getQueryString("vid"); // getQueryString should be implemented 
-    var name = '_pxCaptcha';
-    var expiryUtc = new Date(Date.now() + 1000 * 10).toUTCString();
-    var cookieParts = [name, '=', response + ':' + vid + '; expires=', expiryUtc, '; path=/'];
-    document.cookie = cookieParts.join('');
-    location.reload();
-}
-</script>
-```
-* Inside `<body>` section:
-
-```
-<div class="g-recaptcha" data-sitekey="6Lcj-R8TAAAAABs3FrRPuQhLMbp5QrHsHufzLf7b" data-callback="handleCaptcha" data-theme="dark"></div>
-```
-
-* [PerimeterX Javascript snippet](https://console.perimeterx.com/#/app/applicationsmgmt).
-
-#### configuration example:
- 
-```xml
-<IfModule mod_perimeterx.c>
-	...
-	BlockpageURL /blockpage.html
-	...
-</IfModule>
-```
-
-#### Block page implementation example: 
-
-```html
-<html>
-    <head>
-        <script src="https://www.google.com/recaptcha/api.js"></script>
-        <script>
-        function handleCaptcha(response) {
-            var vid = getQueryString("vid");
-            var name = '_pxCaptcha';
-            var expiryUtc = new Date(Date.now() + 1000 * 10).toUTCString();
-            var cookieParts = [name, '=', response + ':' + vid, '; expires=', expiryUtc, '; path=/'];
-            document.cookie = cookieParts.join('');
-            window.location.pathname = getQueryString("url");
-        }
-       
-       // http://stackoverflow.com/questions/901115/how-can-i-get-query-string-values-in-javascript
-		function getQueryString(name, url) {
-		    if (!url) url = window.location.href;
-		    name = name.replace(/[\[\]]/g, "\\$&");
-		    var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
-		        results = regex.exec(url);
-		    if (!results) return null;
-		    if (!results[2]) return '';
-		    return decodeURIComponent(results[2].replace(/\+/g, " "));
-		}
-
-        </script>
-    </head>
-    <body>
-        <h1>You are Blocked</h1>
-        <p>Try and solve the captcha</p> 
-        <div class="g-recaptcha" data-sitekey="6Lcj-R8TAAAAABs3FrRPuQhLMbp5QrHsHufzLf7b" data-callback="handleCaptcha" data-theme="dark"></div>
-    </body>
-<html>
-```
-
+**values** : string
 
 ### `CurlPoolSize` ###
 **description** : The number of active curl handles for each server
@@ -291,21 +176,6 @@ Determines PerimeterX server base URL.
 
 **values** : backspace delimetered list of string
 
-### `ExtensionWhitelist`
-
-**description** : Whitespace seperated list of file extensions that will not be examined by PX module.
-
-**required**: No
-
-**default** : .css, .bmp, .tif, .ttf, .docx, .woff2, .js, .pict, .tiff, .eot, .xlsx, .jpg, .csv,
-    .eps, .woff, .xls, .jpeg, .doc, .ejs, .otf, .pptx, .gif, .pdf, .swf, .svg, .ps,
-    .ico, .pls, .midi, .svgz, .class, .png, .ppt, .mid, webp, .jar.
-    
-**Note**: when using this option the default values are cleared and the supplied list will be used instead.
-
-**values** : whitespace delimetered list of strings
-
-**example**: `.txt .css .jpeg`
 
 ### Example ###
 
@@ -341,5 +211,9 @@ Determines PerimeterX server base URL.
                 ReportPageRequest On
                 Captcha On
         </IfModule>
+
+        ErrorLog ${APACHE_LOG_DIR}/error.log
+        CustomLog ${APACHE_LOG_DIR}/access.log combined
+
 </VirtualHost>
 ```
