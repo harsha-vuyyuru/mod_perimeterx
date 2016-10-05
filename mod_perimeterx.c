@@ -76,7 +76,7 @@ static const char *BLOCKING_PAGE_FMT = "<html lang=\"en\">\n\
             <div><img src=\"http://storage.googleapis.com/instapage-thumbnails/035ca0ab/e94de863/1460594818-1523851-467x110-perimeterx.png\"> </div>\n \
             <span style=\"color: white; font-size: 34px;\">Access to This Page Has Been Blocked</span> \n\
             <div style=\"font-size: 24px;color: #000042;\">\n\
-            <br> Access to '%s' is blocked according to the site security policy.<br> Your browsing behaviour fingerprinting made us think you may be a bot. <br> <br> This may happen as a result of the following: \n\
+            <br> Access to this page is blocked according to the site security policy.<br> Your browsing behaviour fingerprinting made us think you may be a bot. <br> <br> This may happen as a result of the following: \n\
             <ul>\n\
             <li>JavaScript is disabled or not running properly.</li>\n\
             <li>Your browsing behaviour fingerprinting are not likely to be a regular user.</li>\n\
@@ -109,7 +109,7 @@ static const char *CAPTCHA_BLOCKING_PAGE_FMT  = "<html lang=\"en\">\n \
             <div><img src=\"http://storage.googleapis.com/instapage-thumbnails/035ca0ab/e94de863/1460594818-1523851-467x110-perimeterx.png\"> </div>\n \
             <span style=\"color: white; font-size: 34px;\">Access to This Page Has Been Blocked</span> \n \
             <div style=\"font-size: 24px;color: #000042;\">\n \
-            <br> Access to '%s' is blocked according to the site security policy.<br> Your browsing behaviour fingerprinting made us think you may be a bot. <br> <br> This may happen as a result of the following: \n \
+            <br> Access to this page is blocked according to the site security policy.<br> Your browsing behaviour fingerprinting made us think you may be a bot. <br> <br> This may happen as a result of the following: \n \
             <ul>\n \
             <li>JavaScript is disabled or not running properly.</li>\n \
             <li>Your browsing behaviour fingerprinting are not likely to be a regular user.</li>\n \
@@ -154,6 +154,7 @@ typedef enum {
     NO_SIGNING,
     EXPIRED,
     INVALID,
+    DECRYPTION_FAILED,
     NULL_COOKIE
 } validation_result_t;
 
@@ -161,14 +162,16 @@ typedef enum s2s_call_reason_t {
     NONE,
     NO_COOKIE,
     EXPIRED_COOKIE,
-    INVALID_COOKIE
+    COOKIE_DECRYPTION_FAILED,
+    COOKIE_VALIDATION_FAILED
 } s2s_call_reason_t;
 
 static const char *S2S_CALL_REASON_STR[] = {
     "none",
     "no_cookie",
-    "expired_cookie",
-    "invalid_cookie"
+    "cookie_expired",
+    "cookie_decryption_failed",
+    "cookie_validation_failed"
 };
 
 typedef enum {
@@ -221,6 +224,7 @@ typedef struct captcha_response_t {
 
 typedef struct request_context_t {
     const char *px_cookie;
+    const char *px_cookie_decrypted;
     const char *px_captcha;
     const char *ip;
     const char *vid;
@@ -383,7 +387,7 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf, boo
             "http_version", ctx->http_version,
             "module_version", conf->module_version);
     if (ctx->px_cookie) {
-        json_object_set_new(j_additional, "px_cookie", json_string(ctx->px_cookie));
+        json_object_set_new(j_additional, "px_cookie", json_string(ctx->px_cookie_decrypted));
     }
 
     // risk api object
@@ -639,10 +643,6 @@ risk_cookie *parse_risk_cookie(const char *raw_cookie, request_context *ctx) {
 }
 
 risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, request_context *r_ctx) {
-    if (px_cookie == NULL) {
-        return NULL;
-    }
-
     char *px_cookie_cpy = apr_pstrdup(r_ctx->r->pool, px_cookie);
     // parse cookie
     char* saveptr;
@@ -708,6 +708,7 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
 
     // parse cookie string to risk struct
     risk_cookie *c = parse_risk_cookie((const char*)dpayload, r_ctx);
+    r_ctx->px_cookie_decrypted = dpayload;
 
     // clean memory
     EVP_CIPHER_CTX_free(ctx);
@@ -717,12 +718,12 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
 // --------------------------------------------------------------------------------
 
 int rprintf_blocking_page(request_rec *r, const request_context *ctx) {
-    return ap_rprintf(r, BLOCKING_PAGE_FMT, ctx->full_url, ctx->uuid);
+    return ap_rprintf(r, BLOCKING_PAGE_FMT, ctx->uuid);
 }
 
 int rprintf_captcha_blocking_page(request_rec *r, const request_context *ctx) {
     const char *vid = ctx->vid ? ctx->vid : "";
-    return ap_rprintf(r, CAPTCHA_BLOCKING_PAGE_FMT, vid, ctx->full_url, ctx->uuid);
+    return ap_rprintf(r, CAPTCHA_BLOCKING_PAGE_FMT, vid, ctx->uuid);
 }
 
 bool verify_captcha(request_context *ctx, px_config *conf) {
@@ -844,6 +845,7 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     }
 
     ctx->px_cookie = px_cookie;
+    ctx->px_cookie_decrypted = NULL;
     ctx->uri = r->uri;
     ctx->hostname = r->hostname;
     ctx->http_method = r->method;
@@ -895,15 +897,21 @@ risk_response* risk_api_get(const request_context *ctx, const px_config *conf, b
 }
 
 void set_call_reason(request_context *ctx, validation_result_t vr) {
-    switch(vr) {
+    switch (vr) {
         case NULL_COOKIE:
             ctx->call_reason = NO_COOKIE;
             break;
-        case INVALID:
-            ctx->call_reason = INVALID_COOKIE;
-            break;
         case EXPIRED:
             ctx->call_reason = EXPIRED_COOKIE;
+            break;
+        case DECRYPTION_FAILED:
+            ctx->call_reason = COOKIE_DECRYPTION_FAILED;
+            break;
+        case INVALID:
+            ctx->call_reason = COOKIE_VALIDATION_FAILED;
+            break;
+        default:
+            ctx->call_reason = COOKIE_VALIDATION_FAILED;
             break;
     }
 }
@@ -937,14 +945,19 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
             return request_valid;
         }
     }
-
-    validation_result_t vr = NULL_COOKIE;
-    risk_cookie *c = decode_cookie(ctx->px_cookie, conf->cookie_key, ctx);
-    if (c) {
-        ctx->score = c->b_val;
-        ctx->vid = c->vid;
-        ctx->uuid = c->uuid;
-        vr = validate_cookie(c, ctx, conf->cookie_key);
+    validation_result_t vr;
+    if (ctx->px_cookie == NULL) {
+        vr = NULL_COOKIE;
+    } else {
+        risk_cookie *c = decode_cookie(ctx->px_cookie, conf->cookie_key, ctx);
+        if (c) {
+            ctx->score = c->b_val;
+            ctx->vid = c->vid;
+            ctx->uuid = c->uuid;
+            vr = validate_cookie(c, ctx, conf->cookie_key);
+        } else {
+            vr = DECRYPTION_FAILED;
+        }
     }
     switch (vr) {
         case VALID:
@@ -956,6 +969,7 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
         case EXPIRED:
             expired = true;
         case NULL_COOKIE:
+        case DECRYPTION_FAILED:
         case INVALID:
             set_call_reason(ctx, vr);
             risk_response = risk_api_get(ctx, conf, expired);
