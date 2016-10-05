@@ -153,6 +153,7 @@ typedef enum {
     NO_SIGNING,
     EXPIRED,
     INVALID,
+    DECRYPTION_FAILED,
     NULL_COOKIE
 } validation_result_t;
 
@@ -160,14 +161,16 @@ typedef enum s2s_call_reason_t {
     NONE,
     NO_COOKIE,
     EXPIRED_COOKIE,
-    INVALID_COOKIE
+    COOKIE_DECRYPTION_FAILED,
+    COOKIE_VALIDATION_FAILED
 } s2s_call_reason_t;
 
 static const char *S2S_CALL_REASON_STR[] = {
     "none",
     "no_cookie",
-    "expired_cookie",
-    "invalid_cookie"
+    "cookie_expired",
+    "cookie_decryption_failed",
+    "cookie_validation_failed"
 };
 
 typedef enum {
@@ -638,10 +641,6 @@ risk_cookie *parse_risk_cookie(const char *raw_cookie, request_context *ctx) {
 }
 
 risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, request_context *r_ctx) {
-    if (px_cookie == NULL) {
-        return NULL;
-    }
-
     char *px_cookie_cpy = apr_pstrdup(r_ctx->r->pool, px_cookie);
     // parse cookie
     char* saveptr;
@@ -870,15 +869,21 @@ risk_response* risk_api_get(const request_context *ctx, const px_config *conf, b
 }
 
 void set_call_reason(request_context *ctx, validation_result_t vr) {
-    switch(vr) {
+    switch (vr) {
         case NULL_COOKIE:
             ctx->call_reason = NO_COOKIE;
             break;
-        case INVALID:
-            ctx->call_reason = INVALID_COOKIE;
-            break;
         case EXPIRED:
             ctx->call_reason = EXPIRED_COOKIE;
+            break;
+        case DECRYPTION_FAILED:
+            ctx->call_reason = COOKIE_DECRYPTION_FAILED;
+            break;
+        case INVALID:
+            ctx->call_reason = COOKIE_VALIDATION_FAILED;
+            break;
+        default:
+            ctx->call_reason = COOKIE_VALIDATION_FAILED;
             break;
     }
 }
@@ -912,14 +917,19 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
             return request_valid;
         }
     }
-
-    validation_result_t vr = NULL_COOKIE;
-    risk_cookie *c = decode_cookie(ctx->px_cookie, conf->cookie_key, ctx);
-    if (c) {
-        ctx->score = c->b_val;
-        ctx->vid = c->vid;
-        ctx->uuid = c->uuid;
-        vr = validate_cookie(c, ctx, conf->cookie_key);
+    validation_result_t vr;
+    if (px_cookie == NULL) {
+        vr = NULL_COOKIE;
+    } else {
+        risk_cookie *c = decode_cookie(ctx->px_cookie, conf->cookie_key, ctx);
+        if (c) {
+            ctx->score = c->b_val;
+            ctx->vid = c->vid;
+            ctx->uuid = c->uuid;
+            vr = validate_cookie(c, ctx, conf->cookie_key);
+        } else {
+            vr = DECRYPTION_FAILED;
+        }
     }
     switch (vr) {
         case VALID:
@@ -931,6 +941,7 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
         case EXPIRED:
             expired = true;
         case NULL_COOKIE:
+        case DECRYPTION_FAILED:
         case INVALID:
             set_call_reason(ctx, vr);
             risk_response = risk_api_get(ctx, conf, expired);
