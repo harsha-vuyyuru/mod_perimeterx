@@ -150,7 +150,7 @@ typedef struct px_config_t {
     apr_array_header_t *useragents_whitelist;
     apr_array_header_t *custom_file_ext_whitelist;
     apr_array_header_t *ip_header_keys;
-    apr_array_header_t *sensitive_urls;
+    apr_array_header_t *sensitive_routes;
 } px_config;
 
 typedef enum {
@@ -168,7 +168,7 @@ typedef enum s2s_call_reason_t {
     EXPIRED_COOKIE,
     COOKIE_DECRYPTION_FAILED,
     COOKIE_VALIDATION_FAILED,
-    FORCE_RISK_API
+    SENSITIVE_ROUTE
 } s2s_call_reason_t;
 
 static const char *S2S_CALL_REASON_STR[] = {
@@ -177,7 +177,7 @@ static const char *S2S_CALL_REASON_STR[] = {
     "cookie_expired",
     "cookie_decryption_failed",
     "cookie_validation_failed",
-    "sensitive_page"
+    "sensitive_route"
 };
 
 typedef enum {
@@ -939,11 +939,11 @@ static void post_verification(request_context *ctx, px_config *conf, bool reques
     }
 }
 
-static bool should_force_risk_api(request_rec *r, px_config *conf) {
-    apr_array_header_t *sensitive_urls = conf->sensitive_urls;
-    for (int i = 0; i < sensitive_urls->nelts; i++) {
-        char *url = APR_ARRAY_IDX(sensitive_urls, i, char*);
-        if (strcmp(r->uri, url) == 0) {
+static bool is_sensitive_route(request_rec *r, px_config *conf) {
+    apr_array_header_t *sensitive_routes = conf->sensitive_routes;
+    for (int i = 0; i < sensitive_routes->nelts; i++) {
+        char *route = APR_ARRAY_IDX(sensitive_routes, i, char*);
+        if (strcmp(r->uri, route) == 0) {
             return true;
         }
     }
@@ -975,8 +975,8 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
         } else {
             vr = DECRYPTION_FAILED;
         }
-        if (should_force_risk_api(ctx->r, conf)) {
-            ctx->call_reason = FORCE_RISK_API;
+        if (is_sensitive_route(ctx->r, conf)) {
+            ctx->call_reason = SENSITIVE_ROUTE;
             risk_response = risk_api_get(ctx, conf, expired);
             goto handle_response;
         }
@@ -1300,13 +1300,13 @@ static const char *add_file_extension_whitelist(cmd_parms *cmd, void *config, co
     return NULL;
 }
 
-static const char *add_url_force_risk_api(cmd_parms *cmd, void *config, const char *url) {
+static const char *add_sensitive_route(cmd_parms *cmd, void *config, const char *route) {
     px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    const char** entry = apr_array_push(conf->sensitive_urls);
-    *entry = url;
+    const char** entry = apr_array_push(conf->sensitive_routes);
+    *entry = route;
     return NULL;
 }
 
@@ -1339,8 +1339,7 @@ static void *create_config(apr_pool_t *p) {
         conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
         conf->ip_header_keys = apr_array_make(p, 0, sizeof(char*));
         conf->block_page_url = NULL;
-        conf->sensitive_urls = apr_array_make(p, 0, sizeof(char*));
-        /*apr_pool_cleanup_register(p, conf->curl_pool, kill_curl_pool, apr_pool_cleanup_null);*/
+        conf->sensitive_routes = apr_array_make(p, 0, sizeof(char*));
     }
     return conf;
 }
@@ -1422,7 +1421,7 @@ static const command_rec px_directives[] = {
             OR_ALL,
             "Whitelist by file extensions - this module will not apply on files with one of these file extensions"),
     AP_INIT_ITERATE("ForceRiskAPI",
-            add_url_force_risk_api,
+            add_sensitive_route,
             NULL,
             OR_ALL,
             "Whitelist by file extensions - this module will not apply on files with one of these file extensions"),
