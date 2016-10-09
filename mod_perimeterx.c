@@ -90,38 +90,38 @@ static const char *BLOCKING_PAGE_FMT = "<html lang=\"en\">\n\
             </html>";
 
 static const char *CAPTCHA_BLOCKING_PAGE_FMT  = "<html lang=\"en\">\n \
-            <head>\n \
-            <link type=\"text/css\" rel=\"stylesheet\" media=\"screen, print\" href=\"//fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800\">\n\
-            <meta charset=\"UTF-8\">\n \
-            <title>Access to This Page Has Been Blocked</title>\n \
-            <style> p { width: 60%%; margin: 0 auto; font-size: 35px; } body { background-color: #a2a2a2; font-family: \"Open Sans\"; margin: 5%%; } img { width: 180px; } a { color: #2020B1; text-decoration: blink; } a:hover { color: #2b60c6; } </style>\n \
-            <script src=\"https://www.google.com/recaptcha/api.js\"></script> \
-            <script> \
-            window.px_vid = '%s';\n \
-            function handleCaptcha(response) { \n \
-            var name = '_pxCaptcha';\n \
-            var expiryUtc = new Date(Date.now() + 1000 * 10).toUTCString();\n \
-            var cookieParts = [name, '=', response + ':' + window.px_vid, '; expires=', expiryUtc, '; path=/'];\n \
-            document.cookie = cookieParts.join('');\n \
-            location.reload();\n \
-            }\n \
-            </script> \n \
-            </head>\n \
-            <body cz-shortcut-listen=\"true\">\n \
-            <div><img src=\"http://storage.googleapis.com/instapage-thumbnails/035ca0ab/e94de863/1460594818-1523851-467x110-perimeterx.png\"> </div>\n \
-            <span style=\"color: white; font-size: 34px;\">Access to This Page Has Been Blocked</span> \n \
-            <div style=\"font-size: 24px;color: #000042;\">\n \
-            <br> Access to this page is blocked according to the site security policy.<br> Your browsing behaviour fingerprinting made us think you may be a bot. <br> <br> This may happen as a result of the following: \n \
-            <ul>\n \
-            <li>JavaScript is disabled or not running properly.</li>\n \
-            <li>Your browsing behaviour fingerprinting are not likely to be a regular user.</li>\n \
-            </ul>\n \
-            To read more about the bot defender solution: <a href=\"https://www.perimeterx.com/bot-defender\">https://www.perimeterx.com/bot-defender</a><br> If you think the blocking was done by mistake, contact the site administrator. <br> \n \
-            <div class=\"g-recaptcha\" data-sitekey=\"6Lcj-R8TAAAAABs3FrRPuQhLMbp5QrHsHufzLf7b\" data-callback=\"handleCaptcha\" data-theme=\"dark\"></div>\n \
-            <br><span style=\"font-size: 20px;\">Block Reference: <span style=\"color: #525151;\">#' %s '</span></span> \n \
-            </div>\n \
-            </body>\n \
-            </html>";
+                                                 <head>\n \
+                                                 <link type=\"text/css\" rel=\"stylesheet\" media=\"screen, print\" href=\"//fonts.googleapis.com/css?family=Open+Sans:300italic,400italic,600italic,700italic,800italic,400,300,600,700,800\">\n\
+                                                 <meta charset=\"UTF-8\">\n \
+                                                 <title>Access to This Page Has Been Blocked</title>\n \
+                                                 <style> p { width: 60%%; margin: 0 auto; font-size: 35px; } body { background-color: #a2a2a2; font-family: \"Open Sans\"; margin: 5%%; } img { width: 180px; } a { color: #2020B1; text-decoration: blink; } a:hover { color: #2b60c6; } </style>\n \
+                                                 <script src=\"https://www.google.com/recaptcha/api.js\"></script> \
+                                                 <script> \
+                                                 window.px_vid = '%s';\n \
+                                                 function handleCaptcha(response) { \n \
+                                                     var name = '_pxCaptcha';\n \
+                                                         var expiryUtc = new Date(Date.now() + 1000 * 10).toUTCString();\n \
+                                                         var cookieParts = [name, '=', response + ':' + window.px_vid, '; expires=', expiryUtc, '; path=/'];\n \
+                                                         document.cookie = cookieParts.join('');\n \
+                                                         location.reload();\n \
+                                                 }\n \
+                                                 </script> \n \
+                                                 </head>\n \
+                                                 <body cz-shortcut-listen=\"true\">\n \
+                                                 <div><img src=\"http://storage.googleapis.com/instapage-thumbnails/035ca0ab/e94de863/1460594818-1523851-467x110-perimeterx.png\"> </div>\n \
+                                                 <span style=\"color: white; font-size: 34px;\">Access to This Page Has Been Blocked</span> \n \
+                                                 <div style=\"font-size: 24px;color: #000042;\">\n \
+                                                 <br> Access to this page is blocked according to the site security policy.<br> Your browsing behaviour fingerprinting made us think you may be a bot. <br> <br> This may happen as a result of the following: \n \
+                                                 <ul>\n \
+                                                 <li>JavaScript is disabled or not running properly.</li>\n \
+                                                 <li>Your browsing behaviour fingerprinting are not likely to be a regular user.</li>\n \
+                                                 </ul>\n \
+                                                 To read more about the bot defender solution: <a href=\"https://www.perimeterx.com/bot-defender\">https://www.perimeterx.com/bot-defender</a><br> If you think the blocking was done by mistake, contact the site administrator. <br> \n \
+                                                 <div class=\"g-recaptcha\" data-sitekey=\"6Lcj-R8TAAAAABs3FrRPuQhLMbp5QrHsHufzLf7b\" data-callback=\"handleCaptcha\" data-theme=\"dark\"></div>\n \
+                                                 <br><span style=\"font-size: 20px;\">Block Reference: <span style=\"color: #525151;\">#' %s '</span></span> \n \
+                                                 </div>\n \
+                                                 </body>\n \
+                                                 </html>";
 
 
 static const char *ERROR_CONFIG_MISSING = "mod_perimeterx: config structure not allocated";
@@ -150,6 +150,7 @@ typedef struct px_config_t {
     apr_array_header_t *useragents_whitelist;
     apr_array_header_t *custom_file_ext_whitelist;
     apr_array_header_t *ip_header_keys;
+    apr_array_header_t *sensitive_urls;
 } px_config;
 
 typedef enum {
@@ -166,7 +167,8 @@ typedef enum s2s_call_reason_t {
     NO_COOKIE,
     EXPIRED_COOKIE,
     COOKIE_DECRYPTION_FAILED,
-    COOKIE_VALIDATION_FAILED
+    COOKIE_VALIDATION_FAILED,
+    FORCE_RISK_API
 } s2s_call_reason_t;
 
 static const char *S2S_CALL_REASON_STR[] = {
@@ -174,7 +176,8 @@ static const char *S2S_CALL_REASON_STR[] = {
     "no_cookie",
     "cookie_expired",
     "cookie_decryption_failed",
-    "cookie_validation_failed"
+    "cookie_validation_failed",
+    "sensitive_page"
 };
 
 typedef enum {
@@ -261,8 +264,8 @@ static size_t write_response_cb(void* contents, size_t size, size_t nmemb, void 
     size_t realsize = size * nmemb;
     res->data = realloc(res->data, res->size + realsize + 1);
     if (res->data == NULL) {
-      ERROR(res->server, "not enough memory for post_request buffer alloc");
-      return 0;
+        ERROR(res->server, "not enough memory for post_request buffer alloc");
+        return 0;
     }
     memcpy(&(res->data[res->size]), contents, realsize);
     res->size += realsize;
@@ -915,7 +918,6 @@ void set_call_reason(request_context *ctx, validation_result_t vr) {
             break;
         default:
             ctx->call_reason = COOKIE_VALIDATION_FAILED;
-            break;
     }
 }
 
@@ -937,6 +939,17 @@ static void post_verification(request_context *ctx, px_config *conf, bool reques
     }
 }
 
+static bool should_force_risk_api(request_rec *r, px_config *conf) {
+    apr_array_header_t *sensitive_urls = conf->sensitive_urls;
+    for (int i = 0; i < sensitive_urls->nelts; i++) {
+        char *url = APR_ARRAY_IDX(sensitive_urls, i, char*);
+        if (strcmp(r->uri, url) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool px_verify_request(request_context *ctx, px_config *conf) {
     bool expired = false;
     bool request_valid = true;
@@ -948,6 +961,7 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
             return request_valid;
         }
     }
+
     validation_result_t vr;
     if (ctx->px_cookie == NULL) {
         vr = NULL_COOKIE;
@@ -961,6 +975,11 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
         } else {
             vr = DECRYPTION_FAILED;
         }
+        if (should_force_risk_api(ctx->r, conf)) {
+            ctx->call_reason = FORCE_RISK_API;
+            risk_response = risk_api_get(ctx, conf, expired);
+            goto handle_response;
+        }
     }
     switch (vr) {
         case VALID:
@@ -971,11 +990,15 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
             break;
         case EXPIRED:
             expired = true;
-        case NULL_COOKIE:
         case DECRYPTION_FAILED:
+            if (ctx->score && ctx->score < conf->blocking_score) {
+                return false;
+            }
+        case NULL_COOKIE:
         case INVALID:
             set_call_reason(ctx, vr);
             risk_response = risk_api_get(ctx, conf, expired);
+handle_response:
             if (risk_response) {
                 ctx->score = risk_response->score;
                 if (!ctx->uuid && risk_response->uuid) {
@@ -1277,6 +1300,16 @@ static const char *add_file_extension_whitelist(cmd_parms *cmd, void *config, co
     return NULL;
 }
 
+static const char *add_url_force_risk_api(cmd_parms *cmd, void *config, const char *url) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    const char** entry = apr_array_push(conf->sensitive_urls);
+    *entry = url;
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     return px_handle_request(r, conf);
@@ -1306,6 +1339,7 @@ static void *create_config(apr_pool_t *p) {
         conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
         conf->ip_header_keys = apr_array_make(p, 0, sizeof(char*));
         conf->block_page_url = NULL;
+        conf->sensitive_urls = apr_array_make(p, 0, sizeof(char*));
         /*apr_pool_cleanup_register(p, conf->curl_pool, kill_curl_pool, apr_pool_cleanup_null);*/
     }
     return conf;
@@ -1384,6 +1418,11 @@ static const command_rec px_directives[] = {
             "Whitelist by User-Agents - this module will not apply on these user-agents"),
     AP_INIT_ITERATE("ExtensionWhitelist",
             add_file_extension_whitelist,
+            NULL,
+            OR_ALL,
+            "Whitelist by file extensions - this module will not apply on files with one of these file extensions"),
+    AP_INIT_ITERATE("ForceRiskAPI",
+            add_url_force_risk_api,
             NULL,
             OR_ALL,
             "Whitelist by file extensions - this module will not apply on files with one of these file extensions"),
