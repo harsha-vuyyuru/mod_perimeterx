@@ -975,17 +975,16 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
         } else {
             vr = DECRYPTION_FAILED;
         }
-        if (is_sensitive_route(ctx->r, conf)) {
-            ctx->call_reason = SENSITIVE_ROUTE;
-            risk_response = risk_api_get(ctx, conf, expired);
-            goto handle_response;
-        }
     }
     switch (vr) {
         case VALID:
             request_valid = ctx->score < conf->blocking_score;
             if (!request_valid) {
                 ctx->block_reason = COOKIE;
+            } else if (is_sensitive_route(ctx->r, conf)) {
+                ctx->call_reason = SENSITIVE_ROUTE;
+                risk_response = risk_api_get(ctx, conf, expired);
+                goto handle_response;
             }
             break;
         case EXPIRED:
