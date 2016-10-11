@@ -1420,7 +1420,7 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Whitelist by file extensions - this module will not apply on files with one of these file extensions"),
-    AP_INIT_ITERATE("ForceRiskAPI",
+    AP_INIT_ITERATE("SensitiveRoutes",
             add_sensitive_route,
             NULL,
             OR_ALL,
