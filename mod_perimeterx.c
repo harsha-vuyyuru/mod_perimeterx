@@ -1423,7 +1423,7 @@ static const command_rec px_directives[] = {
             add_sensitive_route,
             NULL,
             OR_ALL,
-            "Whitelist by file extensions - this module will not apply on files with one of these file extensions"),
+            "Sensitive routes - for each of this uris the module will do a server-to-server call even if a good cookie is on the request"),
     { NULL }
 };
 
