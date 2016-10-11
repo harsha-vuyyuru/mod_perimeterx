@@ -281,6 +281,19 @@ function handleCaptcha(response) {
 
 Determines PerimeterX server base URL.
 
+###`SensitiveRoutes`
+
+**descripotion** : List of routes the perimeterx module will always do a server-to-server call for, even if the cookie score is low and valid. 
+
+**required** : No
+
+**default** : Empty list
+
+**values** : whitespace seperated list of string
+
+**example** : `/api/checkout /users/login`
+
+
 ###`PXWhitelistRoutes`
 
 **descripotion** : Whitespace seperated list of paths that will not be examined by PX module. 
