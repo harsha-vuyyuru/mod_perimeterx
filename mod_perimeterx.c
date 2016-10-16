@@ -373,7 +373,7 @@ json_t *headers_to_json_helper(const apr_array_header_t *arr) {
     return j_headers;
 }
 
-char *create_risk_payload(const request_context *ctx, const px_config *conf, bool cookie_expired) {
+char *create_risk_payload(const request_context *ctx, const px_config *conf) {
     // headers array
     const apr_array_header_t *header_arr = apr_table_elts(ctx->headers);
     json_t *j_headers = headers_to_json_helper(header_arr);
@@ -406,7 +406,7 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf, boo
     if (ctx->vid) {
         json_object_set_new(j_risk, "vid", json_string(ctx->vid));
     }
-    if (cookie_expired && ctx->uuid) {
+    if (ctx->uuid) {
         json_object_set_new(j_risk, "uuid", json_string(ctx->uuid));
     }
 
@@ -885,8 +885,8 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     return ctx;
 }
 
-risk_response* risk_api_get(const request_context *ctx, const px_config *conf, bool expired) {
-    char *risk_payload = create_risk_payload(ctx, conf, expired);
+risk_response* risk_api_get(const request_context *ctx, const px_config *conf) {
+    char *risk_payload = create_risk_payload(ctx, conf);
     if (!risk_payload) {
         return NULL;
     }
@@ -951,7 +951,6 @@ static bool is_sensitive_route(request_rec *r, px_config *conf) {
 }
 
 static bool px_verify_request(request_context *ctx, px_config *conf) {
-    bool expired = false;
     bool request_valid = true;
     risk_response *risk_response;
 
@@ -983,20 +982,16 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
                 ctx->block_reason = COOKIE;
             } else if (is_sensitive_route(ctx->r, conf)) {
                 ctx->call_reason = SENSITIVE_ROUTE;
-                risk_response = risk_api_get(ctx, conf, expired);
+                risk_response = risk_api_get(ctx, conf);
                 goto handle_response;
             }
             break;
         case EXPIRED:
-            expired = true;
         case DECRYPTION_FAILED:
-            if (ctx->score && ctx->score < conf->blocking_score) {
-                return false;
-            }
         case NULL_COOKIE:
         case INVALID:
             set_call_reason(ctx, vr);
-            risk_response = risk_api_get(ctx, conf, expired);
+            risk_response = risk_api_get(ctx, conf);
 handle_response:
             if (risk_response) {
                 ctx->score = risk_response->score;
