@@ -1,5 +1,6 @@
 #include "curl_pool.h"
 
+
 curl_pool *curl_pool_create(apr_pool_t *p, int size) {
     curl_pool *pool = (curl_pool *)apr_pcalloc(p, sizeof(curl_pool));
     apr_thread_mutex_create(&pool->mutex, APR_THREAD_MUTEX_NESTED, p);
@@ -46,20 +47,24 @@ CURL *curl_pool_get(curl_pool *pool) {
 }
 
 CURL *curl_pool_get_wait(curl_pool *pool) {
-    CURL *c = NULL;
     apr_thread_mutex_lock(pool->mutex);
-    while (1) {
+    CURL *c = NULL;
+    bool found = false;
+    while (1 && !found) {
         if (pool->used < pool->size) {
             for (int i = 0; i < pool->size && c == NULL; ++i) {
                 c = pool->data[i];
                 if  (c) {
                     pool->data[i] = NULL;
                     pool->used += 1;
+                    found = true;
                     break;
                 }
             }
         }
-        apr_thread_cond_wait(pool->cond, pool->mutex);
+        if (!found) {
+            apr_thread_cond_wait(pool->cond, pool->mutex);
+        }
     }
     apr_thread_mutex_unlock(pool->mutex);
     return c;

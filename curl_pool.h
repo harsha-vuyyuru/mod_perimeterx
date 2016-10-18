@@ -1,6 +1,8 @@
 #ifndef CURL_POOL_H
 #define CURL_POOL_H
 
+#include <stdbool.h>
+
 #include <curl/curl.h>
 #include <apr_pools.h>
 #include <apr_thread_mutex.h>
