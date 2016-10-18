@@ -1,6 +1,5 @@
 #include "curl_pool.h"
 
-
 curl_pool *curl_pool_create(apr_pool_t *p, int size) {
     curl_pool *pool = (curl_pool *)apr_pcalloc(p, sizeof(curl_pool));
     apr_thread_mutex_create(&pool->mutex, APR_THREAD_MUTEX_NESTED, p);
