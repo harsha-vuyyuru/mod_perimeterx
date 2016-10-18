@@ -276,11 +276,17 @@ static size_t write_response_cb(void* contents, size_t size, size_t nmemb, void 
 // http post request
 //
 char *post_request(const char *url, const char *payload, const char *auth_header, request_rec *r, curl_pool *curl_pool) {
-    CURL *curl = curl_pool_get(curl_pool);
+    CURL *curl = curl_pool_get_wait(curl_pool);
+    if (curl == NULL) {
+        ERROR(r->server, "post_request: could not obtain curl handle");
+        return NULL;
+    }
     struct response_t response;
     struct curl_slist *headers = NULL;
     long status_code;
     CURLcode res;
+    char errbuf[CURL_ERROR_SIZE];
+    errbuf[0] = 0;
 
     response.data = malloc(1);
     response.size = 0;
@@ -290,6 +296,7 @@ char *post_request(const char *url, const char *payload, const char *auth_header
     headers = curl_slist_append(headers, JSON_CONTENT_TYPE);
     headers = curl_slist_append(headers, EXPECT);
 
+    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload);
@@ -304,8 +311,15 @@ char *post_request(const char *url, const char *payload, const char *auth_header
             return response.data;
         }
         ERROR(r->server, "post_request: status: %ld, url: %s", status_code, url);
-    } else {
-        ERROR(r->server, "post_request: failed: %s", curl_easy_strerror(res));
+    }
+    else {
+        size_t len = strlen(errbuf);
+        if (len) {
+            ERROR(r->server, "post_request failed: %s", errbuf);
+        }
+        else {
+            ERROR(r->server, "post_request failed: %s", curl_easy_strerror(res));
+        }
     }
     curl_pool_put(curl_pool, curl);
     free(response.data);
