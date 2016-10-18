@@ -50,7 +50,7 @@ CURL *curl_pool_get_wait(curl_pool *pool) {
     apr_thread_mutex_lock(pool->mutex);
     CURL *c = NULL;
     bool found = false;
-    while (1 && !found) {
+    while (!found) {
         if (pool->used < pool->size) {
             for (int i = 0; i < pool->size && c == NULL; ++i) {
                 c = pool->data[i];
@@ -73,7 +73,8 @@ CURL *curl_pool_get_wait(curl_pool *pool) {
 CURL *curl_pool_get_timedwait(curl_pool *pool, apr_interval_time_t timeout) {
     CURL *c = NULL;
     apr_thread_mutex_lock(pool->mutex);
-    while (1) {
+    bool found = false;
+    while (!found) {
         if (pool->used < pool->size) {
             for (int i = 0; i < pool->size && c == NULL; ++i) {
                 c = pool->data[i];
@@ -84,8 +85,10 @@ CURL *curl_pool_get_timedwait(curl_pool *pool, apr_interval_time_t timeout) {
                 }
             }
         }
-        if (apr_thread_cond_timedwait(pool->cond, pool->mutex, timeout) == APR_TIMEUP) {
-            break;
+        if (!found) {
+            if (apr_thread_cond_timedwait(pool->cond, pool->mutex, timeout) == APR_TIMEUP) {
+                break;
+            }
         }
     }
     apr_thread_mutex_unlock(pool->mutex);
