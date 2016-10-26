@@ -1008,8 +1008,10 @@ int px_handle_request(request_rec *r, px_config *conf) {
         if (!request_valid) {
             if (conf->captcha_enabled) {
                 rprintf_captcha_blocking_page(r, ctx);
+				r->status = HTTP_FORBIDDEN;
             } else {
                 rprintf_blocking_page(r, ctx);
+				r->status = HTTP_FORBIDDEN;
             }
 # if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 2
             ap_set_content_type(r, "text/html");
