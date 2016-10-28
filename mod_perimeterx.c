@@ -1117,8 +1117,10 @@ int px_handle_request(request_rec *r, px_config *conf) {
             }
             if (conf->captcha_enabled) {
                 rprintf_captcha_blocking_page(r, ctx);
+				r->status = HTTP_FORBIDDEN;
             } else {
                 rprintf_blocking_page(r, ctx);
+				r->status = HTTP_FORBIDDEN;
             }
             ap_set_content_type(r, "text/html");
             INFO(r->server, "px_handle_request: request blocked. captcha (%d)", conf->captcha_enabled);
