@@ -66,6 +66,7 @@ static const char *EXPECT = "Expect:";
 static const int ITERATIONS_UPPER_BOUND = 10000;
 static const int ITERATIONS_LOWER_BOUND = 0;
 static const int TEMP_REDIRECT = 307;
+static const int MAX_CURL_POOL_SIZE = 10000;
 
 static const char *BLOCKING_PAGE_FMT = "<html lang=\"en\">\n\
             <head>\n\
@@ -125,6 +126,7 @@ static const char *CAPTCHA_BLOCKING_PAGE_FMT  = "<html lang=\"en\">\n \
 
 
 static const char *ERROR_CONFIG_MISSING = "mod_perimeterx: config structure not allocated";
+static const char* MAX_CURL_POOL_SIZE_EXCEEDED = "mod_perimeterx: CurlPoolSize can not exceed 10000";
 
 // px configuration
 
@@ -1246,7 +1248,11 @@ static const char *set_curl_pool_size(cmd_parms *cmd, void *config, const char *
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    conf->curl_pool_size = atoi(curl_pool_size);
+    int pool_size = atoi(curl_pool_size);
+    if (pool_size > MAX_CURL_POOL_SIZE) {
+        return MAX_CURL_POOL_SIZE_EXCEEDED;
+    }
+    conf->curl_pool_size = pool_size;
     if (conf->curl_pool != NULL) {
         curl_pool_destroy(conf->curl_pool);
     }
@@ -1337,7 +1343,7 @@ static void *create_config(apr_pool_t *p) {
         conf->send_page_activities = false;
         conf->blocking_score = 70;
         conf->captcha_enabled = false;
-        conf->module_version = "Apache Module v1.0.7";
+        conf->module_version = "Apache Module v1.0.8";
         conf->curl_pool_size = 40;
         conf->base_url = DEFAULT_BASE_URL;
         conf->risk_api_url = apr_pstrcat(p, conf->base_url, RISK_API, NULL);

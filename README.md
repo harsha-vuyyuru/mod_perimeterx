@@ -268,7 +268,13 @@ function handleCaptcha(response) {
 
 **default** : 40
 
+**max**: 10000
+
 **values** : Integer
+
+> Note: For optimized performance - it is best to use the number of running worker threads in your Apache server as the CurlPoolSize.
+
+
 
 ### `BaseURL` ###
 **description** : PerimeterX API server URL
