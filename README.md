@@ -10,7 +10,7 @@ Dependencies
 - [jansson 2.6](http://www.digip.org/jansson/)
 - [Apache Portable Runtime (APR) >=1.4.6](https://apr.apache.org/)
 
-You can install dependencies using linux package manager (```yum``` / ```debian``` packages) or install them manually.
+You can install dependencies using the Linux package manager (```yum``` / ```debian``` packages) or install them manually.
 
 #### Ubuntu users:
 ```shell
@@ -28,7 +28,7 @@ $ sudo make
 $ apache2ctl restart
 ```
 
-Make sure that this line is added to your configuration file: 
+Make sure that the following line is added to your configuration file: 
 
 `LoadModule perimeterx_module $MODULES_PATH/mod_perimeterx.so`
 
@@ -80,7 +80,7 @@ When set to ```On``` the module will be applied on webpage requests.
 **values** : string
 
 ### `AuthToken` ###
-**description** : Api authentication token
+**description** : API authentication token
 
 **required** : yes
 
@@ -89,7 +89,7 @@ When set to ```On``` the module will be applied on webpage requests.
 **values** : string
 
 ### `BlockingScore` ###
-**description** : Blocking score. When requests with a score of equal or higher value they will be blocked.
+**description** : Blocking score. When requests with a score equal to or higher value they will be blocked.
 
 **required** : No
 
@@ -101,7 +101,7 @@ When set to ```On``` the module will be applied on webpage requests.
 
 **description** : Enable reCaptcha on the blocking page. 
 
-***Note***: When using custom block page with captcha abilities implementation - this option must be `On`.
+***Note***: When using a custom block page with captcha abilities implementation, this option must be `On`.
 
 **required** : No
 
@@ -111,7 +111,7 @@ When set to ```On``` the module will be applied on webpage requests.
 
 ### `ReportPageRequest` ###
 
-**description** : Enables the ablity to report page requests and blocking activities to PerimeterX
+**description** : Enables the ablity to report page requests and blocking activities to PerimeterX.
 
 **required** : No
 
@@ -120,7 +120,7 @@ When set to ```On``` the module will be applied on webpage requests.
 **values** : On | Off
 
 ### `APITimeout` ###
-**description** : Timeout, in seconds, for API calles
+**description** : Timeout, in seconds, for API calls.
 
 **required** : No
 
@@ -130,7 +130,7 @@ When set to ```On``` the module will be applied on webpage requests.
 
 ### `IPHeader` ###
 
-**description** : List of HTTP header names that contains the real client IP address. Use this feature when your server is behind a CDN.
+**description** : List of HTTP header names that contain the real client IP address. Use this feature when your server is behind a CDN.
 
 **required** : No
 
@@ -140,31 +140,31 @@ When set to ```On``` the module will be applied on webpage requests.
 
 ***Note***: 
 
-* The order of headers in the configuration matters, the first header found with value will be taken as the IP
-* If no valid IP address is found in the IP header list the - module will use [`useragent_ip`](https://httpd.apache.org/docs/2.4/developer/new_api_2_4.html) as the requet IP.
+* The order of headers in the configuration matters. The first header found with a value will be taken as the IP address.
+* If no valid IP address is found in the IP header list, the module will use [`useragent_ip`](https://httpd.apache.org/docs/2.4/developer/new_api_2_4.html) as the request IP.
 
 
 ### `BlockPageURL`
 
-Apache module allows you to customize your blocking page.
+The Apache module allows you to customize your blocking page.
 
-Under this configuration you need to specify the uri to an blocking page html file (relative to servers `DocumentRoot`).
+Under this configuration, you need to specify the URL to a blocking page HTML file (relative to servers `DocumentRoot`).
 
-This module will send a redirect response with the `Location` header in this format: 
+This module will send a redirect response with the `Location` header in the following format: 
 
 ```
 $host/$blockpageURL?url=${original_request_url}&uuid=${uuid}&vid=${vid}
 ```
 
-Visitor ID (vid) must be extracted from this URL for the captcha JS snippet use (see below for explanation and example).
+The Visitor ID (vid) must be extracted from this URL for captcha JS snippet use (see below for explanation and example).
 
-**required**: No, if not specified the default block page will be used.
+**required**: No. If not specified, the default block page will be used.
 
 **default**: NULL
 
 **value**: String
 
-***Note***: When using custom block page with captcha abilities implementation - `Captcha` configuration  option must be `On`.
+***Note***: When using a custom block page with captcha abilities implemented, the `Captcha` configuration option must be `On`.
 
 #### Blocked user example: 
 
@@ -181,7 +181,7 @@ http://www.mysite.com/block.html&url=coolpage&uuid=uuid=e8e6efb0-8a59-11e6-815c-
 ```
 
 
-When captcha is enabled, the block page **must** include:
+When captcha is enabled, the block page **must** include the following:
 
 ###### Custom blockpage requirements:
 
@@ -272,7 +272,7 @@ function handleCaptcha(response) {
 
 **values** : Integer
 
-> Note: For optimized performance - it is best to use the number of running worker threads in your Apache server as the CurlPoolSize.
+> Note: For optimized performance, it is best to use the number of running worker threads in your Apache server as the CurlPoolSize.
 
 
 
@@ -289,42 +289,42 @@ Determines PerimeterX server base URL.
 
 ###`SensitiveRoutes`
 
-**descripotion** : List of routes the perimeterx module will always do a server-to-server call for, even if the cookie score is low and valid. 
+**descripotion** : List of routes the Perimeterx module will always do a server-to-server call for, even if the cookie score is low and valid. 
 
 **required** : No
 
 **default** : Empty list
 
-**values** : whitespace seperated list of string
+**values** : A whitespace seperated list of strings.
 
 **example** : `/api/checkout /users/login`
 
 
 ###`PXWhitelistRoutes`
 
-**descripotion** : Whitespace seperated list of paths that will not be examined by PX module. 
+**descripotion** : A whitespace seperated list of paths that will not be examined by PX module. 
 
 **required** : No
 
 **default** : Empty list
 
-**values** : whitespace seperated list of string
+**values** : A whitespace seperated list of strings.
 
 **example** : `/server-status /staging`
 
 ### `PXWhitelistUserAgents`
 
-**description** : Whitespace seperated list of User-Agents that will not be examined by PX module.
+**description** : A whitespace seperated list of User-Agents that will not be examined by PX module.
 
 **required**: No
 
 **default** : Empty list
 
-**values** : backspace delimetered list of string
+**values** : A backspace delimited list of strings.
 
 ### `ExtensionWhitelist`
 
-**description** : Whitespace seperated list of file extensions that will not be examined by PX module.
+**description** : A whitespace seperated list of file extensions that will not be examined by PX module.
 
 **required**: No
 
@@ -332,9 +332,9 @@ Determines PerimeterX server base URL.
     .eps, .woff, .xls, .jpeg, .doc, .ejs, .otf, .pptx, .gif, .pdf, .swf, .svg, .ps,
     .ico, .pls, .midi, .svgz, .class, .png, .ppt, .mid, webp, .jar.
     
-**Note**: when using this option the default values are cleared and the supplied list will be used instead.
+**Note**: When using this option, the default values are cleared and the supplied list will be used instead.
 
-**values** : whitespace delimetered list of strings
+**values** : A whitespace delimited list of strings.
 
 **example**: `.txt .css .jpeg`
 
