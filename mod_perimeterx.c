@@ -913,7 +913,7 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     ctx->block_enabled = enable_block_for_hostname(r, conf->enabled_hostnames);
     ctx->r = r;
 
-    INFO(r->server, "create_context: useragent: (%s), px_cookie: (%s), full_url: (%s), hostname: (%s) , http_method: (%s), http_version: (%s), uri: (%s), ip: (%s), block_enabled: %d", ctx->useragent, ctx->px_cookie, ctx->full_url, ctx->hostname, ctx->http_method, ctx->http_version, ctx->uri, ctx->ip, ctx->block_enabled);
+    INFO(r->server, "create_context: useragent: (%s), px_cookie: (%s), full_url: (%s), hostname: (%s) , http_method: (%s), http_version: (%s), uri: (%s), ip: (%s), block_enabled: (%d)", ctx->useragent, ctx->px_cookie, ctx->full_url, ctx->hostname, ctx->http_method, ctx->http_version, ctx->uri, ctx->ip, ctx->block_enabled);
 
     return ctx;
 }
@@ -987,7 +987,6 @@ static bool is_sensitive_route_prefix(request_rec *r, px_config *conf) {
     apr_array_header_t *sensitive_routes_prefix = conf->sensitive_routes_prefix;
     for (int i = 0; i < sensitive_routes_prefix->nelts; i++) {
         char *prefix = APR_ARRAY_IDX(sensitive_routes_prefix, i, char*);
-        ERROR(r->server, "the uri: %s, the prefix: %s", r->uri, prefix);
         if (strncmp(r->uri, prefix, strlen(prefix)) == 0) {
             return true;
         }
@@ -1026,7 +1025,6 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
             if (!request_valid) {
                 ctx->block_reason = COOKIE;
             } else if (is_sensitive_route_prefix(ctx->r, conf ) || is_sensitive_route(ctx->r, conf)) {
-                ERROR(ctx->r->server, "We are going to do this for sensitive route");
                 ctx->call_reason = SENSITIVE_ROUTE;
                 risk_response = risk_api_get(ctx, conf);
                 goto handle_response;
