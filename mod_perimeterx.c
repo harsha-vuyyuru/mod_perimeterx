@@ -153,6 +153,7 @@ typedef struct px_config_t {
     apr_array_header_t *custom_file_ext_whitelist;
     apr_array_header_t *ip_header_keys;
     apr_array_header_t *sensitive_routes;
+    apr_array_header_t *block_domain_list;
 } px_config;
 
 typedef enum {
@@ -1032,12 +1033,28 @@ handle_response:
     return request_valid;
 }
 
+static bool match_domain(apr_uri_t req_uri, apr_array_header_t *domains_list) {
+    const char *req_hostname = req_uri.hostname;
+    for (int i = 0; i < domains_list->nelts; i++) {
+        const char *domain = APR_ARRAY_IDX(domains_list, i, const char*);
+        if (strcmp(req_hostname, domain) == 0) {
+            return false;
+        }
+    }
+}
+
 static bool px_should_verify_request(request_rec *r, px_config *conf) {
     if (!conf->module_enabled) {
         return false;
     }
 
     if (conf->block_page_url && strcmp(r->uri, conf->block_page_url) == 0) {
+        return false;
+    }
+
+    ERROR(r->server, "Hostname: %s, this is the hostinfo: %s", r->parsed_uri.hostname, r->parsed_uri.hostinfo);
+    if (match_domain(r->parsed_uri, conf->block_domain_list)) {
+        INFO(r->server, "Hostname %s is blocked by domain configuration", r->parsed_uri.hostname);
         return false;
     }
 
@@ -1326,6 +1343,16 @@ static const char *add_sensitive_route(cmd_parms *cmd, void *config, const char 
     return NULL;
 }
 
+static const char *add_domain_to_block_domain_list(cmd_parms *cmd, void *config, const char *domain) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    const char** entry = apr_array_push(conf->block_domain_list);
+    *entry = domain;
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     return px_handle_request(r, conf);
@@ -1356,6 +1383,7 @@ static void *create_config(apr_pool_t *p) {
         conf->ip_header_keys = apr_array_make(p, 0, sizeof(char*));
         conf->block_page_url = NULL;
         conf->sensitive_routes = apr_array_make(p, 0, sizeof(char*));
+        conf->block_domain_list = apr_array_make(p, 0, sizeof(char*));
     }
     return conf;
 }
@@ -1441,9 +1469,14 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Sensitive routes - for each of this uris the module will do a server-to-server call even if a good cookie is on the request"),
+    AP_INIT_ITERATE("BlockDomainList",
+            add_domain_to_block_domain_list,
+            NULL,
+            OR_ALL,
+            "..."),
     { NULL }
 };
-
+/*block_enabled_per_domain*/
 static void perimeterx_register_hooks(apr_pool_t *pool) {
     ap_hook_post_read_request(px_hook_post_request, NULL, NULL, APR_HOOK_LAST);
     ap_hook_child_init(px_hook_child_init, NULL, NULL, APR_HOOK_MIDDLE);
