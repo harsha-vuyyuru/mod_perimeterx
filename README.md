@@ -338,6 +338,21 @@ Determines PerimeterX server base URL.
 
 **example**: `.txt .css .jpeg`
 
+### `EnablePXByHostname`
+
+**description** : A whitespace seperated list of hostnames that PX module will be enabled for.
+
+**required**: No
+
+**default** : Empty list
+    
+> **Note**: If this option is persent - only hostnames appear in this list will pass through mod_perimeterx.
+
+**values** : A whitespace delimited list of strings.
+
+**example**: `www.mysite.com`
+
+
 ### Example ###
 
 * Configuration for apache server

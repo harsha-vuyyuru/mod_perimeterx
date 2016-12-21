@@ -153,7 +153,7 @@ typedef struct px_config_t {
     apr_array_header_t *custom_file_ext_whitelist;
     apr_array_header_t *ip_header_keys;
     apr_array_header_t *sensitive_routes;
-    apr_array_header_t *block_domain_list;
+    apr_array_header_t *enabled_hostnames;
 } px_config;
 
 typedef enum {
@@ -1033,7 +1033,9 @@ handle_response:
     return request_valid;
 }
 
-static bool domain_exists_in_list(request_rec *r, apr_array_header_t *domains_list) {
+static bool enable_module_for_hostname(request_rec *r, apr_array_header_t *domains_list) {
+    // domains list not configured, module will be enabled globally and not per domainf
+    if (domains_list->nelts == 0) return true;
     const char *req_hostname = r->hostname;
     for (int i = 0; i < domains_list->nelts; i++) {
         const char *domain = APR_ARRAY_IDX(domains_list, i, const char*);
@@ -1053,9 +1055,7 @@ static bool px_should_verify_request(request_rec *r, px_config *conf) {
         return false;
     }
 
-    ERROR(r->server, "Hostname: %s", r->hostname);
-    if (domain_exists_in_list(r, conf->block_domain_list)) {
-        INFO(r->server, "Hostname %s is blocked by domain configuration", r->hostname);
+    if (!enable_module_for_hostname(r, conf->enabled_hostnames)) {
         return false;
     }
 
@@ -1344,12 +1344,12 @@ static const char *add_sensitive_route(cmd_parms *cmd, void *config, const char 
     return NULL;
 }
 
-static const char *add_domain_to_block_domain_list(cmd_parms *cmd, void *config, const char *domain) {
+static const char *add_host_to_list(cmd_parms *cmd, void *config, const char *domain) {
     px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    const char** entry = apr_array_push(conf->block_domain_list);
+    const char** entry = apr_array_push(conf->enabled_hostnames);
     *entry = domain;
     return NULL;
 }
@@ -1371,7 +1371,7 @@ static void *create_config(apr_pool_t *p) {
         conf->send_page_activities = false;
         conf->blocking_score = 70;
         conf->captcha_enabled = false;
-        conf->module_version = "Apache Module v1.0.8";
+        conf->module_version = "Apache Module v1.0.9";
         conf->curl_pool_size = 40;
         conf->base_url = DEFAULT_BASE_URL;
         conf->risk_api_url = apr_pstrcat(p, conf->base_url, RISK_API, NULL);
@@ -1384,7 +1384,7 @@ static void *create_config(apr_pool_t *p) {
         conf->ip_header_keys = apr_array_make(p, 0, sizeof(char*));
         conf->block_page_url = NULL;
         conf->sensitive_routes = apr_array_make(p, 0, sizeof(char*));
-        conf->block_domain_list = apr_array_make(p, 0, sizeof(char*));
+        conf->enabled_hostnames = apr_array_make(p, 0, sizeof(char*));
     }
     return conf;
 }
@@ -1470,11 +1470,11 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Sensitive routes - for each of this uris the module will do a server-to-server call even if a good cookie is on the request"),
-    AP_INIT_ITERATE("BlockDomainList",
-            add_domain_to_block_domain_list,
+    AP_INIT_ITERATE("EnablePXByHostname",
+            add_host_to_list,
             NULL,
             OR_ALL,
-            "..."),
+            "EnablePXByHostname - list of domains on which PX module will be enabled for"),
     { NULL }
 };
 /*block_enabled_per_domain*/
