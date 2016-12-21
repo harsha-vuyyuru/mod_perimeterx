@@ -1496,11 +1496,11 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Sensitive routes by prefix - for each of this uris prefix the module will do a server-to-server call even if a good cookie is on the request"),
-    AP_INIT_ITERATE("EnablePXByHostname",
+    AP_INIT_ITERATE("EnableBlockingByHostname",
             add_host_to_list,
             NULL,
             OR_ALL,
-            "EnablePXByHostname - list of domains on which PX module will be enabled for"),
+            "Enable blocking by hostname - list of hostnames on which PX module will be enabled for"),
     { NULL }
 };
 
