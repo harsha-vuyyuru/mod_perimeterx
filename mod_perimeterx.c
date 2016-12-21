@@ -1033,14 +1033,16 @@ handle_response:
     return request_valid;
 }
 
-static bool match_domain(apr_uri_t req_uri, apr_array_header_t *domains_list) {
-    const char *req_hostname = req_uri.hostname;
+static bool domain_exists_in_list(request_rec *r, apr_array_header_t *domains_list) {
+    const char *req_hostname = r->hostname;
     for (int i = 0; i < domains_list->nelts; i++) {
         const char *domain = APR_ARRAY_IDX(domains_list, i, const char*);
         if (strcmp(req_hostname, domain) == 0) {
-            return false;
+            ERROR(r->server, "going to return true");
+            return true;
         }
     }
+    return false;
 }
 
 static bool px_should_verify_request(request_rec *r, px_config *conf) {
@@ -1052,9 +1054,9 @@ static bool px_should_verify_request(request_rec *r, px_config *conf) {
         return false;
     }
 
-    ERROR(r->server, "Hostname: %s, this is the hostinfo: %s", r->parsed_uri.hostname, r->parsed_uri.hostinfo);
-    if (match_domain(r->parsed_uri, conf->block_domain_list)) {
-        INFO(r->server, "Hostname %s is blocked by domain configuration", r->parsed_uri.hostname);
+    ERROR(r->server, "Hostname: %s", r->hostname);
+    if (domain_exists_in_list(r, conf->block_domain_list)) {
+        INFO(r->server, "Hostname %s is blocked by domain configuration", r->hostname);
         return false;
     }
 
