@@ -1038,7 +1038,6 @@ static bool domain_exists_in_list(request_rec *r, apr_array_header_t *domains_li
     for (int i = 0; i < domains_list->nelts; i++) {
         const char *domain = APR_ARRAY_IDX(domains_list, i, const char*);
         if (strcmp(req_hostname, domain) == 0) {
-            ERROR(r->server, "going to return true");
             return true;
         }
     }
