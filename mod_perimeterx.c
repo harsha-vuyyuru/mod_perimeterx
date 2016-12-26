@@ -45,7 +45,7 @@ APLOG_USE_MODULE(perimeterx);
 #define ERROR(server_rec, ...) \
     ap_log_error(APLOG_MARK, APLOG_ERR, 0, server_rec, "[mod_perimeterx]:" __VA_ARGS__)
 
-static const char *DEFAULT_BASE_URL = "https://sapi.perimeterx.net";
+static const char *DEFAULT_BASE_URL = "https://sapi-%s.glb1.perimeterx.net";
 static const char *RISK_API = "/api/v1/risk";
 static const char *CAPTCHA_API = "/api/v1/risk/captcha";
 static const char *ACTIVITIES_API = "/api/v1/collector/s2s";
@@ -282,6 +282,7 @@ static size_t write_response_cb(void* contents, size_t size, size_t nmemb, void 
 //
 char *post_request(const char *url, const char *payload, const char *auth_header, request_rec *r, curl_pool *curl_pool) {
     CURL *curl = curl_pool_get_wait(curl_pool);
+
     if (curl == NULL) {
         ERROR(r->server, "post_request: could not obtain curl handle");
         return NULL;
@@ -344,8 +345,14 @@ char *create_activity(const char *activity_type, const px_config *conf, const re
             "http_version", ctx->http_version,
             "module_version", conf->module_version);
 
+
     if (strcmp(activity_type, BLOCKED_ACTIVITY_TYPE) == 0 && ctx->uuid) {
         json_object_set_new(details, "block_uuid", json_string(ctx->uuid));
+    } else {
+        // adding decrypted cookie to page_requested activity
+        if (ctx->px_cookie) {
+            json_object_set_new(details, "px_cookie", json_string(ctx->px_cookie_decrypted));
+        }
     }
 
     // Extract all headers and jsonfy it
@@ -453,6 +460,9 @@ char *create_captcha_payload(const request_context *ctx, const px_config *conf) 
     json_object_set_new(j_captcha, "request", j_request);
     if (ctx->vid) {
         json_object_set_new(j_captcha, "vid", json_string(ctx->vid));
+    }
+    if (ctx->uuid) {
+        json_object_set_new(j_captcha, "uuid", json_string(ctx->uuid));
     }
     if (ctx->px_captcha) {
         json_object_set_new(j_captcha, "pxCaptcha", json_string(ctx->px_captcha));
@@ -1203,6 +1213,10 @@ static const char *set_app_id(cmd_parms *cmd, void *config, const char *app_id) 
         return ERROR_CONFIG_MISSING;
     }
     conf->app_id = app_id;
+    conf->base_url = apr_psprintf(cmd->pool, DEFAULT_BASE_URL, app_id, NULL);
+    conf->risk_api_url = apr_pstrcat(cmd->pool, conf->base_url, RISK_API, NULL);
+    conf->captcha_api_url = apr_pstrcat(cmd->pool, conf->base_url, CAPTCHA_API, NULL);
+    conf->activities_api_url = apr_pstrcat(cmd->pool, conf->base_url, ACTIVITIES_API, NULL);
     return NULL;
 }
 
@@ -1391,12 +1405,8 @@ static void *create_config(apr_pool_t *p) {
         conf->send_page_activities = false;
         conf->blocking_score = 70;
         conf->captcha_enabled = false;
-        conf->module_version = "Apache Module v1.0.9";
+        conf->module_version = "Apache Module v1.0.10-RC";
         conf->curl_pool_size = 40;
-        conf->base_url = DEFAULT_BASE_URL;
-        conf->risk_api_url = apr_pstrcat(p, conf->base_url, RISK_API, NULL);
-        conf->captcha_api_url = apr_pstrcat(p, conf->base_url, CAPTCHA_API, NULL);
-        conf->activities_api_url = apr_pstrcat(p, conf->base_url, ACTIVITIES_API, NULL);
         conf->routes_whitelist = apr_array_make(p, 0, sizeof(char*));
         conf->useragents_whitelist = apr_array_make(p, 0, sizeof(char*));
         conf->custom_file_ext_whitelist = NULL;
@@ -1511,6 +1521,7 @@ static void perimeterx_register_hooks(apr_pool_t *pool) {
 }
 
 static void *create_server_config(apr_pool_t *pool, server_rec *s) {
+    /*ap_error_log2stderr(s);*/
     return create_config(pool);
 }
 
