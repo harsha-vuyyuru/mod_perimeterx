@@ -376,7 +376,6 @@ Determines PerimeterX server base URL.
 
 **example**: `.txt .css .jpeg`
 
-=======
 ### `EnableBlockingByHostname`
 
 **description** : A whitespace seperated list of hostnames that PX module will enable block for.
