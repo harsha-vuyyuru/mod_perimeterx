@@ -927,9 +927,6 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     if (captcha_cookie) {
         char *saveptr;
         populate_captcha_cookie_data(r->pool, captcha_cookie, ctx);
-        /*ctx->px_captcha = apr_strtok(captcha_cookie, ":", &saveptr);*/
-        /*ctx->vid = apr_strtok(NULL, "", &saveptr);*/
-        /*INFO(r->server, "PXCaptcha cookie was found: %s", ctx->px_captcha);*/
         INFO(r->server, "px_captcha data populated to context: token - (%s), vid - (%s), uuid - (%s)", ctx->px_captcha, ctx->vid, ctx->uuid);
     }
 
