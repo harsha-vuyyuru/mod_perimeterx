@@ -99,10 +99,11 @@ static const char *CAPTCHA_BLOCKING_PAGE_FMT  = "<html lang=\"en\">\n \
                                                  <script src=\"https://www.google.com/recaptcha/api.js\"></script> \
                                                  <script> \
                                                  window.px_vid = '%s';\n \
+                                                 window.px_uuid = '%s';\n \
                                                  function handleCaptcha(response) { \n \
                                                      var name = '_pxCaptcha';\n \
                                                          var expiryUtc = new Date(Date.now() + 1000 * 10).toUTCString();\n \
-                                                         var cookieParts = [name, '=', response + ':' + window.px_vid, '; expires=', expiryUtc, '; path=/'];\n \
+                                                         var cookieParts = [name, '=', response + ':' + window.px_vid + ':' + window.px_uuid, '; expires=', expiryUtc, '; path=/'];\n \
                                                          document.cookie = cookieParts.join('');\n \
                                                          location.reload();\n \
                                                  }\n \
@@ -757,8 +758,8 @@ int rprintf_blocking_page(request_rec *r, const request_context *ctx) {
 }
 
 int rprintf_captcha_blocking_page(request_rec *r, const request_context *ctx) {
-    const char *vid = ctx->vid ? ctx->vid : "";
-    return ap_rprintf(r, CAPTCHA_BLOCKING_PAGE_FMT, vid, ctx->uuid);
+    const char *vid = ctx->vid ? ctx->vid : "null";
+    return ap_rprintf(r, CAPTCHA_BLOCKING_PAGE_FMT, vid, ctx->uuid, ctx->uuid);
 }
 
 bool verify_captcha(request_context *ctx, px_config *conf) {
@@ -768,7 +769,14 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
         return captcha_verified;
     }
 
+    // preventing reuse of captcha cookie by deleting it
+    apr_status_t res = ap_cookie_remove2(ctx->r, "_pxCaptcha", NULL, ctx->r->headers_out, ctx->r->err_headers_out, NULL);
+    if (res != APR_SUCCESS) {
+        ERROR(ctx->r->server, "could not remove _pxCatpcha from request");
+    }
+
     char *payload = create_captcha_payload(ctx, conf);
+    INFO(ctx->r->server, "verify_captcha: request - (%s)", payload);
     if (!payload) {
         INFO(ctx->r->server, "verify_captcha: failed to format captcha payload. url: (%s)", ctx->full_url);
         return true;
@@ -848,6 +856,20 @@ static bool enable_block_for_hostname(request_rec *r, apr_array_header_t *domain
     return false;
 }
 
+void populate_captcha_cookie_data(apr_pool_t *p, const char *captcha_cookie, request_context *ctx) {
+    const char *delim = ":";
+    char *saveptr;
+    char *str = apr_pstrdup(p, captcha_cookie);
+    ctx->px_captcha = apr_strtok(str, delim, &saveptr);
+    if (strncmp(saveptr, delim, 1) == 0) {
+        ctx->uuid = apr_strtok(NULL, delim, &saveptr);
+    }
+    ctx->vid = apr_strtok(NULL, delim, &saveptr);
+    if (saveptr) {
+        ctx->uuid = apr_strtok(NULL, delim, &saveptr);
+    }
+}
+
 request_context* create_context(request_rec *r, const px_config *conf) {
     request_context *ctx = (request_context*) apr_pcalloc(r->pool, sizeof(request_context));
 
@@ -904,9 +926,11 @@ request_context* create_context(request_rec *r, const px_config *conf) {
 
     if (captcha_cookie) {
         char *saveptr;
-        ctx->px_captcha = apr_strtok(captcha_cookie, ":", &saveptr);
-        ctx->vid = apr_strtok(NULL, "", &saveptr);
-        INFO(r->server, "PXCaptcha cookie was found: %s", ctx->px_captcha);
+        populate_captcha_cookie_data(r->pool, captcha_cookie, ctx);
+        /*ctx->px_captcha = apr_strtok(captcha_cookie, ":", &saveptr);*/
+        /*ctx->vid = apr_strtok(NULL, "", &saveptr);*/
+        /*INFO(r->server, "PXCaptcha cookie was found: %s", ctx->px_captcha);*/
+        INFO(r->server, "px_captcha data populated to context: token - (%s), vid - (%s), uuid - (%s)", ctx->px_captcha, ctx->vid, ctx->uuid);
     }
 
     // TODO(barak): parse without strtok
@@ -1006,6 +1030,7 @@ static bool is_sensitive_route_prefix(request_rec *r, px_config *conf) {
 
 static bool px_verify_request(request_context *ctx, px_config *conf) {
     bool request_valid = true;
+
     risk_response *risk_response;
 
     if (conf->captcha_enabled && ctx->px_captcha) {
@@ -1405,7 +1430,7 @@ static void *create_config(apr_pool_t *p) {
         conf->send_page_activities = false;
         conf->blocking_score = 70;
         conf->captcha_enabled = false;
-        conf->module_version = "Apache Module v1.0.10-RC";
+        conf->module_version = "Apache Module v1.0.11-RC";
         conf->curl_pool_size = 40;
         conf->routes_whitelist = apr_array_make(p, 0, sizeof(char*));
         conf->useragents_whitelist = apr_array_make(p, 0, sizeof(char*));
