@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/PerimeterX/mod_perimeterx.svg?branch=travisBuild)](https://travis-ci.org/PerimeterX/mod_perimeterx)
+
 ![image](http://media.marketwire.com/attachments/201604/34215_PerimeterX_logo.jpg)
 
 [PerimeterX](http://www.perimeterx.com) Apache Module
@@ -376,7 +378,6 @@ Determines PerimeterX server base URL.
 
 **example**: `.txt .css .jpeg`
 
-=======
 ### `EnableBlockingByHostname`
 
 **description** : A whitespace seperated list of hostnames that PX module will enable block for.
