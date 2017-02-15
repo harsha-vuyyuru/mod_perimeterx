@@ -246,6 +246,7 @@ typedef struct request_context_t {
     const char *full_url;
     const char *http_method;
     const char *http_version;
+    const char *px_cookie_orig;
     int score;
     block_reason_t block_reason;
     s2s_call_reason_t call_reason;
@@ -420,6 +421,9 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf) {
             "module_version", conf->module_version);
     if (ctx->px_cookie) {
         json_object_set_new(j_additional, "px_cookie", json_string(ctx->px_cookie_decrypted));
+    }
+    if (ctx->px_cookie_orig) {
+        json_object_set_new(j_additional, "px_cookie_orig", json_string(ctx->px_cookie_orig));
     }
 
     // risk api object
@@ -683,14 +687,27 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
     char* saveptr;
     const char* delimieter = ":";
     const char* encoded_salt = strtok_r(px_cookie_cpy, delimieter, &saveptr);
-    int iterations = atoi(strtok_r(NULL, delimieter, &saveptr));
-    const char* encoded_payload = strtok_r(NULL, delimieter, &saveptr);
-
-    // make sure iteratins is valid and not too big
-    if (iterations < ITERATIONS_LOWER_BOUND || iterations > ITERATIONS_UPPER_BOUND) {
-        ERROR(r_ctx->r->server,"Stoping cookie decryption: Number of iterations is illegal - %d", iterations);
+    if (encoded_salt == NULL) {
+        INFO(r_ctx->r->server, "Stoping cookie decryption: no valid salt in cookie");
         return NULL;
     }
+    const char* iterations_str = strtok_r(NULL, delimieter, &saveptr);
+    if (iterations_str == NULL) {
+        INFO(r_ctx->r->server, "Stoping cookie decryption: no valid iterations in cookie");
+        return NULL;
+    }
+    apr_int64_t iterations = apr_atoi64(iterations_str);
+    // make sure iteratins is valid and not too big
+    if (iterations < ITERATIONS_LOWER_BOUND || iterations > ITERATIONS_UPPER_BOUND) {
+        ERROR(r_ctx->r->server,"Number of iterations is illegal - %"APR_INT64_T_FMT , iterations);
+        return NULL;
+    }
+    const char* encoded_payload = strtok_r(NULL, delimieter, &saveptr);
+    if (encoded_payload == NULL) {
+        INFO(r_ctx->r->server,"Stoping cookie decryption: no valid encoded_payload in cookie");
+        return NULL;
+    }
+
 
     // decode payload
     unsigned char *payload;
@@ -901,6 +918,7 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     // TODO(barak): fill_url is missing the protocol like http:// or https://
     ctx->full_url = apr_pstrcat(r->pool, r->hostname, r->unparsed_uri, NULL);
     ctx->vid = NULL;
+    ctx->px_cookie_orig = NULL;
 
     if (captcha_cookie) {
         char *saveptr;
@@ -1026,6 +1044,7 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
             ctx->uuid = c->uuid;
             vr = validate_cookie(c, ctx, conf->cookie_key);
         } else {
+            ctx->px_cookie_orig = ctx->px_cookie;
             vr = DECRYPTION_FAILED;
         }
     }
