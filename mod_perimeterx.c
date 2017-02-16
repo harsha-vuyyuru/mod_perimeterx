@@ -54,6 +54,8 @@ static const char *ACTIVITIES_API = "/api/v1/collector/s2s";
 //
 static const char *BLOCKED_ACTIVITY_TYPE = "block";
 static const char *PAGE_REQUESTED_ACTIVITY_TYPE = "page_requested";
+static const char *CAPTCHA_COOKIE = "_pxCaptcha";
+static const char *PX_COOKIE = "_px";
 
 static const char* FILE_EXT_WHITELIST[] = {
     ".css", ".bmp", ".tif", ".ttf", ".docx", ".woff2", ".js", ".pict", ".tiff", ".eot", ".xlsx", ".jpg", ".csv",
@@ -787,7 +789,7 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     }
 
     // preventing reuse of captcha cookie by deleting it
-    apr_status_t res = ap_cookie_remove2(ctx->r, "_pxCaptcha", NULL, ctx->r->headers_out, ctx->r->err_headers_out, NULL);
+    apr_status_t res = ap_cookie_remove2(ctx->r, CAPTCHA_COOKIE, NULL, ctx->r->headers_out, ctx->r->err_headers_out, NULL);
     if (res != APR_SUCCESS) {
         ERROR(ctx->r->server, "could not remove _pxCatpcha from request");
     }
@@ -806,6 +808,7 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
         return true;
     }
 
+    INFO(ctx->r->server, "verify_captcha: server response (%s)", response_str);
     captcha_response *c = parse_captcha_response(response_str, ctx);
     free(response_str);
     if (c) {
@@ -894,8 +897,8 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     const char *px_captcha_cookie = NULL;
     char *captcha_cookie = NULL;
 # if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 4
-    apr_status_t status = ap_cookie_read(r, "_px", &px_cookie, 0);
-    status = ap_cookie_read(r, "_pxCaptcha", &px_captcha_cookie, 0);
+    apr_status_t status = ap_cookie_read(r, PX_COOKIE, &px_cookie, 0);
+    status = ap_cookie_read(r, CAPTCHA_COOKIE, &px_captcha_cookie, 0);
     if (status == APR_SUCCESS) {
         captcha_cookie = apr_pstrdup(r->pool, px_captcha_cookie);
     }
@@ -914,10 +917,10 @@ request_context* create_context(request_rec *r, const px_config *conf) {
             if (*cookie == ' ') {
                 cookie ++;
             }
-            if (strncmp(cookie, "_pxCaptcha", 10) == 0) {
+            if (strncmp(cookie, CAPTCHA_COOKIE, 10) == 0) {
                 apr_pstrdup(r->pool, apr_strtok(cookie, "=", &val_ctx));
                 captcha_cookie = apr_pstrdup(r->pool, apr_strtok(NULL, "", &val_ctx));
-            } else if (strncmp(cookie, "_px", 3) == 0) {
+            } else if (strncmp(cookie, PX_COOKIE, 3) == 0) {
                 apr_strtok(cookie, "=", &val_ctx);
                 px_cookie = apr_pstrdup(r->pool, apr_strtok(NULL, "", &val_ctx));
             }
@@ -1050,6 +1053,11 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
 
     if (conf->captcha_enabled && ctx->px_captcha) {
         if (verify_captcha(ctx, conf)) {
+            // clean users cookie on captcha verification
+            apr_status_t res = ap_cookie_remove2(ctx->r, PX_COOKIE, NULL, ctx->r->headers_out, ctx->r->err_headers_out, NULL);
+            if (res != APR_SUCCESS) {
+                ERROR(ctx->r->server, "could not remove _px from request");
+            }
             post_verification(ctx, conf, true);
             return request_valid;
         }
