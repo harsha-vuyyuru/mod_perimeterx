@@ -494,7 +494,7 @@ captcha_response *parse_captcha_response(const char* captcha_response_str, const
     const char *uuid = NULL;
     const char *vid = NULL;
     const char *cid = NULL;
-    if (json_unpack(j_response, "{s:i,s:s,s?s,s?s}",
+    if (json_unpack(j_response, "{s:i,s?s,s?s,s?s}",
                 "status", &status,
                 "uuid", &uuid,
                 "cid", &cid,
