@@ -803,7 +803,7 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     free(payload);
     if (!response_str) {
         INFO(ctx->r->server, "verify_captcha: failed to perform captcha validation request. url: (%s)", ctx->full_url);
-        return truet;
+        return true;
     }
 
     captcha_response *c = parse_captcha_response(response_str, ctx);
