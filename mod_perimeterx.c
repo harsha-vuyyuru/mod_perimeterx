@@ -775,7 +775,7 @@ int rprintf_blocking_page(request_rec *r, const request_context *ctx) {
 }
 
 int rprintf_captcha_blocking_page(request_rec *r, const request_context *ctx) {
-    const char *vid = ctx->vid ? ctx->vid : "null";
+    const char *vid = ctx->vid ? ctx->vid : "";
     return ap_rprintf(r, CAPTCHA_BLOCKING_PAGE_FMT, vid, ctx->uuid, ctx->uuid);
 }
 
@@ -803,7 +803,7 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     free(payload);
     if (!response_str) {
         INFO(ctx->r->server, "verify_captcha: failed to perform captcha validation request. url: (%s)", ctx->full_url);
-        return true;
+        return truet;
     }
 
     captcha_response *c = parse_captcha_response(response_str, ctx);
