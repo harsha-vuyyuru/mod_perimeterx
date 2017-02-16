@@ -485,7 +485,7 @@ captcha_response *parse_captcha_response(const char* captcha_response_str, const
     json_error_t j_error;
     json_t *j_response = json_loads(captcha_response_str, 0, &j_error);
     if (!j_response) {
-        ERROR(ctx->r->server, "parse_captcha_response: failed to parse. error (%s), reponse (%s)",
+        ERROR(ctx->r->server, "parse_captcha_response: failed to parse. error (%s), response (%s)",
                 j_error.text, captcha_response_str);
         return NULL;
     }
@@ -494,12 +494,12 @@ captcha_response *parse_captcha_response(const char* captcha_response_str, const
     const char *uuid = NULL;
     const char *vid = NULL;
     const char *cid = NULL;
-    if (json_unpack(j_response, "{s:i,s:s,s:s,s?s}",
+    if (json_unpack(j_response, "{s:i,s:s,s?s,s?s}",
                 "status", &status,
                 "uuid", &uuid,
                 "cid", &cid,
                 "vid", &vid)) {
-        ERROR(ctx->r->server, "parse_captcha_response: failed to unpack. reponse (%s)", captcha_response_str);
+        ERROR(ctx->r->server, "parse_captcha_response: failed to unpack. response (%s)", captcha_response_str);
         json_decref(j_response);
         return NULL;
     }
