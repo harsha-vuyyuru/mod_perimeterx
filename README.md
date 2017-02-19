@@ -1,6 +1,6 @@
 [![Build Status](https://travis-ci.org/PerimeterX/mod_perimeterx.svg?branch=travisBuild)](https://travis-ci.org/PerimeterX/mod_perimeterx)
 
-![image](http://media.marketwire.com/attachments/201604/34215_PerimeterX_logo.jpg)
+![image](https://s.perimeterx.net/logo.png)
 
 [PerimeterX](http://www.perimeterx.com) Apache Module
 ===========================================
