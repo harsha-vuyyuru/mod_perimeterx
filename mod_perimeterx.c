@@ -805,7 +805,7 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     free(payload);
     if (!response_str) {
         INFO(ctx->r->server, "verify_captcha: failed to perform captcha validation request. url: (%s)", ctx->full_url);
-        return true;
+        return false; // in case we are getting non 200 response
     }
 
     INFO(ctx->r->server, "verify_captcha: server response (%s)", response_str);
@@ -876,20 +876,6 @@ static bool enable_block_for_hostname(request_rec *r, apr_array_header_t *domain
     return false;
 }
 
-void populate_captcha_cookie_data(apr_pool_t *p, const char *captcha_cookie, request_context *ctx) {
-    const char *delim = ":";
-    char *saveptr;
-    char *str = apr_pstrdup(p, captcha_cookie);
-    ctx->px_captcha = apr_strtok(str, delim, &saveptr);
-    if (strncmp(saveptr, delim, 1) == 0) {
-        ctx->uuid = apr_strtok(NULL, delim, &saveptr);
-    }
-    ctx->vid = apr_strtok(NULL, delim, &saveptr);
-    if (saveptr) {
-        ctx->uuid = apr_strtok(NULL, delim, &saveptr);
-    }
-}
-
 request_context* create_context(request_rec *r, const px_config *conf) {
     request_context *ctx = (request_context*) apr_pcalloc(r->pool, sizeof(request_context));
 
@@ -947,8 +933,9 @@ request_context* create_context(request_rec *r, const px_config *conf) {
 
     if (captcha_cookie) {
         char *saveptr;
-        populate_captcha_cookie_data(r->pool, captcha_cookie, ctx);
-        INFO(r->server, "px_captcha data populated to context: token - (%s), vid - (%s), uuid - (%s)", ctx->px_captcha, ctx->vid, ctx->uuid);
+        ctx->px_captcha = apr_strtok(captcha_cookie, ":", &saveptr);
+        ctx->vid = apr_strtok(NULL, "", &saveptr);
+        INFO(r->server, "PXCaptcha cookie was found: %s", ctx->px_captcha);
     }
 
     // TODO(barak): parse without strtok
@@ -1060,6 +1047,10 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
             }
             post_verification(ctx, conf, true);
             return request_valid;
+        } else {
+            INFO(ctx->r->server, "Failed to verify px captcha, creating risk_api call");
+            risk_response = risk_api_get(ctx, conf);
+            goto handle_response;
         }
     }
 
