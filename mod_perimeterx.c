@@ -246,6 +246,7 @@ typedef struct request_context_t {
     const char *full_url;
     const char *http_method;
     const char *http_version;
+    const char *px_cookie_orig;
     int score;
     block_reason_t block_reason;
     s2s_call_reason_t call_reason;
@@ -413,6 +414,10 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf) {
             "module_version", conf->module_version);
     if (ctx->px_cookie) {
         json_object_set_new(j_additional, "px_cookie", json_string(ctx->px_cookie_decrypted));
+    }
+
+    if (ctx->px_cookie_orig) {
+        json_object_set_new(j_additional, "px_cookie_orig", json_string(ctx->px_cookie_orig));
     }
 
     // risk api object
@@ -897,6 +902,7 @@ request_context* create_context(request_rec *r, const px_config *conf) {
 
     ctx->px_cookie = px_cookie;
     ctx->px_cookie_decrypted = NULL;
+    ctx->px_cookie_orig = NULL;
     ctx->uri = r->uri;
     ctx->hostname = r->hostname;
     ctx->http_method = r->method;
@@ -1029,6 +1035,7 @@ static bool px_verify_request(request_context *ctx, px_config *conf) {
             ctx->uuid = c->uuid;
             vr = validate_cookie(c, ctx, conf->cookie_key);
         } else {
+            ctx->px_cookie_orig = ctx->px_cookie;
             vr = DECRYPTION_FAILED;
         }
     }
