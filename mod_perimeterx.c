@@ -673,12 +673,25 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
     char* saveptr;
     const char* delimieter = ":";
     const char* encoded_salt = strtok_r(px_cookie_cpy, delimieter, &saveptr);
-    int iterations = atoi(strtok_r(NULL, delimieter, &saveptr));
-    const char* encoded_payload = strtok_r(NULL, delimieter, &saveptr);
 
+    if (encoded_salt == NULL) {
+        INFO(r_ctx->r->server, "Stoping cookie decryption: no valid salt in cookie");
+        return NULL;
+    }
+    const char* iterations_str = strtok_r(NULL, delimieter, &saveptr);
+    if (iterations_str == NULL) {
+        INFO(r_ctx->r->server, "Stoping cookie decryption: no valid iterations in cookie");
+        return NULL;
+    }
+    apr_int64_t iterations = apr_atoi64(iterations_str);
     // make sure iteratins is valid and not too big
     if (iterations < ITERATIONS_LOWER_BOUND || iterations > ITERATIONS_UPPER_BOUND) {
-        ERROR(r_ctx->r->server,"Stoping cookie decryption: Number of iterations is illegal - %d", iterations);
+        ERROR(r_ctx->r->server,"Number of iterations is illegal - %"APR_INT64_T_FMT , iterations);
+        return NULL;
+    }
+    const char* encoded_payload = strtok_r(NULL, delimieter, &saveptr);
+    if (encoded_payload == NULL) {
+        INFO(r_ctx->r->server,"Stoping cookie decryption: no valid encoded_payload in cookie");
         return NULL;
     }
 
