@@ -45,7 +45,7 @@ APLOG_USE_MODULE(perimeterx);
 #define ERROR(server_rec, ...) \
     ap_log_error(APLOG_MARK, APLOG_ERR, 0, server_rec, "[mod_perimeterx]:" __VA_ARGS__)
 
-static const char *DEFAULT_BASE_URL = "https://sapi-%s.glb1.perimeterx.net";
+static const char *DEFAULT_BASE_URL = "https://sapi-%s.perimeterx.net";
 static const char *RISK_API = "/api/v1/risk";
 static const char *CAPTCHA_API = "/api/v1/risk/captcha";
 static const char *ACTIVITIES_API = "/api/v1/collector/s2s";
@@ -1574,4 +1574,3 @@ module AP_MODULE_DECLARE_DATA perimeterx_module =  {
     px_directives,              /* command apr_table_t */
     perimeterx_register_hooks   /* register hooks */
 };
-
