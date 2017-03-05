@@ -845,9 +845,8 @@ const char *get_request_ip(const request_rec *r, const px_config *conf) {
 
 static bool enable_block_for_hostname(request_rec *r, apr_array_header_t *domains_list) {
     // domains list not configured, module will be enabled globally and not per domainf
-    if (domains_list->nelts == 0) return true;
     const char *req_hostname = r->hostname;
-    if (req_hostname == NULL) return true;
+    if (req_hostname == NULL || domains_list->nelts == 0) return true;
     for (int i = 0; i < domains_list->nelts; i++) {
         const char *domain = APR_ARRAY_IDX(domains_list, i, const char*);
         if (strcmp(req_hostname, domain) == 0) {
@@ -1145,7 +1144,6 @@ int px_handle_request(request_rec *r, px_config *conf) {
     if (ctx) {
         bool request_valid = px_verify_request(ctx, conf);
         apr_table_set(r->subprocess_env, "SCORE", apr_itoa(r->pool, ctx->score));
-
         if (!request_valid && ctx->block_enabled) {
             if (r->method && strcmp(r->method, "POST") == 0) {
                 return HTTP_FORBIDDEN;
