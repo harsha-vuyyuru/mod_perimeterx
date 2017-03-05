@@ -847,6 +847,7 @@ static bool enable_block_for_hostname(request_rec *r, apr_array_header_t *domain
     // domains list not configured, module will be enabled globally and not per domainf
     if (domains_list->nelts == 0) return true;
     const char *req_hostname = r->hostname;
+    if (req_hostname == NULL) return true;
     for (int i = 0; i < domains_list->nelts; i++) {
         const char *domain = APR_ARRAY_IDX(domains_list, i, const char*);
         if (strcmp(req_hostname, domain) == 0) {
@@ -1091,9 +1092,9 @@ static bool px_should_verify_request(request_rec *r, px_config *conf) {
 
     const char *file_ending = strrchr(r->uri, '.');
     if (file_ending) {
-        if (conf->custom_file_ext_whitelist) {
+        const apr_array_header_t *file_exts = conf->custom_file_ext_whitelist;
+        if (file_exts->nelts > 0) {
             // using custom file extension whitelist
-            const apr_array_header_t *file_exts = conf->custom_file_ext_whitelist;
             for (int i = 0; i < file_exts->nelts; i++) {
                 const char *file_ext = APR_ARRAY_IDX(file_exts, i, const char*);
                 if (strcmp(file_ending, file_ext) == 0) {
@@ -1135,6 +1136,7 @@ static bool px_should_verify_request(request_rec *r, px_config *conf) {
 }
 
 int px_handle_request(request_rec *r, px_config *conf) {
+
     if (!px_should_verify_request(r, conf)) {
         return OK;
     }
@@ -1145,7 +1147,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
         apr_table_set(r->subprocess_env, "SCORE", apr_itoa(r->pool, ctx->score));
 
         if (!request_valid && ctx->block_enabled) {
-            if (strcmp(r->method, "POST") == 0) {
+            if (r->method && strcmp(r->method, "POST") == 0) {
                 return HTTP_FORBIDDEN;
             }
             // redirecting requests to custom block page if exists
@@ -1356,9 +1358,6 @@ static const char *add_file_extension_whitelist(cmd_parms *cmd, void *config, co
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    if (!conf->custom_file_ext_whitelist) {
-        conf->custom_file_ext_whitelist = apr_array_make(cmd->pool, 0, sizeof(char*));
-    }
     const char** entry = apr_array_push(conf->custom_file_ext_whitelist);
     *entry = file_extension;
     return NULL;
@@ -1411,15 +1410,16 @@ static void *create_config(apr_pool_t *p) {
         conf->send_page_activities = false;
         conf->blocking_score = 70;
         conf->captcha_enabled = false;
-        conf->module_version = "Apache Module v1.0.9";
+        conf->module_version = "Apache Module v1.0.9.1";
         conf->curl_pool_size = 40;
         conf->base_url = DEFAULT_BASE_URL;
         conf->risk_api_url = apr_pstrcat(p, conf->base_url, RISK_API, NULL);
         conf->captcha_api_url = apr_pstrcat(p, conf->base_url, CAPTCHA_API, NULL);
         conf->activities_api_url = apr_pstrcat(p, conf->base_url, ACTIVITIES_API, NULL);
+        conf->auth_token = "";
         conf->routes_whitelist = apr_array_make(p, 0, sizeof(char*));
         conf->useragents_whitelist = apr_array_make(p, 0, sizeof(char*));
-        conf->custom_file_ext_whitelist = NULL;
+        conf->custom_file_ext_whitelist = apr_array_make(p, 0, sizeof(char*));
         conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
         conf->ip_header_keys = apr_array_make(p, 0, sizeof(char*));
         conf->block_page_url = NULL;
