@@ -392,6 +392,45 @@ Determines PerimeterX server base URL.
 
 **example**: `www.mysite.com www.mynewsite.com `
 
+## <a name="custom-block-page"></a> Customizing Default Block Pages
+
+**Custom logo insertion**
+
+### `CustomLogo`
+
+**description**: The logo will be displayed at the top div of the the block page.
+The logo's ```max-heigh``` property would be 150px and width would be set to ```auto```. 
+
+`CustomLogo` directive will except valid URL.
+
+**required**: No
+
+**default**: NULL
+
+**example**: ```https://s.perimeterx.net/logo.png```
+
+**Custom JS/CSS**
+
+### `CSSRef`
+
+**description**: The block page can be modified with a custom CSS by adding the ```CSSRef``` directive and providing a valid URL to the css.
+
+**required**: No
+
+**default**: NULL
+
+**example**: ```https://s.perimeterx.net/style.css```
+
+### `JSRef` 
+
+**description**: The block page can be added with custom JS file by adding ```JSRef``` directive and providing the JS file that will be loaded with the block page.
+
+**required**: No
+
+**default**: NULL
+
+**example**: ```https://s.perimeterx.net/myscript.js```
+
 ### <a name="example"></a> Example ###
 
 * Configuration for apache server
