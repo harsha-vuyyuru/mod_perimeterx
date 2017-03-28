@@ -29,11 +29,12 @@ WORKDIR /home/r
 
 RUN cpanm Apache::Test Crypt::KeyDerivation
 
-RUN git clone https://github.com/PerimeterX/mod_perimeterx.git && cd ./mod_perimeterx && git checkout integration_tests
+RUN git clone https://github.com/PerimeterX/mod_perimeterx.git && cd ./mod_perimeterx
+RUN chown -R r /home/r
 
 RUN cd mod_perimeterx && perl Makefile.PL && make && make install
 RUN cd mod_perimeterx/src && make debug
 
-CMD ["su", "-m", "r" , "-c"  , "bash /home/r/mod_perimeterx/t/TEST"]
-#CMD ["su", "-m", "r" , "-c"  , "bash /home/r/run-test.sh"]
+#CMD ["su", "-m", "r" , "-c"  , "/home/r/mod_perimeterx/t/TEST"]
+CMD ["su", "-m", "r" , "-c"  , "bash /home/r/run-test.sh"]
 #CMD ["bash"]
