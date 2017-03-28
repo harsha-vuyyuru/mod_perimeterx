@@ -26,9 +26,9 @@ LoadModule perimeterx_module /usr/lib/apache2/modules/mod_perimeterx.so
 
 <IfModule mod_perimeterx.c>
     PXEnabled on
-    AuthToken TOKEN
+    AuthToken
     CookieKey perimeterx
-    AppId APP_ID
+    AppId
     BlockingScore 30
     Captcha Off
     IPHeader MyRealIP1 MyRealRealIP
