@@ -39,7 +39,7 @@ $ sudo apt-get install libjansson-dev libjson0 libjson0-dev libssl-dev libcurl4-
 ----------------------------------------
 ```shell
 $ git clone https://github.com/PerimeterX/mod_perimeterx.git
-$ cd mod_perimeterx
+$ cd mod_perimeterx/src
 $ sudo make
 $ apache2ctl restart
 ```
