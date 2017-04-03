@@ -4,11 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/) 
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## [2.0.0] - 3-22-2017
+## [1.1.0] - 3-22-2017
 ###Changed 
 
 * Redesign block/captcha page.
 * Handle invalid `_px` and `_pxCaptcha` cookie format.
+* Bug fixes.
 
 ### Added
 * Support custom css/javascript/logo on block page.

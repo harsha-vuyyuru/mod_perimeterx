@@ -152,7 +152,7 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     INFO(ctx->r->server, "verify_captcha: request - (%s)", payload);
     if (!payload) {
         INFO(ctx->r->server, "verify_captcha: failed to format captcha payload. url: (%s)", ctx->full_url);
-        return true; // TODO: why is it true?
+        return true;
     }
 
     char *response_str = post_request(conf->captcha_api_url, payload, conf->auth_header, ctx->r, conf->curl_pool);
