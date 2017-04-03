@@ -138,8 +138,6 @@ static bool enable_block_for_hostname(request_rec *r, apr_array_header_t *domain
 }
 
 bool verify_captcha(request_context *ctx, px_config *conf) {
-    /*bool captcha_verified = false;*/
-
     if (!ctx->px_captcha) {
         return false;
     }
