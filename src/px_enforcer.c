@@ -315,11 +315,11 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     ctx->px_cookie = px_cookie;
     ctx->px_cookie_decrypted = NULL;
     ctx->px_cookie_orig = NULL;
-    ctx->uri = r->uri;
+    ctx->uri = r->unparsed_uri;
     ctx->hostname = r->hostname;
     ctx->http_method = r->method;
     ctx->useragent = apr_table_get(r->headers_in, "User-Agent");
-    // TODO(barak): fill_url is missing the protocol like http:// or https://
+    // TODO(barak): full_url is missing the protocol like http:// or https://
     ctx->full_url = apr_pstrcat(r->pool, r->hostname, r->unparsed_uri, NULL);
     ctx->vid = NULL;
     ctx->px_cookie_orig = NULL;
