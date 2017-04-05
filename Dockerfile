@@ -23,7 +23,7 @@ RUN apt-get install -y \
 
 WORKDIR tmp
 RUN git clone https://github.com/PerimeterX/mod_perimeterx.git
-RUN cd mod_perimeterx/src && make
+RUN cd mod_perimeterx/src && make && make install
 
 EXPOSE 80
 

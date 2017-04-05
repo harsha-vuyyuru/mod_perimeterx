@@ -40,8 +40,8 @@ $ sudo apt-get install libjansson-dev libjson0 libjson0-dev libssl-dev libcurl4-
 ```shell
 $ git clone https://github.com/PerimeterX/mod_perimeterx.git
 $ cd mod_perimeterx/src
-$ sudo make
-$ apache2ctl restart
+$ make
+$ sudo make install
 ```
 
 Make sure that the following line is added to your configuration file: 
@@ -141,9 +141,9 @@ When set to ```On``` the module will be applied on webpage requests.
 
 **required** : No
 
-**default** : 0 (no timeout)
+**default** : 1
 
-**values** : Integer between 0 and 3
+**values** : Integer between 1 and 3
 
 ### <a name="ipheader"></a> `IPHeader` ###
 
