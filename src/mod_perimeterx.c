@@ -365,9 +365,9 @@ static void *create_config(apr_pool_t *p) {
     if (conf) {
         conf->module_enabled = false;
         conf->api_timeout = 1L;
-        conf->send_page_activities = false;
+        conf->send_page_activities = true;
         conf->blocking_score = 70;
-        conf->captcha_enabled = false;
+        conf->captcha_enabled = true;
         conf->module_version = "Apache Module v2.0.0";
         conf->curl_pool_size = 40;
         conf->base_url = DEFAULT_BASE_URL;
