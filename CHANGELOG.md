@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 * Redesign block/captcha page.
 * Handle invalid `_px` and `_pxCaptcha` cookie format.
+* Bug fixes.
 
 ### Added
 * Support custom css/javascript/logo on block page.

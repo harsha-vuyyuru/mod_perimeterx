@@ -138,10 +138,8 @@ static bool enable_block_for_hostname(request_rec *r, apr_array_header_t *domain
 }
 
 bool verify_captcha(request_context *ctx, px_config *conf) {
-    bool captcha_verified = false;
-
     if (!ctx->px_captcha) {
-        return captcha_verified;
+        return false;
     }
 
     // preventing reuse of captcha cookie by deleting it
@@ -167,16 +165,7 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     INFO(ctx->r->server, "verify_captcha: server response (%s)", response_str);
     captcha_response *c = parse_captcha_response(response_str, ctx);
     free(response_str);
-    if (c) {
-        if (c->status == 0) {
-            captcha_verified = true;
-        } else {
-            // TODO(barak): do we want to change ctx here?
-            ctx->vid = NULL;
-        }
-        INFO(ctx->r->server, "verify_captcha: cookie validation status (%d)", captcha_verified);
-    }
-    return captcha_verified;
+    return (c && c->status == 0);
 }
 
 static void post_verification(request_context *ctx, px_config *conf, bool request_valid) {
@@ -256,7 +245,9 @@ risk_response* risk_api_get(const request_context *ctx, const px_config *conf) {
     if (!risk_payload) {
         return NULL;
     }
+    INFO(ctx->r->server, "risk payload: %s", risk_payload);
     char *risk_response_str = post_request(conf->risk_api_url , risk_payload, conf->auth_header, ctx->r, conf->curl_pool);
+    INFO(ctx->r->server, "risk response: %s", risk_response_str);
     free(risk_payload);
     if (!risk_response_str) {
         return NULL;
@@ -266,6 +257,15 @@ risk_response* risk_api_get(const request_context *ctx, const px_config *conf) {
     risk_response *risk_response = parse_risk_response(risk_response_str, ctx);
     free(risk_response_str);
     return risk_response;
+}
+
+int populate_captcha_cookie_data(apr_pool_t *p, const char *captcha_cookie, request_context *ctx) {
+    const char *delim = ":";
+    char *saveptr;
+    char *str = apr_pstrdup(p, captcha_cookie);
+    ctx->px_captcha = apr_strtok(str, delim, &saveptr);
+    ctx->uuid = apr_strtok(NULL, delim, &saveptr);
+    ctx->vid = apr_strtok(NULL, delim, &saveptr);
 }
 
 request_context* create_context(request_rec *r, const px_config *conf) {
@@ -315,20 +315,17 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     ctx->px_cookie = px_cookie;
     ctx->px_cookie_decrypted = NULL;
     ctx->px_cookie_orig = NULL;
-    ctx->uri = r->uri;
+    ctx->uri = r->unparsed_uri;
     ctx->hostname = r->hostname;
     ctx->http_method = r->method;
     ctx->useragent = apr_table_get(r->headers_in, "User-Agent");
-    // TODO(barak): fill_url is missing the protocol like http:// or https://
+    // TODO(barak): full_url is missing the protocol like http:// or https://
     ctx->full_url = apr_pstrcat(r->pool, r->hostname, r->unparsed_uri, NULL);
     ctx->vid = NULL;
     ctx->px_cookie_orig = NULL;
 
     if (captcha_cookie) {
-        char *saveptr;
-        ctx->px_captcha = apr_strtok(captcha_cookie, ":", &saveptr);
-        ctx->vid = apr_strtok(NULL, "", &saveptr);
-        INFO(r->server, "PXCaptcha cookie was found: %s", ctx->px_captcha);
+        populate_captcha_cookie_data(r->pool, captcha_cookie, ctx);
     }
 
     // TODO(barak): parse without strtok
@@ -357,6 +354,7 @@ bool px_verify_request(request_context *ctx, px_config *conf) {
 
     if (conf->captcha_enabled && ctx->px_captcha) {
         if (verify_captcha(ctx, conf)) {
+            INFO(ctx->r->server, "verify_captcha: validation status true");
             // clean users cookie on captcha verification
             apr_status_t res = ap_cookie_remove2(ctx->r, PX_COOKIE, NULL, ctx->r->headers_out, ctx->r->err_headers_out, NULL);
             if (res != APR_SUCCESS) {
@@ -365,7 +363,10 @@ bool px_verify_request(request_context *ctx, px_config *conf) {
             post_verification(ctx, conf, true);
             return request_valid;
         } else {
-            INFO(ctx->r->server, "Failed to verify px captcha, creating risk_api call");
+            INFO(ctx->r->server, "verify_captcha: validation status false, createing risk_api for this request");
+            // pxCaptcha is not valid: removing captcha cookie data
+            ctx->uuid = NULL;
+            ctx->vid = NULL;
             ctx->call_reason = CAPTCHA_FAILED;
             risk_response = risk_api_get(ctx, conf);
             goto handle_response;
