@@ -122,7 +122,7 @@ When set to ```On``` the module will be applied on webpage requests.
 
 **required** : No
 
-**default** : Off
+**default** : On
 
 **values** : On | Off
 
@@ -132,7 +132,7 @@ When set to ```On``` the module will be applied on webpage requests.
 
 **required** : No
 
-**default** : Off
+**default** : On
 
 **values** : On | Off
 
