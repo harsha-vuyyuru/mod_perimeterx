@@ -22,7 +22,7 @@ typedef struct px_config_t {
     char *auth_header;
     bool module_enabled;
     bool captcha_enabled;
-    bool disable_mod_by_envvar;
+    bool skip_mod_by_envvar;
     int blocking_score;
     long api_timeout;
     bool send_page_activities;
