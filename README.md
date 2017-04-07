@@ -315,6 +315,49 @@ function getQueryString(name, url) {
 
 Determines PerimeterX server base URL.
 
+### <a name="baseurl"></a> `SkipModByEnvvar` ###
+**description** : Allow to skip PerimeterX module if environment variable `PX_SKIP_MODULE` is set on the request.
+
+**required** : No
+
+**default** : Off
+
+**values** : On|Off
+
+##### Example Use-cases
+
+If you are using `mod_setenvif`, or something similiar, you can configure set of rules for flagging a request with `PX_SKIP_MODULE`. 
+
+Consider the following examples:
+
+* You can consider skipping module for resources of your choice. This configuration will skip module on either `gif` or `jpg`:
+ 
+```
+SetEnvIf Request_URI "\.gif$" PX_SKIP_MODULE true
+SetEnvIf Request_URI "\.jpg$" PX_SKIP_MODULE true
+```
+
+* This will skip module according to the referer:
+
+```
+SetEnvIf Referer www\.mydomain\.example\.com PX_SKIP_MODULE true
+```
+
+* This will skip all `HEAD` requests:
+
+```
+SetEnvIfNoCase Request_Method HEAD PX_SKIP_MODULE true
+```
+
+* If you are using an internal test client of some sort you can skip px module by it's user agnet:
+
+```
+SetEnvIfNoCase User-Agent good-bot PX_SKIP_MODULE true
+```
+
+> **Read more on `mod_setenvif` [here](https://httpd.apache.org/docs/current/mod/mod_setenvif.html).**
+
+
 ### <a name="sensitiveroutes"></a> `SensitiveRoutes`
 
 **descripotion** : List of routes the Perimeterx module will always do a server-to-server call for, even if the cookie score is low and valid. 

@@ -66,8 +66,12 @@ int render_page(request_rec *r, const request_context *ctx, const px_config *con
 }
 
 int px_handle_request(request_rec *r, px_config *conf) {
-    if (!px_should_verify_request(r, conf)) {
-        return OK;
+    if (conf->skip_mod_by_envvar) {
+        const char *skip_px = apr_table_get(r->subprocess_env, "PX_SKIP_MODULE");
+        if  (skip_px != NULL) {
+            INFO(r->server, "px_handle_request: PX_SKIP_MODULE was set on the request - skipping request verification");
+            return OK;
+        }
     }
 
     request_context *ctx = create_context(r, conf);
@@ -257,6 +261,15 @@ static const char *set_base_url(cmd_parms *cmd, void *config, const char *base_u
     return NULL;
 }
 
+static const char *set_skip_mod_by_envvar(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->skip_mod_by_envvar = arg ? true : false;
+    return NULL;
+}
+
 static const char *set_block_page_url(cmd_parms *cmd, void *config, const char *url) {
     px_config *conf = get_config(cmd, config);
     if (!conf) {
@@ -368,7 +381,8 @@ static void *create_config(apr_pool_t *p) {
         conf->send_page_activities = true;
         conf->blocking_score = 70;
         conf->captcha_enabled = true;
-        conf->module_version = "Apache Module v2.0.0";
+        conf->module_version = "Apache Module v2.1.0";
+        conf->skip_mod_by_envvar = false;
         conf->curl_pool_size = 40;
         conf->base_url = DEFAULT_BASE_URL;
         conf->risk_api_url = apr_pstrcat(p, conf->base_url, RISK_API, NULL);
@@ -462,6 +476,11 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "PerimeterX server base URL"),
+    AP_INIT_FLAG("DisableModByEnvvar",
+            set_skip_mod_by_envvar,
+            NULL,
+            OR_ALL,
+            "Allow to disable PerimeterX module by environment variable"),
     AP_INIT_TAKE1("BlockPageURL",
             set_block_page_url,
             NULL,
@@ -501,13 +520,14 @@ static const command_rec px_directives[] = {
 };
 
 static void perimeterx_register_hooks(apr_pool_t *pool) {
-    ap_hook_post_read_request(px_hook_post_request, NULL, NULL, APR_HOOK_LAST);
+    static const char *const asz_pre[] =
+    { "mod_setenvif.c", "mod_setenv.c", NULL };
+    ap_hook_post_read_request(px_hook_post_request, asz_pre, NULL, APR_HOOK_MIDDLE);
     ap_hook_child_init(px_hook_child_init, NULL, NULL, APR_HOOK_MIDDLE);
     ap_hook_pre_config(px_hook_pre_config, NULL, NULL, APR_HOOK_MIDDLE);
 }
 
 static void *create_server_config(apr_pool_t *pool, server_rec *s) {
-    /*ap_error_log2stderr(s);*/
     return create_config(pool);
 }
 
