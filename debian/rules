@@ -1,0 +1,29 @@
+#!/usr/bin/make -f
+
+# -*- makefile -*-
+#DH_VERBOSE = 1
+DEB_BUILDDIR = $(CURDIR)/build
+
+%:
+	dh $@ --with apache2 --builddirectory=build
+
+#need to play tricks here copying file from directory containing space (examples/Multiple\ VirtualHosts/*)
+#because dh_* configs will not accept directories with spaces
+override_dh_auto_configure:
+	mkdir $(DEB_BUILDDIR)
+	cp -a curl_pool.c  mod_perimeterx.c *.h examples/*/* $(DEB_BUILDDIR)
+	mv $(DEB_BUILDDIR)/README.md $(DEB_BUILDDIR)/README-example.md
+	dh_auto_configure
+
+#Custom build command to skip -i from command in original Make file
+override_dh_auto_build:
+	cd $(DEB_BUILDDIR) && apxs -a -Wc,-std=gnu99 -c `pkg-config --cflags --libs jansson openssl libcurl` mod_perimeterx.c curl_pool.c
+
+override_dh_auto_clean:
+	-rm -rf $(DEB_BUILDDIR)
+	dh_auto_clean
+
+oerride_dh_auto_install:
+	dh_apache2 --conditional=perimeterx_not_enabled
+	dh_auto_install
+
