@@ -389,6 +389,7 @@ static void *create_config(apr_pool_t *p) {
         conf->captcha_api_url = apr_pstrcat(p, conf->base_url, CAPTCHA_API, NULL);
         conf->activities_api_url = apr_pstrcat(p, conf->base_url, ACTIVITIES_API, NULL);
         conf->auth_token = "";
+        conf->auth_header = "";
         conf->js_ref = NULL;
         conf->css_ref = NULL;
         conf->custom_logo = NULL;
