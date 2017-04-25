@@ -10,3 +10,4 @@ t/TEST
 Makefile
 .vagrant
 build/*
+debian/libapache2-mod-perimeterx/*
