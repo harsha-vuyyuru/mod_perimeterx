@@ -1,4 +1,4 @@
-FROM ubuntu:16.04
+FROM debian:jessie
 
 MAINTAINER aviad@perimeterx.com
 
@@ -19,7 +19,8 @@ RUN apt-get install -y \
         libgdm-dev \
         cpanminus \
         libjson0 \
-        libjson0-dev
+        libjson0-dev \
+        devscripts
 
 WORKDIR tmp
 RUN git clone https://github.com/PerimeterX/mod_perimeterx.git
