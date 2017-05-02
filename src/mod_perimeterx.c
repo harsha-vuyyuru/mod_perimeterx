@@ -66,6 +66,10 @@ int render_page(request_rec *r, const request_context *ctx, const px_config *con
 }
 
 int px_handle_request(request_rec *r, px_config *conf) {
+    if (!px_should_verify_request(r, conf)) {
+        return OK;
+    }
+
     if (conf->skip_mod_by_envvar) {
         const char *skip_px = apr_table_get(r->subprocess_env, "PX_SKIP_MODULE");
         if  (skip_px != NULL) {
