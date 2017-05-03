@@ -3,7 +3,7 @@ Section: non-free/web
 Priority: optional
 Maintainer: Eugene Aleynikov <a1j@guthub>
 Standards-Version: 3.9.1
-Build-Depends: debhelper (>> 5.0.0), cdbs, dh-apache2, apache2-dev (>= 2.2.4), dpatch (>= 2.0.0), libtool-bin, libapr1-dev, pkg-config, libjansson-dev, libcurl4-openssl-dev
+Build-Depends: debhelper (>> 5.0.0), cdbs, dh-apache2, apache2-dev (>= 2.2.4), dpatch (>= 2.0.0), libtool-bin, libapr1-dev, pkg-config, libjansson-dev, libcurl4-openssl-dev, libjson-c-dev
 Homepage: https://github.com/PerimeterX/mod_perimeterx
 
 Package: libapache2-mod-perimeterx

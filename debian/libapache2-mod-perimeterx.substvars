@@ -1,2 +1,0 @@
-misc:Depends=apache2-api-20120211
-shlibs:Depends=libc6 (>= 2.14), libcurl3 (>= 7.16.2), libjansson4 (>= 2.0.1), libjson-c2 (>= 0.10), libssl1.0.0 (>= 1.0.0)
