@@ -74,6 +74,11 @@ int render_page(request_rec *r, const request_context *ctx, const px_config *con
 }
 
 int px_handle_request(request_rec *r, px_config *conf) {
+    // faill open mode
+    if (conf->timeouts_counter > conf->timeouts_threshold) {
+        return OK;
+    }
+
     if (!px_should_verify_request(r, conf)) {
         return OK;
     }
@@ -130,6 +135,28 @@ int px_handle_request(request_rec *r, px_config *conf) {
     return OK;
 }
 
+typedef struct health_check_data_t {
+    server_rec *server;
+    px_config *config;
+} health_check_data;
+
+static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
+    CURL *curl = curl_easy_init();
+    // threshold // curl handle // empty request to check the 200
+    health_check_data *hc = (health_check_data*) data;
+    INFO(s, "we are int he health check function");
+    while (true) {
+        INFO(s, "we are int he health check function, going to going to sleep on cond cond");
+        apr_thread_cond_wait(conf->health_check_cond); // this is the first time
+        conf->timeouts_counter = 0;
+        INFO(s, "this is the fist time we are going this");
+        // when we we finish
+        apr_thread_cond_wait(conf->health_check_cond); // this is the first time
+        /*apr_thread_cond_wait();*/
+    /*}*/
+    return NULL;
+}
+
 static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, void *data) {
     activity_consumer_data *consumer_data = (activity_consumer_data*)data;
     px_config *conf = consumer_data->config;
@@ -172,6 +199,8 @@ static apr_status_t destroy_activity_queue(void *q) {
 static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
     curl_global_init(CURL_GLOBAL_ALL);
     px_config *cfg = ap_get_module_config(s->module_config, &perimeterx_module);
+
+    // setting up thread pool for background activities send
     if (cfg->background_activity_send) {
         apr_status_t rv = apr_queue_create(&cfg->activity_queue, cfg->background_activity_queue_size, s->process->pool);
         if (rv != APR_SUCCESS) {
@@ -194,6 +223,24 @@ static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
         }
         apr_pool_cleanup_register(s->process->pool, cfg->activity_queue, apr_pool_cleanup_null, destroy_activity_queue);
         apr_pool_cleanup_register(s->process->pool, cfg->activity_queue, apr_pool_cleanup_null, destroy_thread_pool);
+    }
+
+    // setting up health_check thread
+    apr_status_t rv;
+    rv = apr_thread_cond_create(&cfg->health_check_cond, s->process->pool);
+    if (rv != APR_SUCCESS) {
+        INFO(s, "we could not create the cond for the worker thread");
+        exit(1); // ??
+    }
+    rv = apr_thread_create(&cfg->health_check_thread, NULL, health_check, (void*) s, s->process->pool);
+    if (rv != APR_SUCCESS) {
+        INFO(s, "we could not init the thread for the health check");
+        exit(1);
+    }
+    rv = apr_thread_mutex_create(&cfg->timeouts_count_mutex, 0, s->process->pool);
+    if (rv != APR_SUCCESS) {
+        INFO(s, "could not init the thread mutex");
+        exit(1);
     }
 }
 
@@ -497,21 +544,22 @@ static void *create_config(apr_pool_t *p) {
         conf->activities_api_url = apr_pstrcat(p, conf->base_url, ACTIVITIES_API, NULL);
         conf->auth_token = "";
         conf->auth_header = "";
-        conf->js_ref = NULL;
-        conf->css_ref = NULL;
-        conf->custom_logo = NULL;
+        /*conf->js_ref = NULL;*/
+        /*conf->css_ref = NULL;*/
+        /*conf->custom_logo = NULL;*/
         conf->routes_whitelist = apr_array_make(p, 0, sizeof(char*));
         conf->useragents_whitelist = apr_array_make(p, 0, sizeof(char*));
         conf->custom_file_ext_whitelist = apr_array_make(p, 0, sizeof(char*));
         conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
         conf->ip_header_keys = apr_array_make(p, 0, sizeof(char*));
-        conf->block_page_url = NULL;
+        /*conf->block_page_url = NULL;*/
         conf->sensitive_routes = apr_array_make(p, 0, sizeof(char*));
         conf->enabled_hostnames = apr_array_make(p, 0, sizeof(char*));
         conf->sensitive_routes_prefix = apr_array_make(p, 0, sizeof(char*));
         conf->background_activity_send = true;
         conf->background_activity_workers = 10;
         conf->background_activity_queue_size = 1000;
+        conf->timeouts_threshold = 1000; // TODO: this should be configurable
     }
     return conf;
 }

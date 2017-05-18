@@ -13,6 +13,15 @@
 static const char *JSON_CONTENT_TYPE = "Content-Type: application/json";
 static const char *EXPECT = "Expect:";
 
+void update_timeout_counter(px_config *conf) {
+    apr_thread_mutex_lock(conf->timeouts_count_mutex);
+    conf->timeouts_counter += 1;
+    if (conf->timeouts_counter >= conf->timeouts_threshold) {
+        apr_thread_cond_signal(conf->health_check_cond);
+    }
+    apr_thread_mutex_unlock(conf->timeouts_count_mutex);
+}
+
 CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, const px_config *conf, server_rec *server, char **response_data) {
     struct response_t response;
     struct curl_slist *headers = NULL;
@@ -37,25 +46,32 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, c
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*) &response);
     CURLcode status = curl_easy_perform(curl);
     curl_slist_free_all(headers);
-    if (status == CURLE_OK) {
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
-        if (status_code == HTTP_OK) {
-            if (response_data != NULL) {
-                *response_data = response.data;
-            } else {
-                free(response.data);
+    size_t len;
+    switch (status) {
+        case CURLE_OK:
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
+            if (status_code == HTTP_OK) {
+                if (response_data != NULL) {
+                    *response_data = response.data;
+                } else {
+                    free(response.data);
+                }
+                return status;
             }
-            return status;
-        }
-        ERROR(server, "post_request: status: %ld, url: %s", status_code, url);
-        status = CURLE_HTTP_RETURNED_ERROR;
-    } else {
-        size_t len = strlen(errbuf);
-        if (len) {
-            ERROR(server, "post_request failed: %s", errbuf);
-        } else {
-            ERROR(server, "post_request failed: %s", curl_easy_strerror(status));
-        }
+            ERROR(server, "post_request: status: %ld, url: %s", status_code, url);
+            status = CURLE_HTTP_RETURNED_ERROR;
+            break;
+        case CURLE_OPERATION_TIMEDOUT:
+            update_timeout_counter(conf);
+            INFO(server, "we are now on: %d timeouts", conf->timeouts_counter);
+            break;
+        default:
+            len = strlen(errbuf);
+            if (len) {
+                ERROR(server, "post_request failed: %s", errbuf);
+            } else {
+                ERROR(server, "post_request failed: %s", curl_easy_strerror(status));
+            }
     }
     free(response.data);
     *response_data = NULL;

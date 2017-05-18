@@ -43,6 +43,11 @@ typedef struct px_config_t {
     int background_activity_queue_size;
     apr_queue_t *activity_queue;
     apr_thread_pool_t *activity_thread_pool;
+    apr_thread_t *health_check_thread;
+    apr_thread_cond_t *health_check_cond;
+    int timeouts_counter;
+    int timeouts_threshold;
+    apr_thread_mutex_t *timeouts_count_mutex;
 } px_config;
 
 typedef struct activity_consumer_data_t {
