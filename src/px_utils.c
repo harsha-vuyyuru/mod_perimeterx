@@ -22,7 +22,7 @@ void update_timeout_counter(px_config *conf) {
     apr_thread_mutex_unlock(conf->timeouts_count_mutex);
 }
 
-CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, const px_config *conf, server_rec *server, char **response_data) {
+CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, px_config *conf, server_rec *server, char **response_data) {
     struct response_t response;
     struct curl_slist *headers = NULL;
     long status_code;

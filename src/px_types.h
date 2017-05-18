@@ -50,6 +50,11 @@ typedef struct px_config_t {
     apr_thread_mutex_t *timeouts_count_mutex;
 } px_config;
 
+typedef struct health_check_data_t {
+    server_rec *server;
+    px_config *config;
+} health_check_data;
+
 typedef struct activity_consumer_data_t {
     px_config *config;
     server_rec *server;

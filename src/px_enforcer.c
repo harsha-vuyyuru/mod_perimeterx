@@ -28,7 +28,7 @@ static const char* FILE_EXT_WHITELIST[] = {
     ".ico", ".pls", ".midi", ".svgz", ".class", ".png", ".ppt", ".mid", "webp", ".jar"
 };
 
-static CURLcode post_request(const char *url, const char *payload, const request_context *ctx, const px_config *conf, char **response_data) {
+static CURLcode post_request(const char *url, const char *payload, const request_context *ctx, px_config *conf, char **response_data) {
     CURL *curl = curl_pool_get_wait(conf->curl_pool);
     if (curl == NULL) {
         ERROR(ctx->r->server, "post_request: could not obtain curl handle");
@@ -204,7 +204,7 @@ bool px_should_verify_request(request_rec *r, px_config *conf) {
     return true;
 }
 
-risk_response* risk_api_get(request_context *ctx, const px_config *conf) {
+risk_response* risk_api_get(request_context *ctx, px_config *conf) {
     char *risk_payload = create_risk_payload(ctx, conf);
     if (!risk_payload) {
         ctx->pass_reason = PASS_REASON_ERROR;

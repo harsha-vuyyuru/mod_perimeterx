@@ -135,25 +135,34 @@ int px_handle_request(request_rec *r, px_config *conf) {
     return OK;
 }
 
-typedef struct health_check_data_t {
-    server_rec *server;
-    px_config *config;
-} health_check_data;
-
 static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
-    CURL *curl = curl_easy_init();
-    // threshold // curl handle // empty request to check the 200
+    // TODO: We still need to clean the timeouts counter in interval of X times
+    //TODO: add tid to all logs
+    INFO(hc->server, "starting health_check thread");
     health_check_data *hc = (health_check_data*) data;
-    INFO(s, "we are int he health check function");
+    const char *health_check_url = apr_psprintf(hc->server->process->pool, "%s/api/v1/kpi/status", hc->config->base_url);
+    CURL *curl = curl_easy_init();
+
+    CURLcode res;
     while (true) {
-        INFO(s, "we are int he health check function, going to going to sleep on cond cond");
-        apr_thread_cond_wait(conf->health_check_cond); // this is the first time
-        conf->timeouts_counter = 0;
-        INFO(s, "this is the fist time we are going this");
-        // when we we finish
-        apr_thread_cond_wait(conf->health_check_cond); // this is the first time
-        /*apr_thread_cond_wait();*/
-    /*}*/
+        long status_code = 0;
+        while (status_code != HTTP_OK) {
+            hc->config->timeouts_counter = 0;
+            curl_easy_setopt(curl, CURLOPT_URL, health_check_url);
+            //TODO: hardcoded timeout
+            //TODO; check if we need to wait more than 1 seconds between health checks
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT, 1);
+            res = curl_easy_perform(curl);
+            if (res == CURLE_OK) {
+                curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
+                INFO(hc->server, "PerimeterX service is healthy", status_code);
+            }
+        }
+        // TODO: (shikloshi) we need to change the mutex to avoid deadlock
+        apr_thread_cond_wait(hc->config->health_check_cond, hc->config->timeouts_count_mutex);
+    }
+    INFO(hc->server, "exiting health_check thread");
+    curl_easy_cleanup(curl);
     return NULL;
 }
 
@@ -226,20 +235,24 @@ static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
     }
 
     // setting up health_check thread
+    health_check_data *hc_data= (health_check_data*)apr_palloc(s->process->pool, sizeof(health_check_data));
+    hc_data->server = s;
+    hc_data->config = cfg;
     apr_status_t rv;
     rv = apr_thread_cond_create(&cfg->health_check_cond, s->process->pool);
+    //TODO: check error handling in this flow
     if (rv != APR_SUCCESS) {
-        INFO(s, "we could not create the cond for the worker thread");
-        exit(1); // ??
+        INFO(s, "error while init health_check thread cond");
+        exit(1);
     }
-    rv = apr_thread_create(&cfg->health_check_thread, NULL, health_check, (void*) s, s->process->pool);
+    rv = apr_thread_create(&cfg->health_check_thread, NULL, health_check, (void*) hc_data, s->process->pool);
     if (rv != APR_SUCCESS) {
-        INFO(s, "we could not init the thread for the health check");
+        INFO(s, "error while init health_check thread create");
         exit(1);
     }
     rv = apr_thread_mutex_create(&cfg->timeouts_count_mutex, 0, s->process->pool);
     if (rv != APR_SUCCESS) {
-        INFO(s, "could not init the thread mutex");
+        INFO(s, "error while creating health_check thread mutex");
         exit(1);
     }
 }
@@ -553,22 +566,23 @@ static void *create_config(apr_pool_t *p) {
         conf->activities_api_url = apr_pstrcat(p, conf->base_url, ACTIVITIES_API, NULL);
         conf->auth_token = "";
         conf->auth_header = "";
-        /*conf->js_ref = NULL;*/
-        /*conf->css_ref = NULL;*/
-        /*conf->custom_logo = NULL;*/
+        //TODO: check with barak if we can dismiss NULL assignments due to use of apr_pcalloc
+        conf->js_ref = NULL;
+        conf->css_ref = NULL;
+        conf->custom_logo = NULL;
+        conf->block_page_url = NULL;
         conf->routes_whitelist = apr_array_make(p, 0, sizeof(char*));
         conf->useragents_whitelist = apr_array_make(p, 0, sizeof(char*));
         conf->custom_file_ext_whitelist = apr_array_make(p, 0, sizeof(char*));
         conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
         conf->ip_header_keys = apr_array_make(p, 0, sizeof(char*));
-        /*conf->block_page_url = NULL;*/
         conf->sensitive_routes = apr_array_make(p, 0, sizeof(char*));
         conf->enabled_hostnames = apr_array_make(p, 0, sizeof(char*));
         conf->sensitive_routes_prefix = apr_array_make(p, 0, sizeof(char*));
         conf->background_activity_send = true;
         conf->background_activity_workers = 10;
         conf->background_activity_queue_size = 1000;
-        conf->timeouts_threshold = 1000; // TODO: this should be configurable
+        conf->timeouts_threshold = 100;
     }
     return conf;
 }
@@ -701,6 +715,11 @@ static const command_rec px_directives[] = {
             "Number of background workers to send activities"),
     AP_INIT_TAKE1("BackgroundActivityQueueSize",
             set_background_activity_queue_size,
+            NULL,
+            OR_ALL,
+            "Queue size for background activity send"),
+    AP_INIT_TAKE1("MaxTimeoutThreshold", // TODO: better name
+            set_max_timeout_threshold,
             NULL,
             OR_ALL,
             "Queue size for background activity send"),
