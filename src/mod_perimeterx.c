@@ -136,10 +136,10 @@ int px_handle_request(request_rec *r, px_config *conf) {
 }
 
 static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
-    // TODO: We still need to clean the timeouts counter in interval of X times
+    //TODO: We still need to clean the timeouts counter in interval of X times
     //TODO: add tid to all logs
-    INFO(hc->server, "starting health_check thread");
     health_check_data *hc = (health_check_data*) data;
+    INFO(hc->server, "starting health_check thread");
     const char *health_check_url = apr_psprintf(hc->server->process->pool, "%s/api/v1/kpi/status", hc->config->base_url);
     CURL *curl = curl_easy_init();
 
@@ -155,7 +155,7 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
             res = curl_easy_perform(curl);
             if (res == CURLE_OK) {
                 curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
-                INFO(hc->server, "PerimeterX service is healthy", status_code);
+                INFO(hc->server, "PerimeterX service is healthy");
             }
         }
         // TODO: (shikloshi) we need to change the mutex to avoid deadlock
@@ -518,6 +518,15 @@ static const char *set_background_activity_send(cmd_parms *cmd, void *config, in
     return NULL;
 }
 
+static const char *set_max_timeout_threshold(cmd_parms *cmd, void *config, const char *arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->timeouts_threshold = atoi(arg);
+    return NULL;
+}
+
 static const char *set_background_activity_workers(cmd_parms *cmd, void *config, const char *arg) {
     px_config *conf = get_config(cmd, config);
     if (!conf) {
@@ -722,7 +731,7 @@ static const command_rec px_directives[] = {
             set_max_timeout_threshold,
             NULL,
             OR_ALL,
-            "Queue size for background activity send"),
+            "Number of timeouts before running in fail open mode"),
     { NULL }
 };
 

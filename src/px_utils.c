@@ -63,7 +63,7 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, p
             break;
         case CURLE_OPERATION_TIMEDOUT:
             update_timeout_counter(conf);
-            INFO(server, "we are now on: %d timeouts", conf->timeouts_counter);
+            INFO(server, "post_request timeouts: %d", conf->timeouts_counter);
             break;
         default:
             len = strlen(errbuf);
