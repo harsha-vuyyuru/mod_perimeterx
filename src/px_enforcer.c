@@ -108,30 +108,29 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     }
 
     char *payload = create_captcha_payload(ctx, conf);
-    INFO(ctx->r->server, "verify_captcha: request - (%s)", payload);
     if (!payload) {
         INFO(ctx->r->server, "verify_captcha: failed to format captcha payload. url: (%s)", ctx->full_url);
         ctx->pass_reason = PASS_REASON_ERROR;
         return true;
     }
 
+    INFO(ctx->r->server, "verify_captcha: request - (%s)", payload);
     char *response_str = NULL;
     CURLcode status = post_request(conf->captcha_api_url, payload, ctx, conf, &response_str);
     free(payload);
-    if (!response_str) {
-        if (status == CURLE_OPERATION_TIMEDOUT) {
-            ctx->pass_reason = PASS_REASON_CAPTCHA_TIMEOUT;
+    if (status == CURLE_OK) {
+        INFO(ctx->r->server, "verify_captcha: server response (%s)", response_str);
+        captcha_response *c = parse_captcha_response(response_str, ctx);
+        free(response_str);
+        bool passed = (c && c->status == 0);
+        if (passed) {
+            ctx->pass_reason = PASS_REASON_CAPTCHA;
         }
-        INFO(ctx->r->server, "verify_captcha: failed to perform captcha validation request. url: (%s)", ctx->full_url);
-        return false; // in case we are getting non 200 response
+        return passed;
     }
-
-    INFO(ctx->r->server, "verify_captcha: server response (%s)", response_str);
-    captcha_response *c = parse_captcha_response(response_str, ctx);
-    free(response_str);
-    bool passed = (c && c->status == 0);
-    if (passed) ctx->pass_reason = PASS_REASON_CAPTCHA;
-    return passed;
+    ctx->pass_reason = (status == CURLE_OPERATION_TIMEDOUT) ? PASS_REASON_CAPTCHA_TIMEOUT : PASS_REASON_ERROR;
+    INFO(ctx->r->server, "verify_captcha: failed to perform captcha validation request. url: (%s), curl status: %d", ctx->full_url, status);
+    return false;
 }
 
 static void post_verification(request_context *ctx, px_config *conf, bool request_valid) {
@@ -215,18 +214,15 @@ risk_response* risk_api_get(request_context *ctx, const px_config *conf) {
     char *risk_response_str;
     CURLcode status = post_request(conf->risk_api_url , risk_payload, ctx, conf, &risk_response_str);
     free(risk_payload);
-    if (!risk_response_str) {
-        INFO(ctx->r->server, "no risk response, status %d", status);
-        if (status == CURLE_OPERATION_TIMEDOUT) {
-            ctx->pass_reason = PASS_REASON_S2S_TIMEOUT;
-        }
-        return NULL;
+    if (status == CURLE_OK) {
+        INFO(ctx->r->server, "risk_api_get: server response (%s)", risk_response_str);
+        risk_response *risk_response = parse_risk_response(risk_response_str, ctx);
+        free(risk_response_str);
+        return risk_response;
     }
-
-    INFO(ctx->r->server, "risk_api_get: server response (%s)", risk_response_str);
-    risk_response *risk_response = parse_risk_response(risk_response_str, ctx);
-    free(risk_response_str);
-    return risk_response;
+    ctx->pass_reason = (status == CURLE_OPERATION_TIMEDOUT) ? PASS_REASON_S2S_TIMEOUT : PASS_REASON_ERROR;
+    INFO(ctx->r->server, "no risk response, status %d", status);
+    return NULL;
 }
 
 int populate_captcha_cookie_data(apr_pool_t *p, const char *captcha_cookie, request_context *ctx) {
