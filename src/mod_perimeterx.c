@@ -42,6 +42,7 @@ static const char *DEFAULT_BASE_URL = "https://sapi-%s.perimeterx.net";
 static const char *RISK_API = "/api/v2/risk";
 static const char *CAPTCHA_API = "/api/v1/risk/captcha";
 static const char *ACTIVITIES_API = "/api/v1/collector/s2s";
+static const char *HEALTH_CHECK_API = "/api/v1/kpi/status";
 
 // constants
 //
@@ -136,8 +137,7 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
     health_check_data *hc = (health_check_data*) data;
     px_config *conf = hc->config;
 
-    const char *health_check_url = apr_psprintf(hc->server->process->pool, "%s/api/v1/kpi/status", hc->config->base_url);
-
+    const char *health_check_url = apr_pstrcat(hc->server->process->pool, hc->config->base_url, HEALTH_CHECK_API, NULL);
     CURL *curl = curl_easy_init();
     CURLcode res;
     while (1) {
