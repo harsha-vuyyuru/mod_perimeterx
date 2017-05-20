@@ -38,16 +38,21 @@ typedef struct px_config_t {
     apr_array_header_t *sensitive_routes;
     apr_array_header_t *sensitive_routes_prefix;
     apr_array_header_t *enabled_hostnames;
+
     bool background_activity_send;
     int background_activity_workers;
     int background_activity_queue_size;
     apr_queue_t *activity_queue;
     apr_thread_pool_t *activity_thread_pool;
+
+    // TODO: make different struct?
+    bool px_service_monitor;
     apr_thread_t *health_check_thread;
     apr_thread_cond_t *health_check_cond;
-    int timeouts_counter;
-    int timeouts_threshold;
-    apr_thread_mutex_t *timeouts_count_mutex;
+    int px_errors_threshold;
+    volatile apr_uint32_t px_errors_count;
+    int px_errors_count_interval; // in ms
+    apr_thread_mutex_t *px_errors_count_mutex;
 } px_config;
 
 typedef struct health_check_data_t {

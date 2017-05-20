@@ -1,8 +1,11 @@
 #include "px_utils.h"
 
+#include <apr_atomic.h>
+
 #include <arpa/inet.h>
 #include <apr_strings.h>
 #include <http_log.h>
+
 
 #define INFO(server_rec, ...) \
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server_rec, "[mod_perimeterx]: " __VA_ARGS__)
@@ -13,13 +16,17 @@
 static const char *JSON_CONTENT_TYPE = "Content-Type: application/json";
 static const char *EXPECT = "Expect:";
 
-void update_timeout_counter(px_config *conf) {
-    apr_thread_mutex_lock(conf->timeouts_count_mutex);
-    conf->timeouts_counter += 1;
-    if (conf->timeouts_counter >= conf->timeouts_threshold) {
-        apr_thread_cond_signal(conf->health_check_cond);
+void update_and_notify_health_check(px_config *conf, server_rec *server) {
+    if (!conf->px_service_monitor) {
+        return;
     }
-    apr_thread_mutex_unlock(conf->timeouts_count_mutex);
+    apr_uint32_t old_value = apr_atomic_inc32(&conf->px_errors_count);
+    apr_thread_mutex_lock(conf->px_errors_count_mutex);
+    if (old_value == conf->px_errors_threshold) {
+        apr_thread_cond_signal(conf->health_check_cond);
+        INFO(server, "current number of px service errors reached: %u", conf->px_errors_count);
+    }
+    apr_thread_mutex_unlock(conf->px_errors_count_mutex);
 }
 
 CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, px_config *conf, server_rec *server, char **response_data) {
@@ -47,31 +54,26 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, p
     CURLcode status = curl_easy_perform(curl);
     curl_slist_free_all(headers);
     size_t len;
-    switch (status) {
-        case CURLE_OK:
-            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
-            if (status_code == HTTP_OK) {
-                if (response_data != NULL) {
-                    *response_data = response.data;
-                } else {
-                    free(response.data);
-                }
-                return status;
-            }
-            ERROR(server, "post_request: status: %ld, url: %s", status_code, url);
-            status = CURLE_HTTP_RETURNED_ERROR;
-            break;
-        case CURLE_OPERATION_TIMEDOUT:
-            update_timeout_counter(conf);
-            INFO(server, "post_request timeouts: %d", conf->timeouts_counter);
-            break;
-        default:
-            len = strlen(errbuf);
-            if (len) {
-                ERROR(server, "post_request failed: %s", errbuf);
+    if (status == CURLE_OK) {
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
+        if (status_code == HTTP_OK) {
+            if (response_data != NULL) {
+                *response_data = response.data;
             } else {
-                ERROR(server, "post_request failed: %s", curl_easy_strerror(status));
+                free(response.data);
             }
+            return status;
+        }
+        ERROR(server, "post_request: status: %ld, url: %s", status_code, url);
+        status = CURLE_HTTP_RETURNED_ERROR;
+    } else {
+        update_and_notify_health_check(conf, server);
+        size_t len = strlen(errbuf);
+        if (len) {
+            ERROR(server, "post_request failed: %s", errbuf);
+        } else {
+            ERROR(server, "post_request failed: %s", curl_easy_strerror(status));
+        }
     }
     free(response.data);
     *response_data = NULL;

@@ -9,15 +9,17 @@
 #include <openssl/err.h>
 #include <openssl/evp.h>
 
-#include "httpd.h"
-#include "http_config.h"
-#include "http_protocol.h"
-#include "ap_config.h"
-#include "ap_provider.h"
-#include "http_request.h"
-#include "http_log.h"
-#include "apr_strings.h"
-#include "apr_escape.h"
+#include <httpd.h>
+#include <http_config.h>
+#include <http_protocol.h>
+#include <ap_config.h>
+#include <ap_provider.h>
+#include <http_request.h>
+#include <http_log.h>
+#include <apr_strings.h>
+#include <apr_escape.h>
+#include <apr_atomic.h>
+#include <apr_portable.h>
 
 #include "px_utils.h"
 #include "px_types.h"
@@ -74,8 +76,8 @@ int render_page(request_rec *r, const request_context *ctx, const px_config *con
 }
 
 int px_handle_request(request_rec *r, px_config *conf) {
-    // faill open mode
-    if (conf->timeouts_counter > conf->timeouts_threshold) {
+    // fail open mode
+    if (conf->px_errors_count >= conf->px_errors_threshold) {
         return OK;
     }
 
@@ -135,32 +137,40 @@ int px_handle_request(request_rec *r, px_config *conf) {
     return OK;
 }
 
+// Background thread that wakes up after reacing X timeoutes in interval length Y and checks when service is available again
 static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
-    //TODO: We still need to clean the timeouts counter in interval of X times
-    //TODO: add tid to all logs
+
+    apr_os_thread_t tid = apr_os_thread_current();
     health_check_data *hc = (health_check_data*) data;
+    px_config *conf = hc->config;
     INFO(hc->server, "starting health_check thread");
+
     const char *health_check_url = apr_psprintf(hc->server->process->pool, "%s/api/v1/kpi/status", hc->config->base_url);
     CURL *curl = curl_easy_init();
-
     CURLcode res;
+
+    long status_code;
     while (true) {
-        long status_code = 0;
+        status_code = 0;
+        apr_thread_mutex_lock(hc->config->px_errors_count_mutex);
         while (status_code != HTTP_OK) {
-            hc->config->timeouts_counter = 0;
+            hc->config->px_errors_count = 0;
             curl_easy_setopt(curl, CURLOPT_URL, health_check_url);
-            //TODO: hardcoded timeout
-            //TODO; check if we need to wait more than 1 seconds between health checks
+            // TODO: sleep between iterations?
             curl_easy_setopt(curl, CURLOPT_TIMEOUT, 1);
             res = curl_easy_perform(curl);
             if (res == CURLE_OK) {
                 curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
+                apr_atomic_set32(&hc->config->px_errors_count, 0);
                 INFO(hc->server, "PerimeterX service is healthy");
             }
         }
-        // TODO: (shikloshi) we need to change the mutex to avoid deadlock
-        apr_thread_cond_wait(hc->config->health_check_cond, hc->config->timeouts_count_mutex);
+        if (apr_thread_cond_timedwait(hc->config->health_check_cond, hc->config->px_errors_count_mutex, conf->px_errors_count_interval) == APR_TIMEUP) {
+            apr_atomic_set32(&hc->config->px_errors_count, 0);
+        }
+        apr_thread_mutex_unlock(hc->config->px_errors_count_mutex);
     }
+
     INFO(hc->server, "exiting health_check thread");
     curl_easy_cleanup(curl);
     return NULL;
@@ -234,26 +244,30 @@ static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
         apr_pool_cleanup_register(s->process->pool, cfg->activity_queue, apr_pool_cleanup_null, destroy_thread_pool);
     }
 
-    // setting up health_check thread
-    health_check_data *hc_data= (health_check_data*)apr_palloc(s->process->pool, sizeof(health_check_data));
-    hc_data->server = s;
-    hc_data->config = cfg;
-    apr_status_t rv;
-    rv = apr_thread_cond_create(&cfg->health_check_cond, s->process->pool);
-    //TODO: check error handling in this flow
-    if (rv != APR_SUCCESS) {
-        INFO(s, "error while init health_check thread cond");
-        exit(1);
-    }
-    rv = apr_thread_create(&cfg->health_check_thread, NULL, health_check, (void*) hc_data, s->process->pool);
-    if (rv != APR_SUCCESS) {
-        INFO(s, "error while init health_check thread create");
-        exit(1);
-    }
-    rv = apr_thread_mutex_create(&cfg->timeouts_count_mutex, 0, s->process->pool);
-    if (rv != APR_SUCCESS) {
-        INFO(s, "error while creating health_check thread mutex");
-        exit(1);
+    // setting up health_check thread is service monitor enabled
+    if (cfg->px_service_monitor) {
+
+        health_check_data *hc_data= (health_check_data*)apr_palloc(s->process->pool, sizeof(health_check_data));
+        apr_atomic_set32(&cfg->px_errors_count, 0);
+        hc_data->server = s;
+        hc_data->config = cfg;
+        apr_status_t rv;
+        rv = apr_thread_cond_create(&cfg->health_check_cond, s->process->pool);
+
+        if (rv != APR_SUCCESS) {
+            INFO(s, "error while init health_check thread cond");
+            exit(1);
+        }
+        rv = apr_thread_create(&cfg->health_check_thread, NULL, health_check, (void*) hc_data, s->process->pool);
+        if (rv != APR_SUCCESS) {
+            INFO(s, "error while init health_check thread create");
+            exit(1);
+        }
+        rv = apr_thread_mutex_create(&cfg->px_errors_count_mutex, 0, s->process->pool);
+        if (rv != APR_SUCCESS) {
+            INFO(s, "error while creating health_check thread mutex");
+            exit(1);
+        }
     }
 }
 
@@ -518,15 +532,32 @@ static const char *set_background_activity_send(cmd_parms *cmd, void *config, in
     return NULL;
 }
 
-static const char *set_max_timeout_threshold(cmd_parms *cmd, void *config, const char *arg) {
+static const char *set_px_service_monitor(cmd_parms *cmd, void *config, int arg) {
     px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    conf->timeouts_threshold = atoi(arg);
+    conf->px_service_monitor = arg ? true : false;
+    return NULL;
+
+}
+static const char *set_max_px_errors_threshold(cmd_parms *cmd, void *config, const char *arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->px_errors_threshold = atoi(arg);
     return NULL;
 }
 
+static const char *set_px_errors_count_interval(cmd_parms *cmd, void *config, const char *arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->px_errors_count_interval = atoi(arg) * 1000; // millisecond to microsecond
+    return NULL;
+}
 static const char *set_background_activity_workers(cmd_parms *cmd, void *config, const char *arg) {
     px_config *conf = get_config(cmd, config);
     if (!conf) {
@@ -562,7 +593,7 @@ static void *create_config(apr_pool_t *p) {
     px_config *conf = apr_pcalloc(p, sizeof(px_config));
     if (conf) {
         conf->module_enabled = false;
-        conf->api_timeout = 1L;
+        conf->api_timeout = 1000L;
         conf->send_page_activities = true;
         conf->blocking_score = 70;
         conf->captcha_enabled = true;
@@ -575,11 +606,6 @@ static void *create_config(apr_pool_t *p) {
         conf->activities_api_url = apr_pstrcat(p, conf->base_url, ACTIVITIES_API, NULL);
         conf->auth_token = "";
         conf->auth_header = "";
-        //TODO: check with barak if we can dismiss NULL assignments due to use of apr_pcalloc
-        conf->js_ref = NULL;
-        conf->css_ref = NULL;
-        conf->custom_logo = NULL;
-        conf->block_page_url = NULL;
         conf->routes_whitelist = apr_array_make(p, 0, sizeof(char*));
         conf->useragents_whitelist = apr_array_make(p, 0, sizeof(char*));
         conf->custom_file_ext_whitelist = apr_array_make(p, 0, sizeof(char*));
@@ -591,7 +617,9 @@ static void *create_config(apr_pool_t *p) {
         conf->background_activity_send = true;
         conf->background_activity_workers = 10;
         conf->background_activity_queue_size = 1000;
-        conf->timeouts_threshold = 100;
+        conf->px_errors_threshold = 10;
+        conf->px_errors_count_interval = 10000000; // 10 seconds
+        conf->px_service_monitor = false;
     }
     return conf;
 }
@@ -727,11 +755,21 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Queue size for background activity send"),
-    AP_INIT_TAKE1("MaxTimeoutThreshold", // TODO: better name
-            set_max_timeout_threshold,
+    AP_INIT_FLAG("PXServiceMonitor",
+            set_px_service_monitor,
             NULL,
             OR_ALL,
-            "Number of timeouts before running in fail open mode"),
+            "Background monitoring on PerimeterX service"),
+    AP_INIT_TAKE1("MaxPXErrorsThreshold",
+            set_max_px_errors_threshold,
+            NULL,
+            OR_ALL,
+            "Number of errors from px servers before running in fail open mode"),
+    AP_INIT_TAKE1("PXErrorsCountInterval",
+            set_px_errors_count_interval,
+            NULL,
+            OR_ALL,
+            "Time in seconds until we set the px server errors count back to zero"),
     { NULL }
 };
 
