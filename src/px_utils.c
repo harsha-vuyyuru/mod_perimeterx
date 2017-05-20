@@ -20,11 +20,11 @@ void update_and_notify_health_check(px_config *conf, server_rec *server) {
     if (!conf->px_service_monitor) {
         return;
     }
+    INFO(server, "current number of px service errors reached: %u", conf->px_errors_count);
     apr_uint32_t old_value = apr_atomic_inc32(&conf->px_errors_count);
     apr_thread_mutex_lock(conf->px_errors_count_mutex);
     if (old_value == conf->px_errors_threshold) {
         apr_thread_cond_signal(conf->health_check_cond);
-        INFO(server, "current number of px service errors reached: %u", conf->px_errors_count);
     }
     apr_thread_mutex_unlock(conf->px_errors_count_mutex);
 }

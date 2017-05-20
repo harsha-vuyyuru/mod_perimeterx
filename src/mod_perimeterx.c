@@ -163,10 +163,10 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
                 curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
                 apr_atomic_set32(&hc->config->px_errors_count, 0);
                 INFO(hc->server, "PerimeterX service is healthy");
+                if (apr_thread_cond_timedwait(hc->config->health_check_cond, hc->config->px_errors_count_mutex, conf->px_errors_count_interval) == APR_TIMEUP) {
+                    apr_atomic_set32(&hc->config->px_errors_count, 0);
+                }
             }
-        }
-        if (apr_thread_cond_timedwait(hc->config->health_check_cond, hc->config->px_errors_count_mutex, conf->px_errors_count_interval) == APR_TIMEUP) {
-            apr_atomic_set32(&hc->config->px_errors_count, 0);
         }
         apr_thread_mutex_unlock(hc->config->px_errors_count_mutex);
     }
