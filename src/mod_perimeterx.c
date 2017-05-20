@@ -290,7 +290,7 @@ static const char *set_api_timeout(cmd_parms *cmd, void *config, const char *api
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    conf->api_timeout = atoi(api_timeout) * 1000;
+    conf->api_timeout_ms = atoi(api_timeout) * 1000;
     return NULL;
 }
 
@@ -299,7 +299,7 @@ static const char *set_api_timeout_ms(cmd_parms *cmd, void *config, const char *
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    conf->api_timeout = atoi(api_timeout_ms);
+    conf->api_timeout_ms = atoi(api_timeout_ms);
     return NULL;
 }
 
@@ -493,7 +493,7 @@ static void *create_config(apr_pool_t *p) {
     px_config *conf = apr_pcalloc(p, sizeof(px_config));
     if (conf) {
         conf->module_enabled = false;
-        conf->api_timeout = 1L;
+        conf->api_timeout_ms = 1L;
         conf->send_page_activities = true;
         conf->blocking_score = 70;
         conf->captcha_enabled = true;
