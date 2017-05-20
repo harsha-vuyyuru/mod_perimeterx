@@ -63,16 +63,16 @@ extern const char *CALL_REASON_STR[];
 #endif // DEBUG
 
 int render_page(request_rec *r, const request_context *ctx, const px_config *conf) {
-  int ret_val;
-  char *html = NULL;
-  const char *tpl = conf->captcha_enabled ? captcha_tpl : block_tpl;
-  size_t size;
-  int res = render_template(tpl, &html, ctx, conf, &size);
-  if (res == 0) {
-    ret_val = ap_rwrite(html, size, r);
-  }
-  free(html);
-  return res;
+    int ret_val;
+    char *html = NULL;
+    const char *tpl = conf->captcha_enabled ? captcha_tpl : block_tpl;
+    size_t size;
+    int res = render_template(tpl, &html, ctx, conf, &size);
+    if (res == 0) {
+        ret_val = ap_rwrite(html, size, r);
+    }
+    free(html);
+    return res;
 }
 
 int px_handle_request(request_rec *r, px_config *conf) {
@@ -96,12 +96,6 @@ int px_handle_request(request_rec *r, px_config *conf) {
     request_context *ctx = create_context(r, conf);
     if (ctx) {
         bool request_valid = px_verify_request(ctx, conf);
-#ifdef DEBUG
-        apr_table_set(r->headers_out, "X-PX-SCORE", apr_itoa(r->pool, ctx->score));
-        apr_table_set(r->headers_out, "X-PX-EXTRACTED-IP", ctx->ip);
-        apr_table_set(r->headers_out, "X-PX-BLOCK-REASON", BLOCK_REASON_STR[ctx->block_reason]);
-        apr_table_set(r->headers_out, "X-PX-CALL-REASON", CALL_REASON_STR[ctx->call_reason]);
-#endif
         if (!request_valid && ctx->block_enabled) {
             if (r->method && strcmp(r->method, "POST") == 0) {
                 return HTTP_FORBIDDEN;
@@ -124,12 +118,12 @@ int px_handle_request(request_rec *r, px_config *conf) {
                 return HTTP_TEMPORARY_REDIRECT;
             }
             if (render_page(r, ctx, conf) != 0) {
-              ERROR(r->server, "Could not create block page with template, passing request");
+                ERROR(r->server, "Could not create block page with template, passing request");
             } else {
-              r->status = HTTP_FORBIDDEN;
-              ap_set_content_type(r, "text/html");
-              INFO(r->server, "px_handle_request: request blocked. captcha (%d)", conf->captcha_enabled);
-              return DONE;
+                r->status = HTTP_FORBIDDEN;
+                ap_set_content_type(r, "text/html");
+                INFO(r->server, "px_handle_request: request blocked. captcha (%d)", conf->captcha_enabled);
+                return DONE;
             }
         }
     }
@@ -139,39 +133,37 @@ int px_handle_request(request_rec *r, px_config *conf) {
 
 // Background thread that wakes up after reacing X timeoutes in interval length Y and checks when service is available again
 static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
-
-    apr_os_thread_t tid = apr_os_thread_current();
     health_check_data *hc = (health_check_data*) data;
     px_config *conf = hc->config;
-    INFO(hc->server, "starting health_check thread");
 
     const char *health_check_url = apr_psprintf(hc->server->process->pool, "%s/api/v1/kpi/status", hc->config->base_url);
+
     CURL *curl = curl_easy_init();
     CURLcode res;
-
-    long status_code;
-    while (true) {
-        status_code = 0;
-        apr_thread_mutex_lock(hc->config->px_errors_count_mutex);
-        while (status_code != HTTP_OK) {
-            hc->config->px_errors_count = 0;
-            curl_easy_setopt(curl, CURLOPT_URL, health_check_url);
-            // TODO: sleep between iterations?
-            curl_easy_setopt(curl, CURLOPT_TIMEOUT, 1);
-            res = curl_easy_perform(curl);
-            if (res == CURLE_OK) {
-                curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
-                apr_atomic_set32(&hc->config->px_errors_count, 0);
-                INFO(hc->server, "PerimeterX service is healthy");
-                if (apr_thread_cond_timedwait(hc->config->health_check_cond, hc->config->px_errors_count_mutex, conf->px_errors_count_interval) == APR_TIMEUP) {
-                    apr_atomic_set32(&hc->config->px_errors_count, 0);
-                }
+    while (1) {
+        // wait for condition and reset errors count on internal
+        apr_thread_mutex_lock(conf->health_check_cond_mutex);
+        while (apr_atomic_read32(&conf->px_errors_count) < conf->px_errors_threshold) {
+            if (apr_thread_cond_timedwait(conf->health_check_cond, conf->health_check_cond_mutex, conf->health_check_interval) == APR_TIMEUP) {
+                apr_atomic_set32(&conf->px_errors_count, 0);
             }
         }
-        apr_thread_mutex_unlock(hc->config->px_errors_count_mutex);
+        apr_thread_mutex_unlock(conf->health_check_cond_mutex);
+
+        // do health check until success
+        CURLcode res = CURLE_AGAIN;
+        while (res != CURLE_OK) {
+            curl_easy_setopt(curl, CURLOPT_URL, health_check_url);
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, conf->api_timeout);
+            res = curl_easy_perform(curl);
+            if (res != CURLE_OK && res != CURLE_OPERATION_TIMEDOUT) {
+                apr_sleep(1000); // TODO(barak): should be configured with nice default
+            }
+        }
+        apr_atomic_set32(&conf->px_errors_count, 0);
     }
 
-    INFO(hc->server, "exiting health_check thread");
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, "health_check thread exiting");
     curl_easy_cleanup(curl);
     return NULL;
 }
@@ -248,7 +240,7 @@ static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
     if (cfg->px_service_monitor) {
 
         health_check_data *hc_data= (health_check_data*)apr_palloc(s->process->pool, sizeof(health_check_data));
-        apr_atomic_set32(&cfg->px_errors_count, 0);
+        cfg->px_errors_count = 0;
         hc_data->server = s;
         hc_data->config = cfg;
         apr_status_t rv;
@@ -263,7 +255,7 @@ static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
             INFO(s, "error while init health_check thread create");
             exit(1);
         }
-        rv = apr_thread_mutex_create(&cfg->px_errors_count_mutex, 0, s->process->pool);
+        rv = apr_thread_mutex_create(&cfg->health_check_cond_mutex, 0, s->process->pool);
         if (rv != APR_SUCCESS) {
             INFO(s, "error while creating health_check thread mutex");
             exit(1);
@@ -555,7 +547,7 @@ static const char *set_px_errors_count_interval(cmd_parms *cmd, void *config, co
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    conf->px_errors_count_interval = atoi(arg) * 1000; // millisecond to microsecond
+    conf->health_check_interval = atoi(arg) * 1000; // millisecond to microsecond
     return NULL;
 }
 static const char *set_background_activity_workers(cmd_parms *cmd, void *config, const char *arg) {
@@ -618,7 +610,7 @@ static void *create_config(apr_pool_t *p) {
         conf->background_activity_workers = 10;
         conf->background_activity_queue_size = 1000;
         conf->px_errors_threshold = 10;
-        conf->px_errors_count_interval = 10000000; // 10 seconds
+        conf->health_check_interval = 10000000; // 10 seconds
         conf->px_service_monitor = false;
     }
     return conf;
