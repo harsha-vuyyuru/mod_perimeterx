@@ -493,7 +493,7 @@ static void *create_config(apr_pool_t *p) {
     px_config *conf = apr_pcalloc(p, sizeof(px_config));
     if (conf) {
         conf->module_enabled = false;
-        conf->api_timeout_ms = 1L;
+        conf->api_timeout_ms = 1000L;
         conf->send_page_activities = true;
         conf->blocking_score = 70;
         conf->captcha_enabled = true;
