@@ -238,7 +238,6 @@ static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
 
     // setting up health_check thread is service monitor enabled
     if (cfg->px_service_monitor) {
-
         health_check_data *hc_data= (health_check_data*)apr_palloc(s->process->pool, sizeof(health_check_data));
         cfg->px_errors_count = 0;
         hc_data->server = s;
