@@ -1,7 +1,7 @@
 Directives
 ===========================================
 
-- Basic:
+- [Basic](#basic):
 	- [PXEnabled](#enabled)
 	- [AppId](#appid)
 	- [CookieKey](#cookiekey)
@@ -15,7 +15,7 @@ Directives
 	- [BlockPageURL](#blockpageurl)
 	- [CurlPoolSize](#curlpoolsize)
 	- [BaseURL](#baseurl)
-- Filters: 
+- [Filters](#filters): 
 	- [DisableModByEnvvar](#disablemodbyenvvar)
 	- [SensitiveRoutes](#sensitiveroutes)
 	- [SensitiveRoutesPrefix](#sensitiveroutesprefix)
@@ -23,19 +23,21 @@ Directives
 	- [PXWhitelistUserAgents](#whitelistuseragents)
 	- [ExtensionWhitelist](#extensionwhitelist)
 	- [EnableBlockingByHostname](#blockingbyhostname)
-- Customizing block page: 
+- [Customizing block page](#blockpage): 
 	- [CustomLogo](#customlogo)
 	- [CSSRef](#cssref)
 	- [JSRef](#jsref)
-- Background activities send: 
+- [Background activities send](#backgroundactivitiessend): 
 	- [BackgroundActivitySend](#backgroundactivitysend)
 	- [BackgroundActivityWorkers](#backgroundactivityworkers)
 	- [BackgroundActivityQueueSize](#backgroundactivityqueuesize)
-- PerimeterX Service monitor:
+- [PerimeterX Service monitor](#servicemonitor):
 	- [PXServiceMonitor](#pxervicemonitor)
 	- [MaxPXErrorsThreshold](#maxpxerrorsthreshold)
 	- [PXErrorsCountInterval](#pxerrorscountinterval)
 
+
+## <a name="#basic"></a>Basic 
 
 ### <a name="enabled"></a> `PXEnabled` ###
 **description** : Enables the PerimeterX module
@@ -286,7 +288,6 @@ function getQueryString(name, url) {
 > Note: For optimized performance, it is best to use the number of running worker threads in your Apache server as the CurlPoolSize.
 
 
-
 ### <a name="baseurl"></a> `BaseURL` ###
 **description** : PerimeterX API server URL
 
@@ -297,6 +298,8 @@ function getQueryString(name, url) {
 **values** : string
 
 Determines PerimeterX server base URL.
+
+## <a name="#filters"></a>Filters 
 
 ### <a name="disablemodbyenvvar"></a> `DisableModByEnvvar` ###
 **description** : Disables the PerimeterX module if environment variable `PX_SKIP_MODULE` is set on the request.
@@ -416,4 +419,70 @@ Read more on `mod_setenvif` [here](https://httpd.apache.org/docs/current/mod/mod
 **values** : A whitespace delimited list of strings.
 
 **example**: `www.mysite.com www.mynewsite.com `
+
+## <a name="#backgroundactivitiessend"></a> Background activities send
+
+When `BackgroundActivitySend` is set to `On` - `page_requested` and `block` activities will be pushed to queue, each worker from the `BackgroundActivityWorkers` will consume this queue for activity and send it.
+
+### <a name="backgroundactivitysend"></a> `BackgroundActivitySend` 
+**description** : 
+
+**required**: No
+
+**default** : 
+
+**values** : 
+
+### <a name="backgroundactivityworkers"></a> `BackgroundActivityWorkers`
+**description** :
+
+**required**: No
+
+**default** : 
+
+**values** : 
+
+### <a name="backgroundactivityqueuesize"></a> `BackgroundActivityQueueSize`
+**description** :
+
+**required**: No
+
+**default** : 
+
+**values** : 
+
+## <a name="#filters"></a>PerimeterX Service monitor
+
+When `PXServiceMonitor` is set to `On` - the module will count errors from PerimeterX service and if the number of errors on the specific apache instance will reach `MaxPXErrorsThreshold` in `PXErrorsCountInterval` seconds - fail open startegy will be activated and the requestes will pass PerieterX module with out cuasing any delays.
+
+In the background there will be periodic health check with PerimeterX service and once service is healthy - the module will start handling requests again.
+
+### <a name="pxervicemonitor"></a> `PXServiceMonitor`
+**description** :
+
+**required**: No
+
+**default** : Off
+
+**values** : On | Off
+
+### <a name="maxpxerrorsthreshold"></a> `MaxPXErrorsThreshold`
+**description** :
+
+**required**: No
+
+**default** : 100
+
+**values** : Integer
+
+### <a name="pxerrorscountinterval"></a>`PXErrorsCountInterval`
+**description** : 
+
+**required**: No
+
+**default** : 10 Seconds
+
+**values** : Integer
+
+
 
