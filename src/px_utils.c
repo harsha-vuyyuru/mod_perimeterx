@@ -76,7 +76,9 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, p
         }
     }
     free(response.data);
-    *response_data = NULL;
+    if (response_data != NULL) {
+        *response_data = NULL;
+    }
     return status;
 }
 
