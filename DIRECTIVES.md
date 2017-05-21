@@ -27,12 +27,12 @@ Directives
 
 Determines PerimeterX server base URL.
 
-####<a name="ipheader">IPHeader Importacne</a>: 
+#### <a name="ipheader">IPHeader Importacne</a>: 
 
 * The order of headers in the configuration matters. The first header found with a value will be taken as the IP address.
 * If no valid IP address is found in the IP header list, the module will use [`useragent_ip`](https://httpd.apache.org/docs/2.4/developer/new_api_2_4.html) as the request IP.
 
-####<a name="customblockpage">About custom block page</a>: 
+#### <a name="customblockpage">About custom block page</a>: 
 
 This module will send a redirect response with the `Location` header in the following format: 
 
