@@ -26,7 +26,7 @@ typedef struct px_config_t {
     bool captcha_enabled;
     bool skip_mod_by_envvar;
     int blocking_score;
-    long api_timeout;
+    long api_timeout_ms;
     bool send_page_activities;
     const char *module_version;
     curl_pool *curl_pool;
@@ -45,7 +45,6 @@ typedef struct px_config_t {
     apr_queue_t *activity_queue;
     apr_thread_pool_t *activity_thread_pool;
 
-    // TODO: make different struct?
     bool px_service_monitor;
     apr_thread_mutex_t *health_check_cond_mutex;
     apr_thread_t *health_check_thread;
