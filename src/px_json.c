@@ -5,12 +5,6 @@
 #include <http_log.h>
 #include <apr_strings.h>
 
-#define INFO(server_rec, ...) \
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server_rec, "[mod_perimeterx]: " __VA_ARGS__)
-
-#define ERROR(server_rec, ...) \
-    ap_log_error(APLOG_MARK, APLOG_ERR, 0, server_rec, "[mod_perimeterx]:" __VA_ARGS__)
-
 static const char *BLOCKED_ACTIVITY_TYPE = "block";
 static const char *PAGE_REQUESTED_ACTIVITY_TYPE = "page_requested";
 
@@ -196,8 +190,7 @@ captcha_response *parse_captcha_response(const char* captcha_response_str, const
     json_error_t j_error;
     json_t *j_response = json_loads(captcha_response_str, 0, &j_error);
     if (!j_response) {
-        ERROR(ctx->r->server, "parse_captcha_response: failed to parse. error (%s), response (%s)",
-                j_error.text, captcha_response_str);
+        ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s]: parse_captcha_response: failed to parse. error (%s), response (%s)", ctx->app_id, j_error.text, captcha_response_str);
         return NULL;
     }
 
@@ -210,7 +203,7 @@ captcha_response *parse_captcha_response(const char* captcha_response_str, const
                 "uuid", &uuid,
                 "cid", &cid,
                 "vid", &vid)) {
-        ERROR(ctx->r->server, "parse_captcha_response: failed to unpack. response (%s)", captcha_response_str);
+        ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s]: parse_captcha_response: failed to unpack. response (%s)", ctx->app_id, captcha_response_str);
         json_decref(j_response);
         return NULL;
     }
@@ -230,7 +223,7 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
     json_error_t j_error;
     json_t *j_response = json_loads(risk_response_str, 0, &j_error);
     if (!j_response) {
-        ERROR(ctx->r->server, "parse_risk_response: failed to parse risk response. (%s)", risk_response_str);
+        ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s]: parse_risk_response: failed to parse risk response (%s)", ctx->app_id, risk_response_str);
         return NULL;
     }
 
@@ -244,7 +237,7 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
                 "score", &score,
                 "action", &action
                 )) {
-        ERROR(ctx->r->server, "parse_risk_response: failed to unpack risk response. (%s)", risk_response_str);
+        ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s]: parse_risk_response: failed to unpack risk response (%s)", ctx->app_id, risk_response_str);
         json_decref(j_response);
         return NULL;
     }
@@ -259,4 +252,3 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
     json_decref(j_response);
     return parsed_response;
 }
-

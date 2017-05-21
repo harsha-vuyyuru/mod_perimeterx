@@ -30,12 +30,6 @@ module AP_MODULE_DECLARE_DATA perimeterx_module;
 APLOG_USE_MODULE(perimeterx);
 #endif
 
-#define INFO(server_rec, ...) \
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server_rec, "[mod_perimeterx]: " __VA_ARGS__)
-
-#define ERROR(server_rec, ...) \
-    ap_log_error(APLOG_MARK, APLOG_ERR, 0, server_rec, "[mod_perimeterx]:" __VA_ARGS__)
-
 static const char *DEFAULT_BASE_URL = "https://sapi-%s.perimeterx.net";
 static const char *RISK_API = "/api/v2/risk";
 static const char *CAPTCHA_API = "/api/v1/risk/captcha";
@@ -61,16 +55,16 @@ extern const char *CALL_REASON_STR[];
 #endif // DEBUG
 
 int render_page(request_rec *r, const request_context *ctx, const px_config *conf) {
-  int ret_val;
-  char *html = NULL;
-  const char *tpl = conf->captcha_enabled ? captcha_tpl : block_tpl;
-  size_t size;
-  int res = render_template(tpl, &html, ctx, conf, &size);
-  if (res == 0) {
-    ret_val = ap_rwrite(html, size, r);
-  }
-  free(html);
-  return res;
+    int ret_val;
+    char *html = NULL;
+    const char *tpl = conf->captcha_enabled ? captcha_tpl : block_tpl;
+    size_t size;
+    int res = render_template(tpl, &html, ctx, conf, &size);
+    if (res == 0) {
+        ret_val = ap_rwrite(html, size, r);
+    }
+    free(html);
+    return res;
 }
 
 int px_handle_request(request_rec *r, px_config *conf) {
@@ -81,7 +75,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
     if (conf->skip_mod_by_envvar) {
         const char *skip_px = apr_table_get(r->subprocess_env, "PX_SKIP_MODULE");
         if  (skip_px != NULL) {
-            INFO(r->server, "px_handle_request: PX_SKIP_MODULE was set on the request - skipping request verification");
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: px_handle_request: PX_SKIP_MODULE was set on the request", conf->app_id);
             return OK;
         }
     }
@@ -117,16 +111,16 @@ int px_handle_request(request_rec *r, px_config *conf) {
                 return HTTP_TEMPORARY_REDIRECT;
             }
             if (render_page(r, ctx, conf) != 0) {
-              ERROR(r->server, "Could not create block page with template, passing request");
+                ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server, "[%s]: Could not create block page with template, passing request", conf->app_id);
             } else {
-              r->status = HTTP_FORBIDDEN;
-              ap_set_content_type(r, "text/html");
-              INFO(r->server, "px_handle_request: request blocked. captcha (%d)", conf->captcha_enabled);
-              return DONE;
+                r->status = HTTP_FORBIDDEN;
+                ap_set_content_type(r, "text/html");
+                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: px_handle_request: request blocked. (%d)", ctx->app_id, conf->captcha_enabled);
+                return DONE;
             }
         }
     }
-    INFO(r->server, "px_handle_request: request passed");
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: px_handle_request: request passed", ctx->app_id);
     return OK;
 }
 
@@ -135,8 +129,8 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
     px_config *conf = consumer_data->config;
     CURL *curl = curl_easy_init();
     void *v;
-    if (!curl ) {
-        ERROR(consumer_data->server, "could not create curl handle, thread will not run to consume messages");
+    if (!curl) {
+        ap_log_error(APLOG_MARK, LOG_ERR, 0, consumer_data->server, "[%s]: could not create curl handle, thread will not run to consume messages", conf->app_id);
         return NULL;
     }
     while (true) {
@@ -175,7 +169,7 @@ static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
     if (cfg->background_activity_send) {
         apr_status_t rv = apr_queue_create(&cfg->activity_queue, cfg->background_activity_queue_size, s->process->pool);
         if (rv != APR_SUCCESS) {
-            ERROR(s, "failed to initialize background activity queue");
+            ap_log_error(APLOG_MARK, LOG_ERR, 0, s, "[%s]: failed to initialize background activity queue", cfg->app_id);
             exit(1);
         }
         activity_consumer_data *consumer_data = apr_palloc(s->process->pool, sizeof(activity_consumer_data));
@@ -183,13 +177,13 @@ static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
         consumer_data->config = cfg;
         rv = apr_thread_pool_create(&cfg->activity_thread_pool, 0, cfg->background_activity_workers, s->process->pool);
         if (rv != APR_SUCCESS) {
-            ERROR(s, "failed to initialize background activity thread pool");
+            ap_log_error(APLOG_MARK, LOG_ERR, 0, s, "[%s]: failed to initialize background activity thread pool", cfg->app_id);
             exit(1);
         }
         for (unsigned int i = 0; i < cfg->background_activity_workers; ++i) {
             rv = apr_thread_pool_push(cfg->activity_thread_pool, background_activity_consumer, consumer_data, 0, NULL);
             if (rv != APR_SUCCESS) {
-                ERROR(s, "failed to push background activity consumer");
+                ap_log_error(APLOG_MARK, LOG_ERR, 0, s, "[%s]: failed to push background activity consumer", cfg->app_id);
             }
         }
         apr_pool_cleanup_register(s->process->pool, cfg->activity_queue, apr_pool_cleanup_null, destroy_activity_queue);

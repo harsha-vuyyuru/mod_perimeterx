@@ -4,12 +4,6 @@
 #include <apr_strings.h>
 #include <http_log.h>
 
-#define INFO(server_rec, ...) \
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server_rec, "[mod_perimeterx]: " __VA_ARGS__)
-
-#define ERROR(server_rec, ...) \
-    ap_log_error(APLOG_MARK, APLOG_ERR, 0, server_rec, "[mod_perimeterx]:" __VA_ARGS__)
-
 static const char *JSON_CONTENT_TYPE = "Content-Type: application/json";
 static const char *EXPECT = "Expect:";
 
@@ -47,14 +41,14 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, c
             }
             return status;
         }
-        ERROR(server, "post_request: status: %ld, url: %s", status_code, url);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server, "[%s]: post_request: status: %lu, url: %s", conf->app_id, status_code, url);
         status = CURLE_HTTP_RETURNED_ERROR;
     } else {
         size_t len = strlen(errbuf);
         if (len) {
-            ERROR(server, "post_request failed: %s", errbuf);
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server, "[%s]: post_request failed: %s", conf->app_id, errbuf);
         } else {
-            ERROR(server, "post_request failed: %s", curl_easy_strerror(status));
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server, "[%s]: post_request failed: %s", conf->app_id, curl_easy_strerror(status));
         }
     }
     free(response.data);
@@ -67,7 +61,7 @@ size_t write_response_cb(void* contents, size_t size, size_t nmemb, void *stream
     size_t realsize = size * nmemb;
     res->data = realloc(res->data, res->size + realsize + 1);
     if (res->data == NULL) {
-        ERROR(res->server, "not enough memory for post_request buffer alloc");
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, res->server, "[%s]: not enough memory for post_request buffer alloc", res->app_id);
         return 0;
     }
     memcpy(&(res->data[res->size]), contents, realsize);
