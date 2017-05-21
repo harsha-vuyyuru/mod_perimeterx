@@ -20,6 +20,7 @@
 #include <apr_escape.h>
 #include <apr_atomic.h>
 #include <apr_portable.h>
+#include <apr_signal.h>
 
 #include "px_utils.h"
 #include "px_types.h"
@@ -242,8 +243,9 @@ static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
                 ERROR(s, "failed to push background activity consumer");
             }
         }
-        apr_pool_cleanup_register(s->process->pool, cfg->activity_queue, apr_pool_cleanup_null, destroy_activity_queue);
-        apr_pool_cleanup_register(s->process->pool, cfg->activity_queue, apr_pool_cleanup_null, destroy_thread_pool);
+        apr_pool_cleanup_register(s->process->pool, cfg->activity_queue, destroy_activity_queue, apr_pool_cleanup_null);
+        apr_pool_cleanup_register(s->process->pool, cfg->activity_thread_pool, destroy_thread_pool, apr_pool_cleanup_null);
+        apr_pool_cleanup_register(s->process->pool, cfg->curl_pool, destroy_curl_pool, apr_pool_cleanup_null);
     }
 
     // setting up health_check thread is service monitor enabled
