@@ -2,7 +2,7 @@ Directives
 ===========================================
 
 - [Basic](#basic)
-- [Filters](#filters):
+- [Filters](#filters)
 - [Customizing block page](#blockpage)
 - [Background activities send](#backgroundactivitiessend)
 - [PerimeterX Service monitor](#servicemonitor)
