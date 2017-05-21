@@ -165,6 +165,7 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
 
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, "health_check thread exiting");
     curl_easy_cleanup(curl);
+    apr_thread_exit(thd, 0);
     return NULL;
 }
 
@@ -190,6 +191,7 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
         }
     }
     curl_easy_cleanup(curl);
+    apr_thread_exit(thd, 0);
     return NULL;
 }
 
@@ -207,9 +209,17 @@ static apr_status_t destroy_activity_queue(void *q) {
     return APR_SUCCESS;
 }
 
+static apr_status_t destroy_curl_pool(void *c) {
+    curl_pool *cp = (curl_pool*)c;
+    curl_pool_destroy(cp);
+    return APR_SUCCESS;
+}
+
 static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
     curl_global_init(CURL_GLOBAL_ALL);
     px_config *cfg = ap_get_module_config(s->module_config, &perimeterx_module);
+
+    cfg->curl_pool = curl_pool_create(s->process->pool, cfg->curl_pool_size);
 
     // setting up thread pool for background activities send
     if (cfg->background_activity_send) {
@@ -388,10 +398,6 @@ static const char *set_curl_pool_size(cmd_parms *cmd, void *config, const char *
         return MAX_CURL_POOL_SIZE_EXCEEDED;
     }
     conf->curl_pool_size = pool_size;
-    if (conf->curl_pool != NULL) {
-        curl_pool_destroy(conf->curl_pool);
-    }
-    conf->curl_pool = curl_pool_create(cmd->pool, conf->curl_pool_size);
     return NULL;
 }
 
@@ -600,7 +606,6 @@ static void *create_config(apr_pool_t *p) {
         conf->routes_whitelist = apr_array_make(p, 0, sizeof(char*));
         conf->useragents_whitelist = apr_array_make(p, 0, sizeof(char*));
         conf->custom_file_ext_whitelist = apr_array_make(p, 0, sizeof(char*));
-        conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
         conf->ip_header_keys = apr_array_make(p, 0, sizeof(char*));
         conf->sensitive_routes = apr_array_make(p, 0, sizeof(char*));
         conf->enabled_hostnames = apr_array_make(p, 0, sizeof(char*));
