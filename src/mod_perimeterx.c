@@ -284,7 +284,16 @@ static const char *set_api_timeout(cmd_parms *cmd, void *config, const char *api
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    conf->api_timeout = atoi(api_timeout);
+    conf->api_timeout_ms = atoi(api_timeout) * 1000;
+    return NULL;
+}
+
+static const char *set_api_timeout_ms(cmd_parms *cmd, void *config, const char *api_timeout_ms) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->api_timeout_ms = atoi(api_timeout_ms);
     return NULL;
 }
 
@@ -478,7 +487,7 @@ static void *create_config(apr_pool_t *p) {
     px_config *conf = apr_pcalloc(p, sizeof(px_config));
     if (conf) {
         conf->module_enabled = false;
-        conf->api_timeout = 1L;
+        conf->api_timeout_ms = 1000L;
         conf->send_page_activities = true;
         conf->blocking_score = 70;
         conf->captcha_enabled = true;
@@ -560,7 +569,12 @@ static const command_rec px_directives[] = {
             set_api_timeout,
             NULL,
             OR_ALL,
-            "Set timeout for risk API request"),
+            "Set timeout for risk API request in seconds"),
+    AP_INIT_TAKE1("APITimeoutMS",
+            set_api_timeout_ms,
+            NULL,
+            OR_ALL,
+            "Set timeout for risk API request in milliseconds"),
     AP_INIT_FLAG("ReportPageRequest",
             set_pagerequest_enabled,
             NULL,
