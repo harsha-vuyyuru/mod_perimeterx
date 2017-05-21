@@ -1,156 +1,38 @@
 Directives
 ===========================================
 
-- [Basic](#basic):
-	- [PXEnabled](#enabled)
-	- [AppId](#appid)
-	- [CookieKey](#cookiekey)
-	- [AuthToken](#authtoken)
-	- [BlockingScore](#blockingscore)
-	- [Captcha](#captcha)
-	- [ReportPageRequested](#reportpagerequested)
-	- [APITimeout](#apitimeout)
-	- [APITimeoutMS](#apitimeoutms)
-	- [IPHeader](#ipheader)
-	- [BlockPageURL](#blockpageurl)
-	- [CurlPoolSize](#curlpoolsize)
-	- [BaseURL](#baseurl)
-- [Filters](#filters): 
-	- [DisableModByEnvvar](#disablemodbyenvvar)
-	- [SensitiveRoutes](#sensitiveroutes)
-	- [SensitiveRoutesPrefix](#sensitiveroutesprefix)
-	- [PXWhitelistRoutes](#whitelistroutes)
-	- [PXWhitelistUserAgents](#whitelistuseragents)
-	- [ExtensionWhitelist](#extensionwhitelist)
-	- [EnableBlockingByHostname](#blockingbyhostname)
-- [Customizing block page](#blockpage): 
-	- [CustomLogo](#customlogo)
-	- [CSSRef](#cssref)
-	- [JSRef](#jsref)
-- [Background activities send](#backgroundactivitiessend): 
-	- [BackgroundActivitySend](#backgroundactivitysend)
-	- [BackgroundActivityWorkers](#backgroundactivityworkers)
-	- [BackgroundActivityQueueSize](#backgroundactivityqueuesize)
-- [PerimeterX Service monitor](#servicemonitor):
-	- [PXServiceMonitor](#pxervicemonitor)
-	- [MaxPXErrorsThreshold](#maxpxerrorsthreshold)
-	- [PXErrorsCountInterval](#pxerrorscountinterval)
+- [Basic](#basic)
+- [Filters](#filters):
+- [Customizing block page](#blockpage)
+- [Background activities send](#backgroundactivitiessend)
+- [PerimeterX Service monitor](#servicemonitor)
 
 
 ## <a name="#basic"></a>Basic 
 
-### <a name="enabled"></a> `PXEnabled` ###
-**description** : Enables the PerimeterX module
+|Directive Name| Description   | Default value   | Values  | Note
+|---|---|---|---|---|
+| PXEnabled   | Flag for enabling \ disabling Perimeterx protection, Off - disabled, On - enabled	 | Off  | On / Off |
+| AppId  | PX custom application id in the format of PX______	  | NULL | String  |
+| CookieKey  | Key used for cookie signing - Can be found \ generated in PX portal - Policy page. | NULL  |   |   |
+| AuthToken | JWT token used for REST API - Can be found \ generated in PX portal - Application page.  | NULL  | String |
+| BlockingScore | When requests with a score equal to or higher value they will be blocked.  | 70  | 0 - 100  |
+| Captcha | Enable reCaptcha on the blocking page  | On  | On / Off  | When using a custom block page with captcha abilities implementation, this option must be `On`.
+| ReportPageRequest | Boolean flag to enable or disable sending activities and metrics to PerimeterX on each page request. Enabling this feature will provide data that populates the PerimeterX portal with valuable information	  |  On | On / Off  |
+| APITimeoutMS |  REST API timeout in milliseconds | 1000  | Integer  | In case APITimeoutMS and APITimeout (deprecated but supported for backward compatibility) are both set in the module configuration - the one that is set later in the file will be the one that will be used. Any other value set prior of it will be discarded.
+| IPHeader | List of HTTP header names that contain the real client IP address. Use this feature when your server is behind a CDN. | NULL | List |  [IPHeader Importacne](#ipheader)
+| BlockPageURL | The Apache module allows you to customize your blocking page - Under this configuration, you need to specify the URL to a blocking page HTML file (relative to servers `DocumentRoot`). | NULL  | String  | [About custom block page](#customblockpage)
+| CurlPoolSize | The number of active curl handles for each server  | 40  | Integer 1-1000  | For optimized performance, it is best to use the number of running worker threads in your Apache server as the CurlPoolSize.
+| BaseURL |  Determines PerimeterX server base URL. | https://sapi-\<app_id\>.perimeterx.net  | String |
 
-**required** : yes
+Determines PerimeterX server base URL.
 
-**default** : Off
-
-**values** : On|Off
-
-When set to ```On``` the module will be applied on webpage requests.
-
-### <a name="appid"></a> `AppId` ###
-
-**description** : Unique application ID
-
-**required** : yes
-
-**default** : NULL
-
-**values** : string
-
-### <a name="cookiekey"></a> `CookieKey` ###
-**description** : Cookie signing key
-
-**required** : yes
-
-**default** : NULL
-
-**values** : string
-
-### <a name="authtoken"></a> `AuthToken` ###
-**description** : API authentication token
-
-**required** : yes
-
-**default** : NULL
-
-**values** : string
-
-### <a name="blockingscore"></a>`BlockingScore` ###
-**description** : Blocking score. When requests with a score equal to or higher value they will be blocked.
-
-**required** : No
-
-**default** : 70
-
-**values** : Integer between 0 and 100
-
-### <a name="captcha"></a> `Captcha` ###
-
-**description** : Enable reCaptcha on the blocking page. 
-
-***Note***: When using a custom block page with captcha abilities implementation, this option must be `On`.
-
-**required** : No
-
-**default** : On
-
-**values** : On | Off
-
-### <a name="reportpagerequested"></a> `ReportPageRequest` ###
-
-**description** : Enables the ablity to report page requests and blocking activities to PerimeterX.
-
-**required** : No
-
-**default** : On
-
-**values** : On | Off
-
-### <a name="apitimeout"></a> `APITimeoutMS` ###
-
-**description** : Timeout, in *milliseconds*, for API  calls.
-
-**required** : No
-
-**default** : 1000
-
-**values** : Integer
-
-### <a name="apitimeout"></a> `APITimeout` ###
-**description** : Timeout, in *seconds*, for API calls.
-
-**required** : No
-
-**default** : 1
-
-**values** : Integer between 1 and 3
-
-> Note: If APITimeout and APITimeoutMS are both set in the module configuration - the one that is set later in the file will be the one that will be used. Any other value set prior of it will be discarded.
-
-### <a name="ipheader"></a> `IPHeader` ###
-
-**description** : List of HTTP header names that contain the real client IP address. Use this feature when your server is behind a CDN.
-
-**required** : No
-
-**default** : NULL
-
-**values** : List of strings
-
-***Note***: 
+####<a name="ipheader">IPHeader Importacne</a>: 
 
 * The order of headers in the configuration matters. The first header found with a value will be taken as the IP address.
 * If no valid IP address is found in the IP header list, the module will use [`useragent_ip`](https://httpd.apache.org/docs/2.4/developer/new_api_2_4.html) as the request IP.
 
-
-### <a name="blockpageurl"></a> `BlockPageURL`
-
-The Apache module allows you to customize your blocking page.
-
-Under this configuration, you need to specify the URL to a blocking page HTML file (relative to servers `DocumentRoot`).
+####<a name="customblockpage">About custom block page</a>: 
 
 This module will send a redirect response with the `Location` header in the following format: 
 
@@ -160,13 +42,7 @@ $host/$blockpageURL?url=${original_request_url}&uuid=${uuid}&vid=${vid}
 
 The Visitor ID (vid) must be extracted from this URL for captcha JS snippet use (see below for explanation and example).
 
-**required**: No. If not specified, the default block page will be used.
-
-**default**: NULL
-
-**value**: String
-
-***Note***: When using a custom block page with captcha abilities implemented, the `Captcha` configuration option must be `On`.
+> Note: When using a custom block page with captcha abilities implemented, the `Captcha` configuration option must be `On`.
 
 #### Blocked user example: 
 
@@ -274,30 +150,6 @@ function getQueryString(name, url) {
 <html>
 ```
 
-### <a name="curlpoolsize"></a> `CurlPoolSize` ###
-**description** : The number of active curl handles for each server
-
-**required** : No
-
-**default** : 40
-
-**max**: 10000
-
-**values** : Integer
-
-> Note: For optimized performance, it is best to use the number of running worker threads in your Apache server as the CurlPoolSize.
-
-
-### <a name="baseurl"></a> `BaseURL` ###
-**description** : PerimeterX API server URL
-
-**required** : No
-
-**default** : https://collector.perimeterx.net
-
-**values** : string
-
-Determines PerimeterX server base URL.
 
 ## <a name="#filters"></a>Filters 
 

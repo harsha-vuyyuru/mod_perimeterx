@@ -12,7 +12,7 @@ Table of Contents
   -   [Dependencies](#dependencies)
   -   [Installation](#installation)
   -   [Basic Usage Example](#basic-usage)
--   [Directives](#directives)
+-   [Directives](#directives.md5)
 -   [Contributing](#contributing)
   -   [Tests](#tests)
 
@@ -60,9 +60,6 @@ Loaded Modules:
  ...
  perimeterx_module (shared)
 ```
-
-##[Directives] (directives.md)##
-
 
 ## <a name="custom-block-page"></a> Customizing Default Block Pages
 
