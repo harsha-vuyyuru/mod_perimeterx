@@ -14,7 +14,7 @@ Table of Contents
 	- [Basic Usage Example](#basic-usage)
 - [Directives](DIRECTIVES.md)
 - [Custom Block page](BLOCKPAGE.md)
-- [Logging and Troubleshoot](#troubleshoot)
+- [Logging and Troubleshooting](#troubleshoot)
 - [Contributing](#contributing)
 	- [Tests](#tests)
 
@@ -97,7 +97,7 @@ Loaded Modules:
 </IfModule>
 ```
 
-* Configuration for specific VirtuaHost
+* Configuration for specific VirtualHost
 
 ```xml
 <VirtualHost *:80>
@@ -115,7 +115,7 @@ Loaded Modules:
 </VirtualHost>
 ```
 
-<a name="troubleshoot"></a>Logging and Troubleshoot
+<a name="troubleshoot"></a>Logging and Troubleshooting
 ----------------------------------------
 ### Debug Logs
 mod_perimeterx is writing to apace error log. 
