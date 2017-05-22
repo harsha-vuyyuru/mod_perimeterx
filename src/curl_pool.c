@@ -80,6 +80,7 @@ CURL *curl_pool_get_timedwait(curl_pool *pool, apr_interval_time_t timeout) {
                 if  (c) {
                     pool->data[i] = NULL;
                     pool->used += 1;
+                    found = true;
                     break;
                 }
             }
