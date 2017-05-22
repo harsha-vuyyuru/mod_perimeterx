@@ -610,7 +610,7 @@ static void *create_config(apr_pool_t *p) {
         conf->background_activity_workers = 10;
         conf->background_activity_queue_size = 1000;
         conf->px_errors_threshold = 100;
-        conf->health_check_interval = 10000000; // 10 seconds
+        conf->health_check_interval = 60000000; // 1 minute
         conf->px_service_monitor = false;
     }
     return conf;

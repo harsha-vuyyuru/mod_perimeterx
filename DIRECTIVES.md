@@ -153,16 +153,18 @@ function getQueryString(name, url) {
 
 ## <a name="#filters"></a>Filters 
 
-### <a name="disablemodbyenvvar"></a> `DisableModByEnvvar` ###
-**description** : Disables the PerimeterX module if environment variable `PX_SKIP_MODULE` is set on the request.
+|     Directive Name    |                                                                                                Description                                                                                               | Default value |  Values  |          Note           |
+|:---------------------:|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|:-------------:|:--------:|:-----------------------:|
+|    SensitiveRoutes    | List of routes the Perimeterx module will always do a server-to-server call for, even if the cookie score is low and valid                                                                               | Empty list    | List     |  /login                       |
+| SensitiveRoutesPrefix | List of routes prefix. The PerimeterX module will always match request URI by this prefix list and if match was found will create a server-to-server call for, even if the cookie score is low and valid | Empty list    | List     |                         |
+|   DisableModByEnvvar  | Disables the PerimeterX module if environment variable `PX_SKIP_MODULE` is set on the request.                                                                                                           | Off           | On / Off | [Examples and Use cases](#disablemodenvvar)  |
+|   PXWhitelistRoutes   | A whitespace seperated list of paths that will not be examined by PX module.                                                                                                                             | Empy list     | List     | /server-status /staging |
+| PXWhitelistUserAgents | A whitespace seperated list of User-Agents that will not be examined by PX module.                                                                                                                       | Empty list    | List     |                         |
+| ExtensionWhitelist    | A whitespace seperated list of file extensions that will not be examined by PX module. | .css, .bmp, .tif, .ttf, .docx, .woff2, .js, .pict, .tiff, .eot, .xlsx, .jpg, .csv,,.eps, .woff, .xls, .jpeg, .doc, .ejs, .otf, .pptx, .gif, .pdf, .swf, .svg, .ps,,.ico, .pls, .midi, .svgz, .class, .png, .ppt, .mid, webp, .jar. | List | When using this option, the default values are cleared and the supplied list will be used |
+| EnableBlockingByHostname |     A whitespace seperated list of hostnames that PX module will enable block for.     |                                                                                                              Empy list                                                                                                             | List | If this option is present - only hostnames appear in this list will pass through mod_perimeterx. |
 
-**required** : No
 
-**default** : Off
-
-**values** : On|Off
-
-##### Examples
+#### <a name="disablemodenvvar"></a>DisableModByEnvvar Examples and Use cases:
 
 By using `mod_setenvif` you can configure a set of rules to set the `PX_SKIP_MODULE` variable on a request.
 
@@ -193,115 +195,18 @@ SetEnvIf User-Agent good-bot PX_SKIP_MODULE true
 
 Read more on `mod_setenvif` [here](https://httpd.apache.org/docs/current/mod/mod_setenvif.html).
  
-**`mod_env` is not supported with this feature. Though the syntax is similiar to mod_setenvif, the module is different. Mod_env will only run after the PerimeterX module in the Apache fixups phase. You should NOT use the `SetEnv` directive to set the `PX_SKIP_MODULE` variable.**
-
-### <a name="sensitiveroutes"></a> `SensitiveRoutes`
-
-**descripotion** : List of routes the Perimeterx module will always do a server-to-server call for, even if the cookie score is low and valid. 
-
-**required** : No
-
-**default** : Empty list
-
-**values** : A whitespace seperated list of strings.
-
-**example** : `/api/checkout /users/login`
-
-### <a name="sensitiveroutesprefix"></a>`SensitiveRoutesPrefix`
-
-**descripotion** : List of routes prefix. The Perimeterx module will always match request uri by this prefix list and if match was found will create a server-to-server call for, even if the cookie score is low and valid. 
-
-**required** : No
-
-**default** : Empty list
-
-**values** : A whitespace seperated list of strings.
-
-**example** : `/api /users`
-
-
-###<a name="whitelistroutes"></a> `PXWhitelistRoutes`
-
-**descripotion** : A whitespace seperated list of paths that will not be examined by PX module. 
-
-**required** : No
-
-**default** : Empty list
-
-**values** : A whitespace seperated list of strings.
-
-**example** : `/server-status /staging`
-
-### <a name="whitelistuseragent"></a> `PXWhitelistUserAgents`
-
-**description** : A whitespace seperated list of User-Agents that will not be examined by PX module.
-
-**required**: No
-
-**default** : Empty list
-
-**values** : A backspace delimited list of strings.
-
-### <a name="extensionwhitelist"></a> `ExtensionWhitelist`
-
-**description** : A whitespace seperated list of file extensions that will not be examined by PX module.
-
-**required**: No
-
-**default** : .css, .bmp, .tif, .ttf, .docx, .woff2, .js, .pict, .tiff, .eot, .xlsx, .jpg, .csv,
-    .eps, .woff, .xls, .jpeg, .doc, .ejs, .otf, .pptx, .gif, .pdf, .swf, .svg, .ps,
-    .ico, .pls, .midi, .svgz, .class, .png, .ppt, .mid, webp, .jar.
-    
-**Note**: When using this option, the default values are cleared and the supplied list will be used instead.
-
-**values** : A whitespace delimited list of strings.
-
-**example**: `.txt .css .jpeg`
-
-### <a name="blockingbyhostname"></a>`EnableBlockingByHostname`
-
-**description** : A whitespace seperated list of hostnames that PX module will enable block for.
-
-**required**: No
-
-**default** : Empty list
-    
-> **Note**: If this option is persent - only hostnames appear in this list will pass through mod_perimeterx.
-
-**values** : A whitespace delimited list of strings.
-
-**example**: `www.mysite.com www.mynewsite.com `
+**`mod_env` is not supported with this feature. Though the syntax is similiar to mod_setenvif, the module is different. Mod_env will only run after the PerimeterX module in the Apache fixups phase. You should NOT use the `SetEnv` directive to set the `PX_SKIP_MODULE`
 
 ## <a name="#backgroundactivitiessend"></a> Background activities send
 
 When `BackgroundActivitySend` is set to `On` - `page_requested` and `block` activities will be pushed to queue, each worker from the `BackgroundActivityWorkers` will consume this queue for activity and send it.
 
-### <a name="backgroundactivitysend"></a> `BackgroundActivitySend` 
-**description** : 
+|        Directive Name       |                                                                   Description                                                                   | Default value |  Values  |                                                           Note                                                           |
+|:---------------------------:|:-----------------------------------------------------------------------------------------------------------------------------------------------:|:-------------:|:--------:|:------------------------------------------------------------------------------------------------------------------------:|
+|    BackgroundActivitySend   |  Boolean flag to allow background activity (page_requested / activity) send without blocking the original request from continue with processing |      Off      | On / Off |                                                                                                                          |
+|  BackgroundActivityWorkers  | Number of worker thread in the thread pool that will handle the background send (fetching from activities queue and send to PerimeterX servers) |       10      |  Integer |                                                                                                                          |
+| BackgroundActivityQueueSize |                                Activities queue size from which the workers will fetch activities from and send.                                |      1000     |  Integer | When queue reaches it's full capacity - the push operation will block until queue size is less than the max size we set. |
 
-**required**: No
-
-**default** : 
-
-**values** : 
-
-### <a name="backgroundactivityworkers"></a> `BackgroundActivityWorkers`
-**description** :
-
-**required**: No
-
-**default** : 
-
-**values** : 
-
-### <a name="backgroundactivityqueuesize"></a> `BackgroundActivityQueueSize`
-**description** :
-
-**required**: No
-
-**default** : 
-
-**values** : 
 
 ## <a name="#filters"></a>PerimeterX Service monitor
 
@@ -309,32 +214,12 @@ When `PXServiceMonitor` is set to `On` - the module will count errors from Perim
 
 In the background there will be periodic health check with PerimeterX service and once service is healthy - the module will start handling requests again.
 
-### <a name="pxervicemonitor"></a> `PXServiceMonitor`
-**description** :
+|     Directive Name    |                                                                                                        Description                                                                                                       | Default value |  Values  | Note |
+|:---------------------:|:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|:-------------:|:--------:|:----:|
+|    PXServiceMonitor   |                                     Boolean flag to allow self disable PerimeterX module when PerimeterX service is unhealthy and periodic examine the service until it is healthy.                                      |      Off      | On / Off |      |
+|  MaxPXErrorsThreshold |                                                        Number  of allowed PerimeterX service errors (during an interval) until we will block the PerimeterX module                                                       |       10      |  Integer |      |
+| PXErrorsCountInterval | Time interval - In milliseconds -  in which we will count any kind of non successful call for PerimeterX service - when time is reached, without reaching the MaxPXErrorsThreshold, the counter will be set back to zero |    60000 MS   |  Integer |      |
 
-**required**: No
-
-**default** : Off
-
-**values** : On | Off
-
-### <a name="maxpxerrorsthreshold"></a> `MaxPXErrorsThreshold`
-**description** :
-
-**required**: No
-
-**default** : 100
-
-**values** : Integer
-
-### <a name="pxerrorscountinterval"></a>`PXErrorsCountInterval`
-**description** : 
-
-**required**: No
-
-**default** : 10 Seconds
-
-**values** : Integer
 
 
 
