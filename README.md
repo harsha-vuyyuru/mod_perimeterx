@@ -13,9 +13,10 @@ Table of Contents
 	- [Installation](#installation)
 	- [Basic Usage Example](#basic-usage)
 - [Directives](DIRECTIVES.md)
+- [Custom Block page](BLOCKPAGE.md)
 - [Logging and Troubleshoot](#troubleshoot)
 - [Contributing](#contributing)
-  - [Tests](#tests)
+	- [Tests](#tests)
 
 
 <a name="Usage"></a>

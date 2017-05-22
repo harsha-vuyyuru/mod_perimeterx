@@ -21,7 +21,6 @@ Directives
 | ReportPageRequest | Boolean flag to enable or disable sending activities and metrics to PerimeterX on each page request. Enabling this feature will provide data that populates the PerimeterX portal with valuable information	  |  On | On / Off  |
 | APITimeoutMS |  REST API timeout in milliseconds | 1000  | Integer  | In case APITimeoutMS and APITimeout (deprecated but supported for backward compatibility) are both set in the module configuration - the one that is set later in the file will be the one that will be used. Any other value set prior of it will be discarded.
 | IPHeader | List of HTTP header names that contain the real client IP address. Use this feature when your server is behind a CDN. | NULL | List |  [IPHeader Importacne](#ipheader)
-| BlockPageURL | The Apache module allows you to customize your blocking page - Under this configuration, you need to specify the URL to a blocking page HTML file (relative to servers `DocumentRoot`). | NULL  | String  | [About custom block page](#customblockpage)
 | CurlPoolSize | The number of active curl handles for each server  | 40  | Integer 1-1000  | For optimized performance, it is best to use the number of running worker threads in your Apache server as the CurlPoolSize.
 | BaseURL |  Determines PerimeterX server base URL. | https://sapi-\<app_id\>.perimeterx.net  | String |
 
@@ -30,123 +29,14 @@ Directives
 * The order of headers in the configuration matters. The first header found with a value will be taken as the IP address.
 * If no valid IP address is found in the IP header list, the module will use [`useragent_ip`](https://httpd.apache.org/docs/2.4/developer/new_api_2_4.html) as the request IP.
 
-#### <a name="customblockpage">About custom block page</a>: 
+## <a name="blockpage"></a>Customizing block page:
+| Directive Name |                                                                  Description                                                                  | Default value | Values |                                 Note                                 |
+|:--------------:|:---------------------------------------------------------------------------------------------------------------------------------------------:|:-------------:|:------:|:--------------------------------------------------------------------:|
+|  BlockPageURL  |                                                     [Explanation & Examples](#BLOCKPAGE.md)                                                    |      NULL     | String | The block page URL should be specified as relative to `DocumentRoot` |
+|   CustomLogo   | The logo will be displayed at the top div of the the block page. The logo's max-heigh property would be 150px and width would be set to auto. |      NULL     | String |                                                                      |
+|     CSSRef     |              The block page can be modified with a custom CSS by adding the CSSRef directive and providing a valid URL to the css             |      NULL     | String |                                                                      |
+|      JSRef     |  The block page can be added with custom JS file by adding JSRef directive and providing the JS file that will be loaded with the block page. |      NULL     | String |                                                                      |
 
-This module will send a redirect response with the `Location` header in the following format: 
-
-```
-$host/$blockpageURL?url=${original_request_url}&uuid=${uuid}&vid=${vid}
-```
-
-The Visitor ID (vid) must be extracted from this URL for captcha JS snippet use (see below for explanation and example).
-
-> Note: When using a custom block page with captcha abilities implemented, the `Captcha` configuration option must be `On`.
-
-#### Blocked user example: 
-
-If I'm blocked when browsing to `http://www.mysite.com/coolpage`, and the server configuration is: 
-
-```xml
-BlockPageURL /block.html
-```
-
-Redirect URL will be: 
-
-```
-http://www.mysite.com/block.html&url=coolpage&uuid=uuid=e8e6efb0-8a59-11e6-815c-3bdad80c1d39&vid=08320300-6516-11e6-9308-b9c827550d47
-```
-
-
-When captcha is enabled, the block page **must** include the following:
-
-###### Custom blockpage requirements:
-
-* Inside `<head>` section:
-
-```html
-<script src="https://www.google.com/recaptcha/api.js"></script>
-<script>
-function handleCaptcha(response) {
-    var vid = getQueryString("vid"); // getQueryString is implemented below
-    var uuid = getQueryString("uuid");
-    var name = '_pxCaptcha';
-    var expiryUtc = new Date(Date.now() + 1000 * 10).toUTCString();
-    var cookieParts = [name, '=', response + ':' + uuid + ':' + vid, '; expires=', expiryUtc, '; path=/'];
-    document.cookie = cookieParts.join('');
-    var originalURL = getQueryString("url");
-    var originalHost = window.location.host;
-    window.location.href = window.location.protocol + "//" +  originalHost + originalURL;
-}
-
-// http://stackoverflow.com/questions/901115/how-can-i-get-query-string-values-in-javascript
-function getQueryString(name, url) {
-    if (!url) url = window.location.href;
-    name = name.replace(/[\[\]]/g, "\\$&");
-    var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
-            results = regex.exec(url);
-    if (!results) return null;
-    if (!results[2]) return '';
-    return decodeURIComponent(results[2].replace(/\+/g, " "));
-}
-</script>
-```
-* Inside `<body>` section:
-
-```
-<div class="g-recaptcha" data-sitekey="6Lcj-R8TAAAAABs3FrRPuQhLMbp5QrHsHufzLf7b" data-callback="handleCaptcha" data-theme="dark"></div>
-```
-
-* [PerimeterX Javascript snippet](https://console.perimeterx.com/#/app/applicationsmgmt).
-
-#### configuration example:
- 
-```xml
-<IfModule mod_perimeterx.c>
-	...
-	BlockPageURL /blockpage.html
-	...
-</IfModule>
-```
-
-#### Block page implementation full example: 
-
-```html
-<html>
-    <head>
-        <script src="https://www.google.com/recaptcha/api.js"></script>
-        <script>
-        function handleCaptcha(response) {
-            var vid = getQueryString("vid");
-            var uuid = getQueryString("uuid");
-            var name = '_pxCaptcha';
-            var expiryUtc = new Date(Date.now() + 1000 * 10).toUTCString();
-            var cookieParts = [name, '=', response + ':' + uuid + ':' + vid, '; expires=', expiryUtc, '; path=/'];
-            document.cookie = cookieParts.join('');
-            // after getting resopnse we want to reaload the original page requested
-            var originalURL = getQueryString("url");
-            var originalHost = window.location.host;
-            window.location.href = window.location.protocol + "//" +  originalHost + originalURL;
-        }
-       
-       // http://stackoverflow.com/questions/901115/how-can-i-get-query-string-values-in-javascript	
-	function getQueryString(name, url) {
-		if (!url) url = window.location.href;
-		name = name.replace(/[\[\]]/g, "\\$&");
-		var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
-			results = regex.exec(url);
-		if (!results) return null;
-		if (!results[2]) return '';
-		return decodeURIComponent(results[2].replace(/\+/g, " "));
-	}
-        </script>
-    </head>
-    <body>
-        <h1>You are Blocked</h1>
-        <p>Try and solve the captcha</p> 
-        <div class="g-recaptcha" data-sitekey="6Lcj-R8TAAAAABs3FrRPuQhLMbp5QrHsHufzLf7b" data-callback="handleCaptcha" data-theme="dark"></div>
-    </body>
-<html>
-```
 
 
 ## <a name="#filters"></a>Filters 
