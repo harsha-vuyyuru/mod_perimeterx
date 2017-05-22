@@ -12,6 +12,7 @@ Table of Contents
   -   [Dependencies](#dependencies)
   -   [Installation](#installation)
   -   [Basic Usage Example](#basic-usage)
+- [Logging and Troubleshoot](#troubleshoot)
 -   [Directives](DIRECTIVES.md)
 -   [Contributing](#contributing)
   -   [Tests](#tests)
@@ -61,12 +62,13 @@ Loaded Modules:
  perimeterx_module (shared)
 ```
 
-### <a name="example"></a> Example ###
+### <a name="basic-usage"></a> Basic usage example ###
 
 * Configuration for apache server
 
 ```xml
 <IfModule mod_perimeterx.c>
+	# basic directives
     PXEnabled On
     CookieKey my_key
     AppID my_app_id
@@ -74,9 +76,23 @@ Loaded Modules:
     BlockingScore 90
     ReportPageRequest On
     IPHeader X-True-IP
-    CurlPoolSize 40
+    CurlPoolSize 100
+    Captcha On
+
+    # service monitor directives
+    PXServiceMonitor On
+    MaxPXErrorsThreshold 100
+    PXErrorsCountInterval 30000 # 30 seconds
+    
+    # filter
+    SensitiveRoutes /login
     PXWhitelistRoutes /server-status /staging
     PXWhitelistUserAgents "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/534.34 (KHTML,  like Gecko) PhantomJS/1.9.0 (development) Safari/534.34"
+    
+    # background activities send
+    BackgroundActivitySend On
+    BackgroundActivityWorkers 100
+    BackgroundActivityQueueSize 500
 </IfModule>
 ```
 
@@ -97,6 +113,21 @@ Loaded Modules:
         </IfModule>
 </VirtualHost>
 ```
+
+<a name=""troubleshoot"></a>Logging and Troubleshoot
+----------------------------------------
+### Log
+mod_perimeterx is writing to apace error log. 
+In order to log debug messages to apache error log you should set the `LogLevel` [directive](https://httpd.apache.org/docs/2.4/mod/core.html#loglevel): 
+
+```
+# apache configuration
+LogLevel debug
+```
+
+According to your apache configurations you should find in the error log mod_perimeters log, for example: 
+
+
 
 <a name="contributing"></a> Contributing
 ----------------------------------------

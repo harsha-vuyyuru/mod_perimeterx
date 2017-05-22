@@ -25,8 +25,6 @@ Directives
 | CurlPoolSize | The number of active curl handles for each server  | 40  | Integer 1-1000  | For optimized performance, it is best to use the number of running worker threads in your Apache server as the CurlPoolSize.
 | BaseURL |  Determines PerimeterX server base URL. | https://sapi-\<app_id\>.perimeterx.net  | String |
 
-Determines PerimeterX server base URL.
-
 #### <a name="ipheader">IPHeader Importacne</a>: 
 
 * The order of headers in the configuration matters. The first header found with a value will be taken as the IP address.
