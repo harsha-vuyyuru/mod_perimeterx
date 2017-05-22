@@ -9,15 +9,18 @@
 #include <openssl/err.h>
 #include <openssl/evp.h>
 
-#include "httpd.h"
-#include "http_config.h"
-#include "http_protocol.h"
-#include "ap_config.h"
-#include "ap_provider.h"
-#include "http_request.h"
-#include "http_log.h"
-#include "apr_strings.h"
-#include "apr_escape.h"
+#include <httpd.h>
+#include <http_config.h>
+#include <http_protocol.h>
+#include <ap_config.h>
+#include <ap_provider.h>
+#include <http_request.h>
+#include <http_log.h>
+#include <apr_strings.h>
+#include <apr_escape.h>
+#include <apr_atomic.h>
+#include <apr_portable.h>
+#include <apr_signal.h>
 
 #include "px_utils.h"
 #include "px_types.h"
@@ -34,6 +37,7 @@ static const char *DEFAULT_BASE_URL = "https://sapi-%s.perimeterx.net";
 static const char *RISK_API = "/api/v2/risk";
 static const char *CAPTCHA_API = "/api/v1/risk/captcha";
 static const char *ACTIVITIES_API = "/api/v1/collector/s2s";
+static const char *HEALTH_CHECK_API = "/api/v1/kpi/status";
 
 // constants
 //
@@ -68,7 +72,12 @@ int render_page(request_rec *r, const request_context *ctx, const px_config *con
 }
 
 int px_handle_request(request_rec *r, px_config *conf) {
-    if (!px_should_verify_request(r, conf)) {
+    // fail open mode
+    if (conf->px_errors_count >= conf->px_errors_threshold) {
+        return OK;
+    }
+
+        if (!px_should_verify_request(r, conf)) {
         return OK;
     }
 
@@ -83,12 +92,6 @@ int px_handle_request(request_rec *r, px_config *conf) {
     request_context *ctx = create_context(r, conf);
     if (ctx) {
         bool request_valid = px_verify_request(ctx, conf);
-#ifdef DEBUG
-        apr_table_set(r->headers_out, "X-PX-SCORE", apr_itoa(r->pool, ctx->score));
-        apr_table_set(r->headers_out, "X-PX-EXTRACTED-IP", ctx->ip);
-        apr_table_set(r->headers_out, "X-PX-BLOCK-REASON", BLOCK_REASON_STR[ctx->block_reason]);
-        apr_table_set(r->headers_out, "X-PX-CALL-REASON", CALL_REASON_STR[ctx->call_reason]);
-#endif
         if (!request_valid && ctx->block_enabled) {
             if (r->method && strcmp(r->method, "POST") == 0) {
                 return HTTP_FORBIDDEN;
@@ -124,6 +127,43 @@ int px_handle_request(request_rec *r, px_config *conf) {
     return OK;
 }
 
+// Background thread that wakes up after reacing X timeoutes in interval length Y and checks when service is available again
+static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
+    health_check_data *hc = (health_check_data*) data;
+    px_config *conf = hc->config;
+
+    const char *health_check_url = apr_pstrcat(hc->server->process->pool, hc->config->base_url, HEALTH_CHECK_API, NULL);
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    while (1) {
+        // wait for condition and reset errors count on internal
+        apr_thread_mutex_lock(conf->health_check_cond_mutex);
+        while (apr_atomic_read32(&conf->px_errors_count) < conf->px_errors_threshold) {
+            if (apr_thread_cond_timedwait(conf->health_check_cond, conf->health_check_cond_mutex, conf->health_check_interval) == APR_TIMEUP) {
+                apr_atomic_set32(&conf->px_errors_count, 0);
+            }
+        }
+        apr_thread_mutex_unlock(conf->health_check_cond_mutex);
+
+        // do health check until success
+        CURLcode res = CURLE_AGAIN;
+        while (res != CURLE_OK) {
+            curl_easy_setopt(curl, CURLOPT_URL, health_check_url);
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, conf->api_timeout_ms);
+            res = curl_easy_perform(curl);
+            if (res != CURLE_OK && res != CURLE_OPERATION_TIMEDOUT) {
+                apr_sleep(1000); // TODO(barak): should be configured with nice default
+            }
+        }
+        apr_atomic_set32(&conf->px_errors_count, 0);
+    }
+
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, "health_check thread exiting");
+    curl_easy_cleanup(curl);
+    apr_thread_exit(thd, 0);
+    return NULL;
+}
+
 static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, void *data) {
     activity_consumer_data *consumer_data = (activity_consumer_data*)data;
     px_config *conf = consumer_data->config;
@@ -146,6 +186,7 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
         }
     }
     curl_easy_cleanup(curl);
+    apr_thread_exit(thd, 0);
     return NULL;
 }
 
@@ -163,9 +204,19 @@ static apr_status_t destroy_activity_queue(void *q) {
     return APR_SUCCESS;
 }
 
+static apr_status_t destroy_curl_pool(void *c) {
+    curl_pool *cp = (curl_pool*)c;
+    curl_pool_destroy(cp);
+    return APR_SUCCESS;
+}
+
 static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
     curl_global_init(CURL_GLOBAL_ALL);
     px_config *cfg = ap_get_module_config(s->module_config, &perimeterx_module);
+
+    cfg->curl_pool = curl_pool_create(s->process->pool, cfg->curl_pool_size);
+
+    // setting up thread pool for background activities send
     if (cfg->background_activity_send) {
         apr_status_t rv = apr_queue_create(&cfg->activity_queue, cfg->background_activity_queue_size, s->process->pool);
         if (rv != APR_SUCCESS) {
@@ -183,11 +234,37 @@ static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
         for (unsigned int i = 0; i < cfg->background_activity_workers; ++i) {
             rv = apr_thread_pool_push(cfg->activity_thread_pool, background_activity_consumer, consumer_data, 0, NULL);
             if (rv != APR_SUCCESS) {
-                ap_log_error(APLOG_MARK, LOG_ERR, 0, s, "[%s]: failed to push background activity consumer", cfg->app_id);
+                ap_log_error(APLOG_MARK, LOG_ERR, 0, s, "failed to push background activity consumer");
             }
         }
-        apr_pool_cleanup_register(s->process->pool, cfg->activity_queue, apr_pool_cleanup_null, destroy_activity_queue);
-        apr_pool_cleanup_register(s->process->pool, cfg->activity_queue, apr_pool_cleanup_null, destroy_thread_pool);
+        apr_pool_cleanup_register(s->process->pool, cfg->activity_queue, destroy_activity_queue, apr_pool_cleanup_null);
+        apr_pool_cleanup_register(s->process->pool, cfg->activity_thread_pool, destroy_thread_pool, apr_pool_cleanup_null);
+        apr_pool_cleanup_register(s->process->pool, cfg->curl_pool, destroy_curl_pool, apr_pool_cleanup_null);
+    }
+
+    // setting up health_check thread is service monitor enabled
+    if (cfg->px_service_monitor) {
+        health_check_data *hc_data= (health_check_data*)apr_palloc(s->process->pool, sizeof(health_check_data));
+        cfg->px_errors_count = 0;
+        hc_data->server = s;
+        hc_data->config = cfg;
+        apr_status_t rv;
+        rv = apr_thread_cond_create(&cfg->health_check_cond, s->process->pool);
+
+        if (rv != APR_SUCCESS) {
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "error while init health_check thread cond");
+            exit(1);
+        }
+        rv = apr_thread_create(&cfg->health_check_thread, NULL, health_check, (void*) hc_data, s->process->pool);
+        if (rv != APR_SUCCESS) {
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "error while init health_check thread create");
+            exit(1);
+        }
+        rv = apr_thread_mutex_create(&cfg->health_check_cond_mutex, 0, s->process->pool);
+        if (rv != APR_SUCCESS) {
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "error while creating health_check thread mutex");
+            exit(1);
+        }
     }
 }
 
@@ -317,10 +394,6 @@ static const char *set_curl_pool_size(cmd_parms *cmd, void *config, const char *
         return MAX_CURL_POOL_SIZE_EXCEEDED;
     }
     conf->curl_pool_size = pool_size;
-    if (conf->curl_pool != NULL) {
-        curl_pool_destroy(conf->curl_pool);
-    }
-    conf->curl_pool = curl_pool_create(cmd->pool, conf->curl_pool_size);
     return NULL;
 }
 
@@ -452,6 +525,32 @@ static const char *set_background_activity_send(cmd_parms *cmd, void *config, in
     return NULL;
 }
 
+static const char *set_px_service_monitor(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->px_service_monitor = arg ? true : false;
+    return NULL;
+}
+
+static const char *set_max_px_errors_threshold(cmd_parms *cmd, void *config, const char *arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->px_errors_threshold = atoi(arg);
+    return NULL;
+}
+
+static const char *set_px_errors_count_interval(cmd_parms *cmd, void *config, const char *arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->health_check_interval = atoi(arg) * 1000; // millisecond to microsecond
+    return NULL;
+}
 static const char *set_background_activity_workers(cmd_parms *cmd, void *config, const char *arg) {
     px_config *conf = get_config(cmd, config);
     if (!conf) {
@@ -500,21 +599,19 @@ static void *create_config(apr_pool_t *p) {
         conf->activities_api_url = apr_pstrcat(p, conf->base_url, ACTIVITIES_API, NULL);
         conf->auth_token = "";
         conf->auth_header = "";
-        conf->js_ref = NULL;
-        conf->css_ref = NULL;
-        conf->custom_logo = NULL;
         conf->routes_whitelist = apr_array_make(p, 0, sizeof(char*));
         conf->useragents_whitelist = apr_array_make(p, 0, sizeof(char*));
         conf->custom_file_ext_whitelist = apr_array_make(p, 0, sizeof(char*));
-        conf->curl_pool = curl_pool_create(p, conf->curl_pool_size);
         conf->ip_header_keys = apr_array_make(p, 0, sizeof(char*));
-        conf->block_page_url = NULL;
         conf->sensitive_routes = apr_array_make(p, 0, sizeof(char*));
         conf->enabled_hostnames = apr_array_make(p, 0, sizeof(char*));
         conf->sensitive_routes_prefix = apr_array_make(p, 0, sizeof(char*));
         conf->background_activity_send = true;
         conf->background_activity_workers = 10;
         conf->background_activity_queue_size = 1000;
+        conf->px_errors_threshold = 100;
+        conf->health_check_interval = 60000000; // 1 minute
+        conf->px_service_monitor = false;
     }
     return conf;
 }
@@ -650,6 +747,21 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Queue size for background activity send"),
+    AP_INIT_FLAG("PXServiceMonitor",
+            set_px_service_monitor,
+            NULL,
+            OR_ALL,
+            "Background monitoring on PerimeterX service"),
+    AP_INIT_TAKE1("MaxPXErrorsThreshold",
+            set_max_px_errors_threshold,
+            NULL,
+            OR_ALL,
+            "Number of errors from px servers before running in fail open mode"),
+    AP_INIT_TAKE1("PXErrorsCountInterval",
+            set_px_errors_count_interval,
+            NULL,
+            OR_ALL,
+            "Time in seconds until we set the px server errors count back to zero"),
     { NULL }
 };
 

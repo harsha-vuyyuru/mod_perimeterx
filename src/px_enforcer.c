@@ -22,7 +22,7 @@ static const char* FILE_EXT_WHITELIST[] = {
     ".ico", ".pls", ".midi", ".svgz", ".class", ".png", ".ppt", ".mid", "webp", ".jar"
 };
 
-static CURLcode post_request(const char *url, const char *payload, const request_context *ctx, const px_config *conf, char **response_data) {
+static CURLcode post_request(const char *url, const char *payload, const request_context *ctx, px_config *conf, char **response_data) {
     CURL *curl = curl_pool_get_wait(conf->curl_pool);
     if (curl == NULL) {
         ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server,
@@ -199,7 +199,7 @@ bool px_should_verify_request(request_rec *r, px_config *conf) {
     return true;
 }
 
-risk_response* risk_api_get(request_context *ctx, const px_config *conf) {
+risk_response* risk_api_get(request_context *ctx, px_config *conf) {
     char *risk_payload = create_risk_payload(ctx, conf);
     if (!risk_payload) {
         ctx->pass_reason = PASS_REASON_ERROR;
@@ -232,6 +232,7 @@ int populate_captcha_cookie_data(apr_pool_t *p, const char *captcha_cookie, requ
 request_context* create_context(request_rec *r, const px_config *conf) {
     request_context *ctx = (request_context*) apr_pcalloc(r->pool, sizeof(request_context));
 
+    ctx->app_id = conf->app_id;
     const char *px_cookie = NULL;
     const char *px_captcha_cookie = NULL;
     char *captcha_cookie = NULL;
@@ -270,7 +271,7 @@ request_context* create_context(request_rec *r, const px_config *conf) {
 
     ctx->ip = get_request_ip(r, conf);
     if (!ctx->ip) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_context: request IP is NULL", ctx->app_id);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_context: request IP is NULL", conf->app_id);
     }
 
     ctx->px_cookie = px_cookie;
@@ -304,7 +305,7 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     ctx->block_enabled = enable_block_for_hostname(r, conf->enabled_hostnames);
     ctx->r = r;
 
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_context: create_context: useragent: (%s), px_cookie: (%s), full_url: (%s), hostname: (%s) , http_method: (%s), http_version: (%s), uri: (%s), ip: (%s), block_enabled: (%d)", ctx->app_id, ctx->useragent, ctx->px_cookie, ctx->full_url, ctx->hostname, ctx->http_method, ctx->http_version, ctx->uri, ctx->ip, ctx->block_enabled);
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_context: create_context: useragent: (%s), px_cookie: (%s), full_url: (%s), hostname: (%s) , http_method: (%s), http_version: (%s), uri: (%s), ip: (%s), block_enabled: (%d)", conf->app_id, ctx->useragent, ctx->px_cookie, ctx->full_url, ctx->hostname, ctx->http_method, ctx->http_version, ctx->uri, ctx->ip, ctx->block_enabled);
 
     return ctx;
 }

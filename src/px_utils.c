@@ -1,5 +1,7 @@
 #include "px_utils.h"
 
+#include <apr_atomic.h>
+
 #include <arpa/inet.h>
 #include <apr_strings.h>
 #include <http_log.h>
@@ -7,7 +9,20 @@
 static const char *JSON_CONTENT_TYPE = "Content-Type: application/json";
 static const char *EXPECT = "Expect:";
 
-CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, const px_config *conf, server_rec *server, char **response_data) {
+void update_and_notify_health_check(px_config *conf, server_rec *server) {
+    if (!conf->px_service_monitor) {
+        return;
+    }
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server, "[%s]: previous number of px service errors reached: %u", conf->app_id, conf->px_errors_count);
+    apr_uint32_t old_value = apr_atomic_inc32(&conf->px_errors_count);
+    apr_thread_mutex_lock(conf->health_check_cond_mutex);
+    if (old_value == conf->px_errors_threshold) {
+        apr_thread_cond_signal(conf->health_check_cond);
+    }
+    apr_thread_mutex_unlock(conf->health_check_cond_mutex);
+}
+
+CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, px_config *conf, server_rec *server, char **response_data) {
     struct response_t response;
     struct curl_slist *headers = NULL;
     long status_code;
@@ -31,6 +46,7 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, c
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*) &response);
     CURLcode status = curl_easy_perform(curl);
     curl_slist_free_all(headers);
+    size_t len;
     if (status == CURLE_OK) {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
         if (status_code == HTTP_OK) {
@@ -44,6 +60,7 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, c
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server, "[%s]: post_request: status: %lu, url: %s", conf->app_id, status_code, url);
         status = CURLE_HTTP_RETURNED_ERROR;
     } else {
+        update_and_notify_health_check(conf, server);
         size_t len = strlen(errbuf);
         if (len) {
             ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server, "[%s]: post_request failed: %s", conf->app_id, errbuf);
@@ -52,7 +69,9 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, c
         }
     }
     free(response.data);
-    *response_data = NULL;
+    if (response_data != NULL) {
+        *response_data = NULL;
+    }
     return status;
 }
 
