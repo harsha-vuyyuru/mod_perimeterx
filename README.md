@@ -8,14 +8,14 @@
 Table of Contents
 -----------------
 
--   [Usage](#usage)
-  -   [Dependencies](#dependencies)
-  -   [Installation](#installation)
-  -   [Basic Usage Example](#basic-usage)
+- [Usage](#usage)
+	- [Dependencies](#dependencies)
+	- [Installation](#installation)
+	- [Basic Usage Example](#basic-usage)
+- [Directives](DIRECTIVES.md)
 - [Logging and Troubleshoot](#troubleshoot)
--   [Directives](DIRECTIVES.md)
--   [Contributing](#contributing)
-  -   [Tests](#tests)
+- [Contributing](#contributing)
+  - [Tests](#tests)
 
 
 <a name="Usage"></a>
@@ -114,9 +114,9 @@ Loaded Modules:
 </VirtualHost>
 ```
 
-<a name=""troubleshoot"></a>Logging and Troubleshoot
+<a name="troubleshoot"></a>Logging and Troubleshoot
 ----------------------------------------
-### Log
+### Debug Logs
 mod_perimeterx is writing to apace error log. 
 In order to log debug messages to apache error log you should set the `LogLevel` [directive](https://httpd.apache.org/docs/2.4/mod/core.html#loglevel): 
 
