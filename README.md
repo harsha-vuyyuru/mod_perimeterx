@@ -127,6 +127,13 @@ LogLevel debug
 
 According to your apache configurations you should find in the error log mod_perimeters log, for example: 
 
+```
+[Mon May 22 06:05:48.090556 2017] [:debug] [pid 10923:tid 140374710441728] px_enforcer.c(308): [PXg3P9d2ZQ]: create_context: create_context: useragent: (curl/7.51.0), px_cookie: ((null)), full_url: (localhost/), hostname: (localhost) , http_method: (GET), http_version: (1.1), uri: (/), ip: (172.17.0.1), block_enabled: (1)
+[Mon May 22 06:05:48.090634 2017] [:debug] [pid 10923:tid 140374710441728] px_enforcer.c(208): [PXg3P9d2ZQ]: risk payload: {"additional":{"s2s_call_reason":"none","http_method":"GET","http_version":"1.1","module_version":"Apache Module v2.2.0-RC"},"request":{"url":"localhost/","ip":"172.17.0.1","uri":"/","headers":[{"name":"Host","value":"localhost:9095"},{"name":"User-Agent","value":"curl/7.51.0"},{"name":"Accept","value":"*/*"}]}}
+[Mon May 22 06:05:48.349949 2017] [:debug] [pid 10923:tid 140374710441728] px_enforcer.c(213): [PXg3P9d2ZQ]: risk response: {"status":0,"uuid":"b3921460-3eb4-11e7-92dc-f7aec45df953","score":100,"action":"c"}
+[Mon May 22 06:05:48.350126 2017] [perimeterx:debug] [pid 10923:tid 140374710441728] mod_perimeterx.c(121): [PXg3P9d2ZQ]: px_handle_request: request blocked. (1)
+```
+
 
 
 <a name="contributing"></a> Contributing
