@@ -33,7 +33,7 @@ Directives
 | Directive Name |                                                                  Description                                                                  | Default value | Values |                                 Note                                 |
 |:--------------:|:---------------------------------------------------------------------------------------------------------------------------------------------:|:-------------:|:------:|:--------------------------------------------------------------------:|
 |  BlockPageURL  |                                                     [Explanation & Examples](BLOCKPAGE.md)                                                    |      NULL     | String | The block page URL should be specified as relative to `DocumentRoot` |
-|   CustomLogo   | The logo will be displayed at the top div of the the block page. The logo's max-heigh property would be 150px and width would be set to auto. |      NULL     | String |                                                                      |
+|   CustomLogo   | The logo will be displayed at the top div of the the block page. The logo's max-height property would be 150px and width would be set to auto. |      NULL     | String |                                                                      |
 |     CSSRef     |              The block page can be modified with a custom CSS by adding the CSSRef directive and providing a valid URL to the css             |      NULL     | String |                                                                      |
 |      JSRef     |  The block page can be added with custom JS file by adding JSRef directive and providing the JS file that will be loaded with the block page. |      NULL     | String |                                                                      |
 
@@ -46,10 +46,10 @@ Directives
 |    SensitiveRoutes    | List of routes the Perimeterx module will always do a server-to-server call for, even if the cookie score is low and valid                                                                               | Empty list    | List     |  /login                       |
 | SensitiveRoutesPrefix | List of routes prefix. The PerimeterX module will always match request URI by this prefix list and if match was found will create a server-to-server call for, even if the cookie score is low and valid | Empty list    | List     |                         |
 |   DisableModByEnvvar  | Disables the PerimeterX module if environment variable `PX_SKIP_MODULE` is set on the request.                                                                                                           | Off           | On / Off | [Examples and Use cases](#disablemodenvvar)  |
-|   PXWhitelistRoutes   | A whitespace seperated list of paths that will not be examined by PX module.                                                                                                                             | Empy list     | List     | /server-status /staging |
-| PXWhitelistUserAgents | A whitespace seperated list of User-Agents that will not be examined by PX module.                                                                                                                       | Empty list    | List     |                         |
-| ExtensionWhitelist    | A whitespace seperated list of file extensions that will not be examined by PX module. | .css, .bmp, .tif, .ttf, .docx, .woff2, .js, .pict, .tiff, .eot, .xlsx, .jpg, .csv,,.eps, .woff, .xls, .jpeg, .doc, .ejs, .otf, .pptx, .gif, .pdf, .swf, .svg, .ps,,.ico, .pls, .midi, .svgz, .class, .png, .ppt, .mid, webp, .jar. | List | When using this option, the default values are cleared and the supplied list will be used |
-| EnableBlockingByHostname |     A whitespace seperated list of hostnames that PX module will enable block for.     |                                                                                                              Empy list                                                                                                             | List | If this option is present - only hostnames appear in this list will pass through mod_perimeterx. |
+|   PXWhitelistRoutes   | A whitespace separated list of paths that will not be examined by PX module.                                                                                                                             | Empy list     | List     | /server-status /staging |
+| PXWhitelistUserAgents | A whitespace separated list of User-Agents that will not be examined by PX module.                                                                                                                       | Empty list    | List     |                         |
+| ExtensionWhitelist    | A whitespace separated list of file extensions that will not be examined by PX module. | .css, .bmp, .tif, .ttf, .docx, .woff2, .js, .pict, .tiff, .eot, .xlsx, .jpg, .csv,,.eps, .woff, .xls, .jpeg, .doc, .ejs, .otf, .pptx, .gif, .pdf, .swf, .svg, .ps,,.ico, .pls, .midi, .svgz, .class, .png, .ppt, .mid, webp, .jar. | List | When using this option, the default values are cleared and the supplied list will be used |
+| EnableBlockingByHostname |     A whitespace separated list of hostnames that PX module will enable block for.     |                                                                                                              Empy list                                                                                                             | List | If this option is present - only hostnames appear in this list will pass through mod_perimeterx. |
 
 
 #### <a name="disablemodenvvar"></a>DisableModByEnvvar Examples and Use cases:
@@ -83,7 +83,7 @@ SetEnvIf User-Agent good-bot PX_SKIP_MODULE true
 
 Read more on `mod_setenvif` [here](https://httpd.apache.org/docs/current/mod/mod_setenvif.html).
  
-**`mod_env` is not supported with this feature. Though the syntax is similiar to mod_setenvif, the module is different. Mod_env will only run after the PerimeterX module in the Apache fixups phase. You should NOT use the `SetEnv` directive to set the `PX_SKIP_MODULE`
+**`mod_env` is not supported with this feature. Though the syntax is similar to mod_setenvif, the module is different. Mod_env will only run after the PerimeterX module in the Apache fixups phase. You should NOT use the `SetEnv` directive to set the `PX_SKIP_MODULE`
 
 ## <a name="#backgroundactivitiessend"></a> Background activities send
 
@@ -98,7 +98,7 @@ When `BackgroundActivitySend` is set to `On` - `page_requested` and `block` acti
 
 ## <a name="#filters"></a>PerimeterX Service monitor
 
-When `PXServiceMonitor` is set to `On` - the module will count errors from PerimeterX service and if the number of errors on the specific apache instance will reach `MaxPXErrorsThreshold` in `PXErrorsCountInterval` seconds - fail open startegy will be activated and the requestes will pass PerieterX module with out cuasing any delays.
+When `PXServiceMonitor` is set to `On` - the module will count errors from PerimeterX service and if the number of errors on the specific apache instance will reach `MaxPXErrorsThreshold` in `PXErrorsCountInterval` seconds - fail open strategy will be activated and the requests will pass PerieterX module with out cuasing any delays.
 
 In the background there will be periodic health check with PerimeterX service and once service is healthy - the module will start handling requests again.
 
