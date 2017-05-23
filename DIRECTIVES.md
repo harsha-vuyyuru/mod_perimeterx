@@ -98,7 +98,7 @@ When `BackgroundActivitySend` is set to `On` - `page_requested` and `block` acti
 
 ## <a name="#filters"></a>PerimeterX Service monitor
 
-When `PXServiceMonitor` is set to `On` - the module will count errors from PerimeterX service and if the number of errors on the specific apache instance will reach `MaxPXErrorsThreshold` in `PXErrorsCountInterval` seconds - fail open strategy will be activated and the requests will pass PerieterX module with out cuasing any delays.
+When `PXServiceMonitor` is set to `On` - the module will count errors from PerimeterX service and if the number of errors on the specific apache instance will reach `MaxPXErrorsThreshold` in `PXErrorsCountInterval` seconds - fail open strategy will be activated and the requests will pass PerimeterX module without causing any delays.
 
 In the background there will be periodic health check with PerimeterX service and once service is healthy - the module will start handling requests again.
 
