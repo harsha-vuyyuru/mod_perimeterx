@@ -584,6 +584,15 @@ static const char *set_background_activity_queue_size(cmd_parms *cmd, void *conf
     return NULL;
 }
 
+static const char* set_proxy_url(cmd_parms *cmd, void *config, const char *proxy_url) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->proxy_url = proxy_url;
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     return px_handle_request(r, conf);
@@ -597,7 +606,7 @@ static void *create_config(apr_pool_t *p) {
         conf->send_page_activities = true;
         conf->blocking_score = 70;
         conf->captcha_enabled = true;
-        conf->module_version = "Apache Module v2.2.0";
+        conf->module_version = "Apache Module v2.3.0";
         conf->skip_mod_by_envvar = false;
         conf->curl_pool_size = 40;
         conf->base_url = DEFAULT_BASE_URL;
@@ -769,6 +778,11 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Time in milliseconds until we set the px server errors count back to zero"),
+    AP_INIT_TAKE1("ProxyURL",
+            set_proxy_url,
+            NULL,
+            OR_ALL,
+            "Proxy URL for outgoing PerimeterX service API"),
     { NULL }
 };
 
