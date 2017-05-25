@@ -23,6 +23,8 @@ Directives
 | IPHeader | List of HTTP header names that contain the real client IP address. Use this feature when your server is behind a CDN. | NULL | List |  [IPHeader Importacne](#ipheader)
 | CurlPoolSize | The number of active curl handles for each server  | 40  | Integer 1-1000  | For optimized performance, it is best to use the number of running worker threads in your Apache server as the CurlPoolSize.
 | BaseURL |  Determines PerimeterX server base URL. | https://sapi-\<app_id\>.perimeterx.net  | String |
+| ProxyURL |  Proxy URL for outgoing PerimeterX service API | NULL  | String |
+
 
 #### <a name="ipheader">IPHeader Importacne</a>: 
 

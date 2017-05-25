@@ -31,6 +31,7 @@ typedef struct px_config_t {
     const char *module_version;
     curl_pool *curl_pool;
     int curl_pool_size;
+    const char *proxy_url;
     apr_array_header_t *routes_whitelist;
     apr_array_header_t *useragents_whitelist;
     apr_array_header_t *custom_file_ext_whitelist;
