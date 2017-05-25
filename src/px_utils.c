@@ -44,6 +44,9 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, p
     curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, conf->api_timeout_ms);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_response_cb);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*) &response);
+    if (conf->proxy_url) {
+        curl_easy_setopt(curl, CURLOPT_PROXY, conf->proxy_url);
+    }
     CURLcode status = curl_easy_perform(curl);
     curl_slist_free_all(headers);
     size_t len;
