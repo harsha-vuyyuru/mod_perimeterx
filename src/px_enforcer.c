@@ -38,7 +38,7 @@ static CURLcode post_request(const char *url, const char *payload, const request
 void set_call_reason(request_context *ctx, validation_result_t vr) {
     switch (vr) {
         case VALIDATION_RESULT_NULL_COOKIE:
-            ctx->call_reason = CALL_REASON_NONE;
+            ctx->call_reason = CALL_REASON_NO_COOKIE;
             break;
         case VALIDATION_RESULT_EXPIRED:
             ctx->call_reason = CALL_REASON_EXPIRED_COOKIE;
