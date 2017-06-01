@@ -69,7 +69,7 @@ Loaded Modules:
 
 ```xml
 <IfModule mod_perimeterx.c>
-	# basic directives
+    # basic directives
     PXEnabled On
     CookieKey my_key
     AppID my_app_id
@@ -83,7 +83,7 @@ Loaded Modules:
     # service monitor directives
     PXServiceMonitor On
     MaxPXErrorsThreshold 100
-    PXErrorsCountInterval 30000 # 30 seconds
+    PXErrorsCountInterval 30000
     
     # filter
     SensitiveRoutes /login
