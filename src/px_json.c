@@ -54,6 +54,9 @@ char *create_activity(const char *activity_type, const px_config *conf, const re
         if (ctx->px_cookie) {
             json_object_set_new(details, "px_cookie", json_string(ctx->px_cookie_decrypted));
         }
+        if (ctx->api_rtt) {
+            json_object_set_new(details, "risk_rtt_number", json_integer(ctx->api_rtt * 1000)); // seconds to ms
+        }
         const char *pass_reason_str = PASS_REASON_STR[ctx->pass_reason];
         json_object_set_new(details, "pass_reason", json_string(pass_reason_str));
     }
@@ -127,7 +130,6 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf) {
     if (ctx->px_cookie_orig) {
         json_object_set_new(j_additional, "px_cookie_orig", json_string(ctx->px_cookie_orig));
     }
-
     if (ctx->px_cookie_orig) {
         json_object_set_new(j_additional, "px_cookie_orig", json_string(ctx->px_cookie_orig));
     }
@@ -178,6 +180,9 @@ char *create_captcha_payload(const request_context *ctx, const px_config *conf) 
     }
     if (ctx->hostname) {
         json_object_set_new(j_captcha, "hostname", json_string(ctx->hostname));
+    }
+    if (ctx->api_rtt) {
+        json_object_set_new(j_captcha, "risk_rtt_number", json_integer(ctx->api_rtt));
     }
 
     // dump as string
