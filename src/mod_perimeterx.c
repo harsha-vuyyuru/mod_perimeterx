@@ -58,6 +58,7 @@ extern const char *BLOCK_REASON_STR[];
 extern const char *CALL_REASON_STR[];
 #endif // DEBUG
 
+
 int render_page(request_rec *r, const request_context *ctx, const px_config *conf) {
     int ret_val;
     char *html = NULL;
@@ -77,7 +78,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
         return OK;
     }
 
-        if (!px_should_verify_request(r, conf)) {
+    if (!px_should_verify_request(r, conf)) {
         return OK;
     }
 
@@ -92,6 +93,17 @@ int px_handle_request(request_rec *r, px_config *conf) {
     request_context *ctx = create_context(r, conf);
     if (ctx) {
         bool request_valid = px_verify_request(ctx, conf);
+#if DEBUG
+        char *aut_test_header = apr_pstrdup(r->pool, (char *) apr_table_get(r->headers_in, PX_AUT_HEADER_KEY));
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: This is the header: %s", conf->app_id, aut_test_header);
+
+        if (aut_test_header && strcmp(aut_test_header, PX_AUT_HEADER_VALUE) == 0) {
+            const char *ctx_str = json_context(ctx);
+            ap_set_content_type(r, "application/json");
+            ap_rprintf(r, "%s", ctx_str);
+            return DONE;
+        }
+#endif
         if (!request_valid && ctx->block_enabled) {
             if (r->method && strcmp(r->method, "POST") == 0) {
                 return HTTP_FORBIDDEN;

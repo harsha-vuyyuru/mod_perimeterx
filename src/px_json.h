@@ -10,4 +10,8 @@ char *create_captcha_payload(const request_context *ctx, const px_config *conf);
 captcha_response *parse_captcha_response(const char* captcha_response_str, const request_context *ctx);
 risk_response* parse_risk_response(const char* risk_response_str, const request_context *ctx);
 
+#ifdef DEBUG
+const char* context_to_json_string(request_context *ctx);
+#endif
+
 #endif

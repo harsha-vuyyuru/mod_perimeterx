@@ -252,3 +252,51 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
     json_decref(j_response);
     return parsed_response;
 }
+
+#ifdef DEBUG
+const char* context_to_json_string(request_context *ctx) {
+    json_error_t error;
+
+    const apr_array_header_t *header_arr = apr_table_elts(ctx->headers);
+    json_t *j_headers = headers_to_json_helper(header_arr);
+
+    json_t *ctx_json = json_pack_ex(&error, JSON_DECODE_ANY, "{ss, ss, ss, ss, ss, ss, ss, ss, ss, si, ss, sb, sb, sO}",
+            "ip", ctx->ip,
+            "hostname", ctx->hostname,
+            "full_url", ctx->full_url,
+            "http_version", ctx->http_version,
+            "http_method", ctx->http_method,
+            "block_reason", BLOCK_REASON_STR[ctx->block_reason],
+            "s2s_call_reason", CALL_REASON_STR[ctx->call_reason],
+            "pass_reason", PASS_REASON_STR[ctx->pass_reason],
+            "useragent", ctx->useragent,
+            "score", ctx->score,
+            "uri", ctx->uri,
+            "is_made_s2s_api_call", ctx->made_api_call,
+            "is_sensitive_route", ctx->call_reason == CALL_REASON_SENSITIVE_ROUTE,
+            "headers", j_headers);
+
+    if (!ctx_json) {
+        ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s]: context_to_json_string error: %s", ctx->app_id, error.text);
+        return NULL;
+    }
+
+    // nullable fields
+    if (ctx->vid) {
+        json_object_set_new(ctx_json, "vid", json_string(ctx->vid));
+    }
+
+    if (ctx->uuid) {
+        json_object_set_new(ctx_json, "uuid", json_string(ctx->uuid));
+    }
+
+    if (ctx->px_cookie) {
+        json_object_set_new(ctx_json, "px_cookie", json_string(ctx->px_cookie));
+    }
+
+    const char *context_str = json_dumps(ctx_json, JSON_ENCODE_ANY);
+    json_decref(ctx_json);
+
+    return context_str;
+}
+#endif
