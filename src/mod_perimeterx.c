@@ -95,12 +95,11 @@ int px_handle_request(request_rec *r, px_config *conf) {
         bool request_valid = px_verify_request(ctx, conf);
 #if DEBUG
         char *aut_test_header = apr_pstrdup(r->pool, (char *) apr_table_get(r->headers_in, PX_AUT_HEADER_KEY));
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: This is the header: %s", conf->app_id, aut_test_header);
-
         if (aut_test_header && strcmp(aut_test_header, PX_AUT_HEADER_VALUE) == 0) {
             const char *ctx_str = json_context(ctx);
             ap_set_content_type(r, "application/json");
             ap_rprintf(r, "%s", ctx_str);
+            free((void*)ctx_str);
             return DONE;
         }
 #endif
