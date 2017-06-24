@@ -4,7 +4,6 @@ Directives
 - [Basic](#basic)
 - [Filters](#filters)
 - [Customizing block page](#blockpage)
-- [Background activities send](#backgroundactivitiessend)
 - [PerimeterX Service monitor](#servicemonitor)
 
 
@@ -86,17 +85,6 @@ SetEnvIf User-Agent good-bot PX_SKIP_MODULE true
 Read more on `mod_setenvif` [here](https://httpd.apache.org/docs/current/mod/mod_setenvif.html).
  
 **`mod_env` is not supported with this feature. Though the syntax is similar to mod_setenvif, the module is different. Mod_env will only run after the PerimeterX module in the Apache fixups phase. You should NOT use the `SetEnv` directive to set the `PX_SKIP_MODULE`
-
-## <a name="#backgroundactivitiessend"></a> Background activities send
-
-When `BackgroundActivitySend` is set to `On` - `page_requested` and `block` activities will be pushed to queue, each worker from the `BackgroundActivityWorkers` will consume this queue for activity and send it.
-
-|        Directive Name       |                                                                   Description                                                                   | Default value |  Values  |                                                           Note                                                           |
-|:---------------------------:|:-----------------------------------------------------------------------------------------------------------------------------------------------:|:-------------:|:--------:|:------------------------------------------------------------------------------------------------------------------------:|
-|    BackgroundActivitySend   |  Boolean flag to allow background activity (page_requested / activity) send without blocking the original request from continue with processing |      On      | On / Off |                                                                                                                          |
-|  BackgroundActivityWorkers  | Number of worker thread in the thread pool that will handle the background send (fetching from activities queue and send to PerimeterX servers) |       10      |  Integer |                                                                                                                          |
-| BackgroundActivityQueueSize |                                Activities queue size from which the workers will fetch activities from and send.                                |      1000     |  Integer | When queue reaches it's full capacity - the push operation will block until queue size is less than the max size we set. |
-
 
 ## <a name="#filters"></a>PerimeterX Service monitor
 
