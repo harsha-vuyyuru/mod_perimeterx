@@ -150,6 +150,7 @@ typedef struct request_context_t {
     bool block_enabled;
     bool made_api_call;
     request_rec *r;
+    double api_rtt;
 } request_context;
 
 #endif
