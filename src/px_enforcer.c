@@ -212,6 +212,7 @@ risk_response* risk_api_get(request_context *ctx, px_config *conf) {
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: risk payload: %s", ctx->app_id, risk_payload);
     char *risk_response_str;
     CURLcode status = post_request(conf->risk_api_url, risk_payload, ctx, conf, &risk_response_str, &ctx->api_rtt);
+    ctx->made_api_call = true;
     free(risk_payload);
     if (status == CURLE_OK) {
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: risk response: %s", ctx->app_id, risk_response_str);
@@ -309,7 +310,7 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     ctx->block_enabled = enable_block_for_hostname(r, conf->enabled_hostnames);
     ctx->r = r;
 
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_context: create_context: useragent: (%s), px_cookie: (%s), full_url: (%s), hostname: (%s) , http_method: (%s), http_version: (%s), uri: (%s), ip: (%s), block_enabled: (%d)", conf->app_id, ctx->useragent, ctx->px_cookie, ctx->full_url, ctx->hostname, ctx->http_method, ctx->http_version, ctx->uri, ctx->ip, ctx->block_enabled);
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_context: useragent: (%s), px_cookie: (%s), full_url: (%s), hostname: (%s) , http_method: (%s), http_version: (%s), uri: (%s), ip: (%s), block_enabled: (%d)", conf->app_id, ctx->useragent, ctx->px_cookie, ctx->full_url, ctx->hostname, ctx->http_method, ctx->http_version, ctx->uri, ctx->ip, ctx->block_enabled);
 
     return ctx;
 }
@@ -399,3 +400,9 @@ handle_response:
     post_verification(ctx, conf, request_valid);
     return request_valid;
 }
+
+#if DEBUG
+const char *json_context(request_context *ctx) {
+    return context_to_json_string(ctx);
+}
+#endif

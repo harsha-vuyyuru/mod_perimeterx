@@ -148,6 +148,7 @@ typedef struct request_context_t {
     call_reason_t call_reason;
     pass_reason_t pass_reason;
     bool block_enabled;
+    bool made_api_call;
     request_rec *r;
     double api_rtt;
 } request_context;

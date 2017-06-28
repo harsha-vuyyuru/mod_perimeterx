@@ -54,11 +54,19 @@ char *create_activity(const char *activity_type, const px_config *conf, const re
         if (ctx->px_cookie) {
             json_object_set_new(details, "px_cookie", json_string(ctx->px_cookie_decrypted));
         }
+
         if (ctx->api_rtt) {
             json_object_set_new(details, "risk_rtt", json_integer(ctx->api_rtt * 1000)); // seconds to ms
         }
+
+        // adding uuid to page_requested activity
+        if (ctx->uuid) {
+            json_object_set_new(details, "client_uuid", json_string(ctx->uuid));
+        }
+
         const char *pass_reason_str = PASS_REASON_STR[ctx->pass_reason];
         json_object_set_new(details, "pass_reason", json_string(pass_reason_str));
+
     }
 
     // Extract all headers and jsonfy it
@@ -257,3 +265,66 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
     json_decref(j_response);
     return parsed_response;
 }
+
+#ifdef DEBUG
+const char* context_to_json_string(request_context *ctx) {
+    json_error_t error;
+    json_t *px_cookies, *headers, *ctx_json;
+
+    // format headers as key:value in JSON
+    headers = json_object();
+    const apr_array_header_t *header_arr = apr_table_elts(ctx->headers);
+    if (header_arr) {
+        for (int i = 0; i < header_arr->nelts; i++) {
+            apr_table_entry_t h = APR_ARRAY_IDX(header_arr, i, apr_table_entry_t);
+            json_object_set(headers, h.key, json_string(h.val));
+        }
+    }
+
+    ctx_json = json_pack_ex(&error, JSON_DECODE_ANY, "{ss, ss, ss, ss, ss, ss, ss, ss, ss, si, ss, sb, sb, sO}",
+            "ip", ctx->ip,
+            "hostname", ctx->hostname,
+            "full_url", ctx->full_url,
+            "http_version", ctx->http_version,
+            "http_method", ctx->http_method,
+            "block_reason", BLOCK_REASON_STR[ctx->block_reason],
+            "s2s_call_reason", CALL_REASON_STR[ctx->call_reason],
+            "pass_reason", PASS_REASON_STR[ctx->pass_reason],
+            "useragent", ctx->useragent,
+            "score", ctx->score,
+            "uri", ctx->uri,
+            "is_made_s2s_api_call", ctx->made_api_call,
+            "is_sensitive_route", ctx->call_reason == CALL_REASON_SENSITIVE_ROUTE,
+            "headers", headers);
+    json_decref(headers);
+
+    if (!ctx_json) {
+        ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s]: context_to_json_string error: %s", ctx->app_id, error.text);
+        return NULL;
+    }
+
+    // nullable fields
+    if (ctx->vid) {
+        json_object_set_new(ctx_json, "vid", json_string(ctx->vid));
+    }
+    if (ctx->uuid) {
+        json_object_set_new(ctx_json, "uuid", json_string(ctx->uuid));
+    }
+    if (ctx->px_cookie) {
+        json_t *px_cookies = json_pack("{ ss }", "v1", ctx->px_cookie);
+        json_object_set_new(ctx_json, "px_cookies", px_cookies);
+    }
+    if (ctx->px_cookie_decrypted) {
+        json_object_set_new(ctx_json, "decoded_px_cookie", json_string(ctx->px_cookie_decrypted));
+    }
+    if (ctx->px_captcha) {
+        json_object_set_new(ctx_json, "px_captcha", json_string(ctx->px_captcha));
+    }
+
+    const char *context_str = json_dumps(ctx_json, JSON_ENCODE_ANY);
+    json_decref(ctx_json);
+    json_decref(px_cookies);
+
+    return context_str;
+}
+#endif

@@ -58,6 +58,7 @@ extern const char *BLOCK_REASON_STR[];
 extern const char *CALL_REASON_STR[];
 #endif // DEBUG
 
+
 int render_page(request_rec *r, const request_context *ctx, const px_config *conf) {
     int ret_val;
     char *html = NULL;
@@ -77,7 +78,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
         return OK;
     }
 
-        if (!px_should_verify_request(r, conf)) {
+    if (!px_should_verify_request(r, conf)) {
         return OK;
     }
 
@@ -92,6 +93,16 @@ int px_handle_request(request_rec *r, px_config *conf) {
     request_context *ctx = create_context(r, conf);
     if (ctx) {
         bool request_valid = px_verify_request(ctx, conf);
+#if DEBUG
+        char *aut_test_header = apr_pstrdup(r->pool, (char *) apr_table_get(r->headers_in, PX_AUT_HEADER_KEY));
+        if (aut_test_header && strcmp(aut_test_header, PX_AUT_HEADER_VALUE) == 0) {
+            const char *ctx_str = json_context(ctx);
+            ap_set_content_type(r, "application/json");
+            ap_rprintf(r, "%s", ctx_str);
+            free((void*)ctx_str);
+            return DONE;
+        }
+#endif
         if (!request_valid && ctx->block_enabled) {
             if (r->method && strcmp(r->method, "POST") == 0) {
                 return HTTP_FORBIDDEN;
@@ -606,7 +617,7 @@ static void *create_config(apr_pool_t *p) {
         conf->send_page_activities = true;
         conf->blocking_score = 70;
         conf->captcha_enabled = true;
-        conf->module_version = "Apache Module v2.3.1";
+        conf->module_version = "Apache Module v2.3.2-RC";
         conf->skip_mod_by_envvar = false;
         conf->curl_pool_size = 40;
         conf->base_url = DEFAULT_BASE_URL;
@@ -622,7 +633,7 @@ static void *create_config(apr_pool_t *p) {
         conf->sensitive_routes = apr_array_make(p, 0, sizeof(char*));
         conf->enabled_hostnames = apr_array_make(p, 0, sizeof(char*));
         conf->sensitive_routes_prefix = apr_array_make(p, 0, sizeof(char*));
-        conf->background_activity_send = true;
+        conf->background_activity_send = false;
         conf->background_activity_workers = 10;
         conf->background_activity_queue_size = 1000;
         conf->px_errors_threshold = 100;

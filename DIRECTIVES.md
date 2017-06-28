@@ -4,7 +4,6 @@ Directives
 - [Basic](#basic)
 - [Filters](#filters)
 - [Customizing block page](#blockpage)
-- [Background activities send](#backgroundactivitiessend)
 - [PerimeterX Service monitor](#servicemonitor)
 
 
@@ -48,7 +47,7 @@ Directives
 |    SensitiveRoutes    | List of routes the Perimeterx module will always do a server-to-server call for, even if the cookie score is low and valid                                                                               | Empty list    | List     |  /login                       |
 | SensitiveRoutesPrefix | List of routes prefix. The PerimeterX module will always match request URI by this prefix list and if match was found will create a server-to-server call for, even if the cookie score is low and valid | Empty list    | List     |                         |
 |   DisableModByEnvvar  | Disables the PerimeterX module if environment variable `PX_SKIP_MODULE` is set on the request.                                                                                                           | Off           | On / Off | [Examples and Use cases](#disablemodenvvar)  |
-|   PXWhitelistRoutes   | A whitespace separated list of paths that will not be examined by PX module.                                                                                                                             | Empy list     | List     | /server-status /staging |
+|   PXWhitelistRoutes   | A whitespace separated list of paths prefixes that will not be examined by PX module.                                                                                                                             | Empy list     | List     | /server-status /staging |
 | PXWhitelistUserAgents | A whitespace separated list of User-Agents that will not be examined by PX module.                                                                                                                       | Empty list    | List     |                         |
 | ExtensionWhitelist    | A whitespace separated list of file extensions that will not be examined by PX module. | .css, .bmp, .tif, .ttf, .docx, .woff2, .js, .pict, .tiff, .eot, .xlsx, .jpg, .csv,,.eps, .woff, .xls, .jpeg, .doc, .ejs, .otf, .pptx, .gif, .pdf, .swf, .svg, .ps,,.ico, .pls, .midi, .svgz, .class, .png, .ppt, .mid, webp, .jar. | List | When using this option, the default values are cleared and the supplied list will be used |
 | EnableBlockingByHostname |     A whitespace separated list of hostnames that PX module will enable block for.     |                                                                                                              Empy list                                                                                                             | List | If this option is present - only hostnames appear in this list will pass through mod_perimeterx. |
@@ -86,17 +85,6 @@ SetEnvIf User-Agent good-bot PX_SKIP_MODULE true
 Read more on `mod_setenvif` [here](https://httpd.apache.org/docs/current/mod/mod_setenvif.html).
  
 **`mod_env` is not supported with this feature. Though the syntax is similar to mod_setenvif, the module is different. Mod_env will only run after the PerimeterX module in the Apache fixups phase. You should NOT use the `SetEnv` directive to set the `PX_SKIP_MODULE`
-
-## <a name="#backgroundactivitiessend"></a> Background activities send
-
-When `BackgroundActivitySend` is set to `On` - `page_requested` and `block` activities will be pushed to queue, each worker from the `BackgroundActivityWorkers` will consume this queue for activity and send it.
-
-|        Directive Name       |                                                                   Description                                                                   | Default value |  Values  |                                                           Note                                                           |
-|:---------------------------:|:-----------------------------------------------------------------------------------------------------------------------------------------------:|:-------------:|:--------:|:------------------------------------------------------------------------------------------------------------------------:|
-|    BackgroundActivitySend   |  Boolean flag to allow background activity (page_requested / activity) send without blocking the original request from continue with processing |      Off      | On / Off |                                                                                                                          |
-|  BackgroundActivityWorkers  | Number of worker thread in the thread pool that will handle the background send (fetching from activities queue and send to PerimeterX servers) |       10      |  Integer |                                                                                                                          |
-| BackgroundActivityQueueSize |                                Activities queue size from which the workers will fetch activities from and send.                                |      1000     |  Integer | When queue reaches it's full capacity - the push operation will block until queue size is less than the max size we set. |
-
 
 ## <a name="#filters"></a>PerimeterX Service monitor
 
