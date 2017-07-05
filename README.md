@@ -108,7 +108,7 @@ Loaded Modules:
                 CookieKey my_key
                 AppID my_app_id
                 AuthToken my_auth_token
-                BlockingScore 30
+                BlockingScore 90
                 ReportPageRequest On
                 Captcha On
         </IfModule>
