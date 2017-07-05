@@ -294,7 +294,7 @@ const char* context_to_json_string(request_context *ctx) {
             "score", ctx->score,
             "uri", ctx->uri,
             "is_made_s2s_api_call", ctx->made_api_call,
-            "is_sensitive_route", ctx->call_reason == CALL_REASON_SENSITIVE_ROUTE,
+            "sensitive_route", ctx->call_reason == CALL_REASON_SENSITIVE_ROUTE,
             "headers", headers);
     json_decref(headers);
 
