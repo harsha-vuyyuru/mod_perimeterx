@@ -4,7 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/) 
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
-## [2.3.1] - 5-35-2017
+## [2.3.1.1] - 7-05-2017
+
+* Change default value for background_activity_send
+
+## [2.3.1] - 5-30-2017
 
 * Bug fixes.
 
