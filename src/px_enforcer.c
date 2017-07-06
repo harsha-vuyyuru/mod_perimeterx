@@ -300,9 +300,7 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     ctx->px_cookie_orig = NULL;
 
     if (captcha_cookie) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "captcha cookie mode: %d", conf->legacy_captcha_cookie);
         populate_captcha_cookie_data(r->pool, captcha_cookie, ctx, conf->legacy_captcha_cookie);
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "... populate captcha: vid: %s, uuid: %s", ctx->vid, ctx->uuid);
     }
 
     // TODO(barak): parse without strtok
