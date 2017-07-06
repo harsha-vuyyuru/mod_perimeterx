@@ -232,7 +232,7 @@ int populate_captcha_cookie_data(apr_pool_t *p, const char *captcha_cookie, requ
         ctx->uuid = apr_strtok(NULL, delim, &saveptr);
         if (ctx->uuid == NULL) {
             ctx->uuid = ctx->vid;
-            ctx->vid = ctx->uuid;
+            ctx->vid = NULL;
         }
     } else {
         // captcha cookie for v2 module - token:uuid:vid
