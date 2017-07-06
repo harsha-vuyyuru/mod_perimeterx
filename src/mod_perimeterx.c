@@ -432,6 +432,7 @@ static const char *set_block_page_url(cmd_parms *cmd, void *config, const char *
     }
 
     conf->block_page_url = url;
+    conf->legacy_captcha_cookie = true;
     return NULL;
 }
 
@@ -593,6 +594,15 @@ static const char* set_proxy_url(cmd_parms *cmd, void *config, const char *proxy
     return NULL;
 }
 
+static const char *set_captcha_cookie_mode(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->legacy_captcha_cookie = arg ? true : false;
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     return px_handle_request(r, conf);
@@ -626,8 +636,9 @@ static void *create_config(apr_pool_t *p) {
         conf->background_activity_workers = 10;
         conf->background_activity_queue_size = 1000;
         conf->px_errors_threshold = 100;
-        conf->health_check_interval = 6000000; // 1 minute
+        conf->health_check_interval = 6000000;
         conf->px_service_monitor = false;
+        conf->legacy_captcha_cookie = false;
     }
     return conf;
 }
@@ -783,6 +794,11 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Proxy URL for outgoing PerimeterX service API"),
+    AP_INIT_FLAG("LegacyCaptchaCookie",
+            set_captcha_cookie_mode,
+            NULL,
+            OR_ALL,
+            "Enable legacy captcha cookie format to handle it correctly while migrating from v1 to v2"),
     { NULL }
 };
 

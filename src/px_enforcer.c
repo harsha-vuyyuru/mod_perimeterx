@@ -220,13 +220,26 @@ risk_response* risk_api_get(request_context *ctx, px_config *conf) {
     return NULL;
 }
 
-int populate_captcha_cookie_data(apr_pool_t *p, const char *captcha_cookie, request_context *ctx) {
+int populate_captcha_cookie_data(apr_pool_t *p, const char *captcha_cookie, request_context *ctx, bool legacy_captcha_cookie) {
     const char *delim = ":";
     char *saveptr;
     char *str = apr_pstrdup(p, captcha_cookie);
-    ctx->px_captcha = apr_strtok(str, delim, &saveptr);
-    ctx->uuid = apr_strtok(NULL, delim, &saveptr);
-    ctx->vid = apr_strtok(NULL, delim, &saveptr);
+    // Supporting migration path from v1 to v2,
+    // legacy catpcha cookie for v1 module - token:vid:uuid
+    if (legacy_captcha_cookie) {
+        ctx->px_captcha = apr_strtok(str, delim, &saveptr);
+        ctx->vid = apr_strtok(NULL, delim, &saveptr);
+        ctx->uuid = apr_strtok(NULL, delim, &saveptr);
+        if (ctx->uuid == NULL) {
+            ctx->uuid = ctx->vid;
+            ctx->vid = ctx->uuid;
+        }
+    } else {
+        // captcha cookie for v2 module - token:uuid:vid
+        ctx->px_captcha = apr_strtok(str, delim, &saveptr);
+        ctx->uuid = apr_strtok(NULL, delim, &saveptr);
+        ctx->vid = apr_strtok(NULL, delim, &saveptr);
+    }
 }
 
 request_context* create_context(request_rec *r, const px_config *conf) {
@@ -287,7 +300,9 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     ctx->px_cookie_orig = NULL;
 
     if (captcha_cookie) {
-        populate_captcha_cookie_data(r->pool, captcha_cookie, ctx);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "captcha cookie mode: %d", conf->legacy_captcha_cookie);
+        populate_captcha_cookie_data(r->pool, captcha_cookie, ctx, conf->legacy_captcha_cookie);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "... populate captcha: vid: %s, uuid: %s", ctx->vid, ctx->uuid);
     }
 
     // TODO(barak): parse without strtok
@@ -305,7 +320,7 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     ctx->block_enabled = enable_block_for_hostname(r, conf->enabled_hostnames);
     ctx->r = r;
 
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_context: create_context: useragent: (%s), px_cookie: (%s), full_url: (%s), hostname: (%s) , http_method: (%s), http_version: (%s), uri: (%s), ip: (%s), block_enabled: (%d)", conf->app_id, ctx->useragent, ctx->px_cookie, ctx->full_url, ctx->hostname, ctx->http_method, ctx->http_version, ctx->uri, ctx->ip, ctx->block_enabled);
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_context: useragent: (%s), px_cookie: (%s), full_url: (%s), hostname: (%s) , http_method: (%s), http_version: (%s), uri: (%s), ip: (%s), block_enabled: (%d)", conf->app_id, ctx->useragent, ctx->px_cookie, ctx->full_url, ctx->hostname, ctx->http_method, ctx->http_version, ctx->uri, ctx->ip, ctx->block_enabled);
 
     return ctx;
 }

@@ -53,6 +53,9 @@ typedef struct px_config_t {
     int px_errors_threshold;
     volatile apr_uint32_t px_errors_count;
     int health_check_interval; // in ms
+
+    // for v1 to v2 migration only, will be removed once migration process is over
+    bool legacy_captcha_cookie;
 } px_config;
 
 typedef struct health_check_data_t {
