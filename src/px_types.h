@@ -26,6 +26,8 @@ typedef struct px_config_t {
     bool captcha_enabled;
     bool skip_mod_by_envvar;
     int blocking_score;
+    bool score_header_enabled;
+    const char *score_header_name;
     long api_timeout_ms;
     long captcha_timeout;
     bool send_page_activities;

@@ -93,6 +93,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
     request_context *ctx = create_context(r, conf);
     if (ctx) {
         bool request_valid = px_verify_request(ctx, conf);
+
 #if DEBUG
         char *aut_test_header = apr_pstrdup(r->pool, (char *) apr_table_get(r->headers_in, PX_AUT_HEADER_KEY));
         if (aut_test_header && strcmp(aut_test_header, PX_AUT_HEADER_VALUE) == 0) {
@@ -103,6 +104,12 @@ int px_handle_request(request_rec *r, px_config *conf) {
             return DONE;
         }
 #endif
+
+        if (conf->score_header_enabled) {
+            const char *score_str = apr_itoa(r->pool, ctx->score);
+            apr_table_set(r->headers_out, conf->score_header_name, score_str);
+        }
+
         if (!request_valid && ctx->block_enabled) {
             if (r->method && strcmp(r->method, "POST") == 0) {
                 return HTTP_FORBIDDEN;
@@ -613,6 +620,24 @@ static const char* set_captcha_timeout(cmd_parms *cmd, void *config, const char 
     return NULL;
 }
 
+static const char* set_score_header(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->score_header_enabled = arg ? true : false;
+    return NULL;
+}
+
+static const char* set_score_header_name(cmd_parms *cmd, void *config, const char *score_header_name) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->score_header_name = score_header_name;
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     return px_handle_request(r, conf);
@@ -649,6 +674,7 @@ static void *create_config(apr_pool_t *p) {
         conf->px_errors_threshold = 100;
         conf->health_check_interval = 60000000; // 1 minute
         conf->px_service_monitor = false;
+        conf->score_header_name = "X-PX-SCORE";
     }
     return conf;
 }
@@ -809,6 +835,16 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Proxy URL for outgoing PerimeterX service API"),
+    AP_INIT_FLAG("ScoreHeader",
+            set_score_header,
+            NULL,
+            OR_ALL,
+            "Allow module to place request score on response header"),
+    AP_INIT_TAKE1("ScoreHeaderName",
+            set_score_header_name,
+            NULL,
+            OR_ALL,
+            "Set the name of the score header"),
     { NULL }
 };
 

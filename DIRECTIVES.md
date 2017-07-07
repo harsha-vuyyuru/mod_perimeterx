@@ -24,6 +24,8 @@ Directives
 | CurlPoolSize | The number of active curl handles for each server  | 40  | Integer 1-1000  | For optimized performance, it is best to use the number of running worker threads in your Apache server as the CurlPoolSize.
 | BaseURL |  Determines PerimeterX server base URL. | https://sapi-\<app_id\>.perimeterx.net  | String |
 | ProxyURL |  Proxy URL for outgoing PerimeterX service API | NULL  | String |
+| ScoreHeader |  Enable request score to be placed on the response headers | Off  | On / Off |
+| ScoreHeaderName |  Proxy URL for outgoing PerimeterX service API | X-PX-SCORE  | String | Works only when `ScoreHeader` is set to On
 
 
 #### <a name="ipheader">IPHeader Importacne</a>: 
