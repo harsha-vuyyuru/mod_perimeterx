@@ -58,7 +58,6 @@ extern const char *BLOCK_REASON_STR[];
 extern const char *CALL_REASON_STR[];
 #endif // DEBUG
 
-
 int render_page(request_rec *r, const request_context *ctx, const px_config *conf) {
     int ret_val;
     char *html = NULL;
@@ -386,7 +385,11 @@ static const char *set_api_timeout(cmd_parms *cmd, void *config, const char *api
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    conf->api_timeout_ms = atoi(api_timeout) * 1000;
+    long timeout = atoi(api_timeout) * 1000;
+    conf->api_timeout_ms = timeout;
+    if (!conf->is_captcha_timeout_set) {
+        conf->captcha_timeout = timeout;
+    }
     return NULL;
 }
 
@@ -395,7 +398,11 @@ static const char *set_api_timeout_ms(cmd_parms *cmd, void *config, const char *
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    conf->api_timeout_ms = atoi(api_timeout_ms);
+    long timeout = atoi(api_timeout_ms);
+    conf->api_timeout_ms = timeout;
+    if (!conf->is_captcha_timeout_set) {
+        conf->captcha_timeout = timeout;
+    }
     return NULL;
 }
 
@@ -617,6 +624,7 @@ static const char* set_captcha_timeout(cmd_parms *cmd, void *config, const char 
         return ERROR_CONFIG_MISSING;
     }
     conf->captcha_timeout = atoi(captcha_timeout);
+    conf->is_captcha_timeout_set = true;
     return NULL;
 }
 
