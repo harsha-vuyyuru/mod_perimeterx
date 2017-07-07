@@ -22,7 +22,7 @@ void update_and_notify_health_check(px_config *conf, server_rec *server) {
     apr_thread_mutex_unlock(conf->health_check_cond_mutex);
 }
 
-CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, px_config *conf, server_rec *server, char **response_data) {
+CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, long timeout, px_config *conf, server_rec *server, char **response_data) {
     struct response_t response;
     struct curl_slist *headers = NULL;
     long status_code;
@@ -41,7 +41,7 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, p
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, conf->api_timeout_ms);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_response_cb);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*) &response);
     if (conf->proxy_url) {

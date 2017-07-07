@@ -192,7 +192,7 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
             break;
         if (rv == APR_SUCCESS && v) {
             char *activity = (char *)v;
-            post_request_helper(curl, conf->activities_api_url, activity, conf, consumer_data->server, NULL);
+            post_request_helper(curl, conf->activities_api_url, activity, conf->api_timeout_ms, conf, consumer_data->server, NULL);
             free(activity);
         }
     }
@@ -604,6 +604,15 @@ static const char* set_proxy_url(cmd_parms *cmd, void *config, const char *proxy
     return NULL;
 }
 
+static const char* set_captcha_timeout(cmd_parms *cmd, void *config, const char *captcha_timeout) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->captcha_timeout = atoi(captcha_timeout);
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     return px_handle_request(r, conf);
@@ -614,6 +623,7 @@ static void *create_config(apr_pool_t *p) {
     if (conf) {
         conf->module_enabled = false;
         conf->api_timeout_ms = 1000L;
+        conf->captcha_timeout = 1000L;
         conf->send_page_activities = true;
         conf->blocking_score = 70;
         conf->captcha_enabled = true;
@@ -699,6 +709,11 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Set timeout for risk API request in milliseconds"),
+    AP_INIT_TAKE1("CaptchaTimeout",
+            set_captcha_timeout,
+            NULL,
+            OR_ALL,
+            "Set timeout for captcha API request in milliseconds"),
     AP_INIT_FLAG("ReportPageRequest",
             set_pagerequest_enabled,
             NULL,

@@ -22,13 +22,13 @@ static const char* FILE_EXT_WHITELIST[] = {
     ".ico", ".pls", ".midi", ".svgz", ".class", ".png", ".ppt", ".mid", "webp", ".jar"
 };
 
-static CURLcode post_request(const char *url, const char *payload, const request_context *ctx, px_config *conf, char **response_data, double *request_rtt) {
+static CURLcode post_request(const char *url, const char *payload, long timeout, px_config *conf, const request_context *ctx, char **response_data, double *request_rtt) {
     CURL *curl = curl_pool_get_wait(conf->curl_pool);
     if (curl == NULL) {
         ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s]: post_req_request: could not obtain curl handle", ctx->app_id);
         return CURLE_FAILED_INIT;
     }
-    CURLcode status = post_request_helper(curl, url, payload, conf, ctx->r->server, response_data);
+    CURLcode status = post_request_helper(curl, url, payload, timeout, conf, ctx->r->server, response_data);
     if (request_rtt) {
         if (CURLE_OK != curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME, request_rtt)) {
             *request_rtt = 0;
@@ -114,7 +114,7 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
 
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: verify_captcha: request - (%s)", ctx->app_id, payload);
     char *response_str = NULL;
-    CURLcode status = post_request(conf->captcha_api_url, payload, ctx, conf, &response_str, &ctx->api_rtt);
+    CURLcode status = post_request(conf->captcha_api_url, payload, conf->captcha_timeout, conf, ctx, &response_str, &ctx->api_rtt);
     free(payload);
     if (status == CURLE_OK) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: verify_captcha: server response (%s)", ctx->app_id, response_str);
@@ -142,7 +142,7 @@ static void post_verification(request_context *ctx, px_config *conf, bool reques
         if (conf->background_activity_send) {
             apr_queue_push(conf->activity_queue, activity);
         } else {
-            post_request(conf->activities_api_url, activity, ctx, conf, NULL, NULL);
+            post_request(conf->activities_api_url, activity, conf->api_timeout_ms, conf, ctx, NULL, NULL);
             free(activity);
         }
     }
@@ -211,7 +211,7 @@ risk_response* risk_api_get(request_context *ctx, px_config *conf) {
 
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: risk payload: %s", ctx->app_id, risk_payload);
     char *risk_response_str;
-    CURLcode status = post_request(conf->risk_api_url, risk_payload, ctx, conf, &risk_response_str, &ctx->api_rtt);
+    CURLcode status = post_request(conf->risk_api_url, risk_payload, conf->api_timeout_ms, conf, ctx, &risk_response_str, &ctx->api_rtt);
     ctx->made_api_call = true;
     free(risk_payload);
     if (status == CURLE_OK) {
