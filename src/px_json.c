@@ -35,17 +35,26 @@ static const char *BLOCK_REASON_STR[] = {
     [BLOCK_REASON_SERVER] = "s2s_high_score",
 };
 
+static const char *TOKEN_ORIGIN_STR[] = {
+    [TOKEN_ORIGIN_COOKIE] = "cookie",
+    [TOKEN_ORIGIN_HEADER] = "header",
+};
+
+static const char *ACTION_STR[] = {
+    [ACTION_CAPTCHA] = "captcha",
+    [ACTION_BLOCK] = "block",
+};
+
 // format json requests
 //
-
 char *create_activity(const char *activity_type, const px_config *conf, const request_context *ctx) {
     json_t *details = json_pack("{s:i, s:s, s:s, s:s, s:s}",
             "block_score", ctx->score,
             "block_reason", BLOCK_REASON_STR[ctx->block_reason],
             "http_method", ctx->http_method,
             "http_version", ctx->http_version,
-            "module_version", conf->module_version);
-
+            "module_version", conf->module_version,
+            "cookie_origin", TOKEN_ORIGIN_STR[ctx->token_origin]);
 
     if (strcmp(activity_type, BLOCKED_ACTIVITY_TYPE) == 0 && ctx->uuid) {
         json_object_set_new(details, "block_uuid", json_string(ctx->uuid));
@@ -127,11 +136,13 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf) {
     json_decref(j_headers);
 
     // additional object
-    json_t *j_additional = json_pack("{s:s, s:s, s:s, s:s}",
+    json_t *j_additional = json_pack("{s:s, s:s, s:s, s:s, s:s}",
             "s2s_call_reason", CALL_REASON_STR[ctx->call_reason],
             "http_method", ctx->http_method,
             "http_version", ctx->http_version,
-            "module_version", conf->module_version);
+            "module_version", conf->module_version,
+            "cookie_origin", TOKEN_ORIGIN_STR[ctx->token_origin]);
+
     if (ctx->px_cookie) {
         json_object_set_new(j_additional, "px_cookie", json_string(ctx->px_cookie_decrypted));
     }
@@ -264,6 +275,26 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
     }
     json_decref(j_response);
     return parsed_response;
+}
+
+char *create_mobile_response(px_config *cfg, request_context *ctx, const char *compiled_html) {
+    json_t *j_mobile_response = json_pack("{s:s,s:s,s:s,s:s}",
+            "action", ACTION_STR[ctx->action],
+            "appId", ctx->app_id,
+            "page", compiled_html,
+            "collectorUrl", cfg->base_url);
+
+    if (ctx->vid) {
+        json_object_set_new(j_mobile_response, "vid", json_string(ctx->vid));
+    }
+    if (ctx->uuid) {
+        json_object_set_new(j_mobile_response, "uuid", json_string(ctx->uuid));
+    }
+
+    // dump as string
+    char *request_str = json_dumps(j_mobile_response, JSON_COMPACT);
+    json_decref(j_mobile_response);
+    return request_str;
 }
 
 #ifdef DEBUG
