@@ -57,6 +57,8 @@ typedef struct px_config_t {
     int px_errors_threshold;
     volatile apr_uint32_t px_errors_count;
     long health_check_interval; // in ms
+
+    bool enable_token_via_header;
 } px_config;
 
 typedef struct health_check_data_t {

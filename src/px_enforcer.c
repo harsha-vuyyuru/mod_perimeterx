@@ -232,9 +232,14 @@ request_context* create_context(request_rec *r, const px_config *conf) {
 
     const char *px_token = NULL;
     ctx->token_origin = TOKEN_ORIGIN_COOKIE;
-    int token_version = extract_token_and_version_from_header(r->pool, r->headers_in, &px_token);
-    if (token_version > -1) {
-        ctx->token_origin = TOKEN_ORIGIN_HEADER;
+
+    if (conf->enable_token_via_header) {
+        int token_version = extract_token_and_version_from_header(r->pool, r->headers_in, &px_token);
+        if (token_version > -1) {
+            ctx->token_origin = TOKEN_ORIGIN_HEADER;
+        } else {
+            ap_cookie_read(r, PX_COOKIE, &px_token, 0);
+        }
     } else {
         ap_cookie_read(r, PX_COOKIE, &px_token, 0);
     }
