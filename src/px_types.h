@@ -26,7 +26,11 @@ typedef struct px_config_t {
     bool captcha_enabled;
     bool skip_mod_by_envvar;
     int blocking_score;
+    bool score_header_enabled;
+    const char *score_header_name;
     long api_timeout_ms;
+    bool is_captcha_timeout_set;
+    long captcha_timeout;
     bool send_page_activities;
     const char *module_version;
     curl_pool *curl_pool;
@@ -52,7 +56,9 @@ typedef struct px_config_t {
     apr_thread_cond_t *health_check_cond;
     int px_errors_threshold;
     volatile apr_uint32_t px_errors_count;
-    int health_check_interval; // in ms
+    long health_check_interval; // in ms
+
+    bool enable_token_via_header;
 } px_config;
 
 typedef struct health_check_data_t {
@@ -100,6 +106,20 @@ typedef enum {
     BLOCK_REASON_COOKIE,
     BLOCK_REASON_SERVER,
 } block_reason_t;
+
+typedef enum {
+    TOKEN_ORIGIN_COOKIE,
+    TOKEN_ORIGIN_HEADER,
+} token_origin_t;
+
+typedef enum {
+    ACTION_CAPTCHA,
+    ACTION_BLOCK,
+} action_t;
+
+typedef enum {
+    CAPTCHA_TYPE_RECAPTCHA
+} captcha_type_t;
 
 typedef struct risk_cookie_t {
     const char *timestamp;
@@ -150,6 +170,10 @@ typedef struct request_context_t {
     bool block_enabled;
     bool made_api_call;
     request_rec *r;
+    double api_rtt;
+    token_origin_t token_origin;
+    action_t action;
+    captcha_type_t captcha_type;
 } request_context;
 
 #endif

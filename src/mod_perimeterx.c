@@ -8,7 +8,6 @@
 #include <curl/curl.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
-
 #include <httpd.h>
 #include <http_config.h>
 #include <http_protocol.h>
@@ -21,11 +20,13 @@
 #include <apr_atomic.h>
 #include <apr_portable.h>
 #include <apr_signal.h>
+#include <apr_base64.h>
 
 #include "px_utils.h"
 #include "px_types.h"
 #include "px_template.h"
 #include "px_enforcer.h"
+#include "px_json.h"
 
 module AP_MODULE_DECLARE_DATA perimeterx_module;
 
@@ -35,9 +36,12 @@ APLOG_USE_MODULE(perimeterx);
 
 static const char *DEFAULT_BASE_URL = "https://sapi-%s.perimeterx.net";
 static const char *RISK_API = "/api/v2/risk";
-static const char *CAPTCHA_API = "/api/v1/risk/captcha";
+static const char *CAPTCHA_API = "/api/v2/risk/captcha";
 static const char *ACTIVITIES_API = "/api/v1/collector/s2s";
 static const char *HEALTH_CHECK_API = "/api/v1/kpi/status";
+
+static const char *CONTENT_TYPE_JSON = "application/json";
+static const char *CONTENT_TYPE_HTML = "text/html";
 
 // constants
 //
@@ -53,23 +57,46 @@ static const char *block_tpl = "<!DOCTYPE html> <html lang=\"en\"> <head> <meta 
 
 static const char *captcha_tpl = "<!DOCTYPE html> <html lang=\"en\"> <head> <meta charset=\"utf-8\"> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> <title>Access to this page has been denied.</title> <link href=\"https://fonts.googleapis.com/css?family=Open+Sans:300\" rel=\"stylesheet\"> <style> html,body{ margin: 0; padding: 0; font-family: 'Open Sans', sans-serif; color: #000; } a{ color: #c5c5c5; text-decoration: none; } .container{ align-items: center; display: flex; flex: 1; justify-content: space-between; flex-direction: column; height: 100%; } .container > div { width: 100%; display: flex; justify-content:center; } .container > div > div { display: flex; width: 80%; } .customer-logo-wrapper{ padding-top: 2rem; flex-grow: 0; background-color: #fff; visibility: {{logoVisibility}}; } .customer-logo{ border-bottom: 1px solid #000; } .customer-logo > img{ padding-bottom: 1rem; max-height: 50px; max-width: auto; } .page-title-wrapper{ flex-grow: 2; } .page-title { flex-direction: column-reverse; } .content-wrapper{ flex-grow: 5; } .content{ flex-direction: column; } .page-footer-wrapper{ align-items: center; flex-grow: 0.2; background-color: #000; color: #c5c5c5; font-size: 70%; } @media (min-width:768px){ html,body{ height: 100%; } } </style> <!-- Custom CSS --> {{#cssRef}} <link rel=\"stylesheet\" type=\"text/css\" href=\"{{cssRef}}\" /> {{/cssRef}} <script src=\"https://www.google.com/recaptcha/api.js\" async defer></script> </head> <body> <section class=\"container\"> <div class=\"customer-logo-wrapper\"> <div class=\"customer-logo\"> <img src=\"{{customLogo}}\" alt=\"Logo\"/> </div> </div> <div class=\"page-title-wrapper\"> <div class=\"page-title\"> <h1>Please verify you are a human</h1> </div> </div> <div class=\"content-wrapper\"> <div class=\"content\"> <p> Please click \"I am not a robot\" to continue </p> <div class=\"g-recaptcha\" data-sitekey=\"6Lcj-R8TAAAAABs3FrRPuQhLMbp5QrHsHufzLf7b\" data-callback=\"handleCaptcha\" data-theme=\"dark\"> </div> <p> Access to this page has been denied because we believe you are using automation tools to browse the website. </p> <p> This may happen as a result of the following: </p> <ul> <li> Javascript is disabled or blocked by an extension (ad blockers for example) </li> <li> Your browser does not support cookies </li> </ul> <p> Please make sure that Javascript and cookies are enabled on your browser and that you are not blocking them from loading. </p> <p> Reference ID: #{{refId}} </p> </div> </div> <div class=\"page-footer-wrapper\"> <div class=\"page-footer\"> <p> Powered by <a href=\"https://www.perimeterx.com\">PerimeterX</a> , Inc. </p> </div> </div> </section> <!-- Px --> <script> ( function (){ window._pxAppId = '{{appId}}'; var p = document.getElementsByTagName(\"script\")[0], s = document.createElement(\"script\"); s.async = 1; s.src = '//client.perimeterx.net/{{appId}}/main.min.js'; p.parentNode.insertBefore(s, p); } () ); </script> <!-- Captcha --> <script> window.px_vid = '{{vid}}'; function handleCaptcha(response){ var vid = '{{vid}}'; var uuid = '{{uuid}}'; var name = \"_pxCaptcha\"; var expiryUtc = new Date(Date.now()+1000*10).toUTCString(); var cookieParts = [ name, \"=\", response+\":\"+uuid+\":\"+vid, \"; expires=\", expiryUtc, \"; path=/\" ]; document.cookie = cookieParts.join(\"\"); location.reload(); } </script> <!-- Custom Script --> {{#jsRef}} <script src=\"{{jsRef}}\"></script> {{/jsRef}} </body> </html>";
 
+const static char *mobile_captcha_tpl = "<!DOCTYPE html> <html lang=\"en\"> <head> <meta charset=\"utf-8\"> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> <title>Access to this page has been denied.</title> <link href=\"https://fonts.googleapis.com/css?family=Open+Sans:300\" rel=\"stylesheet\"> <style> html,body{ margin: 0; padding: 0; font-family: 'Open Sans', sans-serif; color: #000; } a{ color: #c5c5c5; text-decoration: none; } .container{ align-items: center; display: flex; flex: 1; justify-content: space-between; flex-direction: column; height: 100%; } .container > div { width: 100%; display: flex; justify-content:center; } .container > div > div { display: flex; width: 80%; } .customer-logo-wrapper{ padding-top: 2rem; flex-grow: 0; background-color: #fff; visibility: {{logoVisibility}}; } .customer-logo{ border-bottom: 1px solid #000; } .customer-logo > img{ padding-bottom: 1rem; max-height: 50px; max-width: auto; } .page-title-wrapper{ flex-grow: 2; } .page-title { flex-direction: column-reverse; } .content-wrapper{ flex-grow: 5; } .content{ flex-direction: column; } .page-footer-wrapper{ align-items: center; flex-grow: 0.2; background-color: #000; color: #c5c5c5; font-size: 70%; } @media (min-width:768px){ html,body{ height: 100%; } } </style> <!-- Custom CSS --> {{#cssRef}} <link rel=\"stylesheet\" type=\"text/css\" href=\"{{cssRef}}\" /> {{/cssRef}} <script src=\"https://www.google.com/recaptcha/api.js\" async defer></script> </head>\r\n <body> <section class=\"container\"> <div class=\"customer-logo-wrapper\"> <div class=\"customer-logo\"> <img src=\"{{customLogo}}\" alt=\"Logo\"/> </div> </div> <div class=\"page-title-wrapper\"> <div class=\"page-title\"> <h1>Please verify you are a human</h1> </div> </div> <div class=\"content-wrapper\"> <div class=\"content\"> <p> Please click \"I am not a robot\" to continue </p> <div class=\"g-recaptcha\" data-sitekey=\"6Lcj-R8TAAAAABs3FrRPuQhLMbp5QrHsHufzLf7b\" data-callback=\"handleCaptcha\" data-theme=\"dark\"> </div> <p> Access to this page has been denied because we believe you are using automation tools to browse the website. </p> <p> This may happen as a result of the following: </p> <ul> <li> Javascript is disabled or blocked by an extension (ad blockers for example) </li> <li> Your browser does not support cookies </li> </ul> <p> Please make sure that Javascript and cookies are enabled on your browser and that you are not blocking them from loading. </p> <p> Reference ID: #{{refId}} </p> </div> </div> <div class=\"page-footer-wrapper\"> <div class=\"page-footer\"> <p> Powered by <a href=\"https://www.perimeterx.com\">PerimeterX</a> , Inc. </p> </div> </div> </section> <!-- Px --> <script> ( function (){ window._pxAppId = '{{appId}}'; var p = document.getElementsByTagName(\"script\")[0], s = document.createElement(\"script\"); s.async = 1; s.src = '//client.perimeterx.net/{{appId}}/main.min.js'; p.parentNode.insertBefore(s, p); } () ); </script> <!-- Captcha --> <script> function captchaSolved(res) { window.location.href = '/px/captcha_callback?status=' + res.status; } function handleCaptcha(response) { var appId = '{{appId}}'; var vid = '{{vid}}'; var uuid = '{{uuid}}'; var collectorUrl = '{{hostUrl}}'; var req = new XMLHttpRequest(); req.open('POST', collectorUrl + '/api/v1/collector/captcha'); req.setRequestHeader('Content-Type', 'application/json'); req.addEventListener('error', function() { captchaSolved({ status: 1 }); }); req.addEventListener('cancel', function() { captchaSolved({ status: 2 }); }); req.addEventListener('load', function() { if (req.status == 200) { try { var responseJSON = JSON.parse(req.responseText); return captchaSolved(responseJSON); } catch (ex) {} } captchaSolved({ status: 3 }); }); req.send(JSON.stringify({ appId: appId, uuid: uuid, vid: vid, pxCaptcha: response, hostname: window.location.hostname, request: { url: window.location.href } })); } </script> <!-- Custom Script --> {{#jsRef}} <script src=\"{{jsRef}}\"></script> {{/jsRef}} </body> </html>";
+
 #ifdef DEBUG
 extern const char *BLOCK_REASON_STR[];
 extern const char *CALL_REASON_STR[];
 #endif // DEBUG
 
-
-int render_page(request_rec *r, const request_context *ctx, const px_config *conf) {
-    int ret_val;
+char* create_response(px_config *conf, request_context *ctx) {
+    char *response;
+    size_t html_size;
     char *html = NULL;
-    const char *tpl = conf->captcha_enabled ? captcha_tpl : block_tpl;
-    size_t size;
-    int res = render_template(tpl, &html, ctx, conf, &size);
-    if (res == 0) {
-        ret_val = ap_rwrite(html, size, r);
+
+    // which template to use in response
+    const char *template = block_tpl;
+    if (ctx->action == ACTION_CAPTCHA) {
+        template = ctx->token_origin == TOKEN_ORIGIN_COOKIE ? captcha_tpl : mobile_captcha_tpl;
     }
-    free(html);
-    return res;
+
+    // render html page with the relevant template
+    int res = render_template(template, &html, ctx, conf, &html_size);
+    if (res) {
+        // failed to render
+        return NULL;
+    }
+
+    // formulate server response according to px token type
+    if (ctx->token_origin == TOKEN_ORIGIN_HEADER) {
+        int expected_encoded_len = apr_base64_encode_len(html_size);
+        char *encoded_html = apr_palloc(ctx->r->pool, expected_encoded_len + 1);
+        int encoded_len = apr_base64_encode(encoded_html, html, html_size);
+        free(html);
+        if (encoded_html == 0) {
+            return NULL;
+        }
+        response = create_mobile_response(conf, ctx, encoded_html);
+    } else {
+        response = html;
+    }
+
+    return response;
 }
 
 int px_handle_request(request_rec *r, px_config *conf) {
@@ -93,16 +120,23 @@ int px_handle_request(request_rec *r, px_config *conf) {
     request_context *ctx = create_context(r, conf);
     if (ctx) {
         bool request_valid = px_verify_request(ctx, conf);
+
 #if DEBUG
         char *aut_test_header = apr_pstrdup(r->pool, (char *) apr_table_get(r->headers_in, PX_AUT_HEADER_KEY));
         if (aut_test_header && strcmp(aut_test_header, PX_AUT_HEADER_VALUE) == 0) {
             const char *ctx_str = json_context(ctx);
-            ap_set_content_type(r, "application/json");
+            ap_set_content_type(r, CONTENT_TYPE_JSON);
             ap_rprintf(r, "%s", ctx_str);
             free((void*)ctx_str);
             return DONE;
         }
 #endif
+
+        if (conf->score_header_enabled) {
+            const char *score_str = apr_itoa(r->pool, ctx->score);
+            apr_table_set(r->headers_out, conf->score_header_name, score_str);
+        }
+
         if (!request_valid && ctx->block_enabled) {
             if (r->method && strcmp(r->method, "POST") == 0) {
                 return HTTP_FORBIDDEN;
@@ -124,16 +158,21 @@ int px_handle_request(request_rec *r, px_config *conf) {
                 apr_table_set(r->headers_out, "Location", redirect_url);
                 return HTTP_TEMPORARY_REDIRECT;
             }
-            if (render_page(r, ctx, conf) != 0) {
-                ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server, "[%s]: Could not create block page with template, passing request", conf->app_id);
-            } else {
-                r->status = HTTP_FORBIDDEN;
-                ap_set_content_type(r, "text/html");
-                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: px_handle_request: request blocked. (%d)", ctx->app_id, conf->captcha_enabled);
+
+            char *response = create_response(conf, ctx);
+            if (response) {
+                const char *content_type = ctx->token_origin == TOKEN_ORIGIN_COOKIE ? CONTENT_TYPE_HTML : CONTENT_TYPE_JSON;
+                ap_set_content_type(ctx->r, content_type);
+                ctx->r->status = HTTP_FORBIDDEN;
+                ap_rwrite(response, strlen(response), ctx->r);
+                free(response);
                 return DONE;
             }
+            // failed to create response
+            ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server, "[%s]: Could not create block page with template, passing request", conf->app_id);
         }
     }
+    r->status = HTTP_OK;
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: px_handle_request: request passed", ctx->app_id);
     return OK;
 }
@@ -192,7 +231,7 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
             break;
         if (rv == APR_SUCCESS && v) {
             char *activity = (char *)v;
-            post_request_helper(curl, conf->activities_api_url, activity, conf, consumer_data->server, NULL);
+            post_request_helper(curl, conf->activities_api_url, activity, conf->api_timeout_ms, conf, consumer_data->server, NULL);
             free(activity);
         }
     }
@@ -379,7 +418,11 @@ static const char *set_api_timeout(cmd_parms *cmd, void *config, const char *api
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    conf->api_timeout_ms = atoi(api_timeout) * 1000;
+    long timeout = atoi(api_timeout) * 1000;
+    conf->api_timeout_ms = timeout;
+    if (!conf->is_captcha_timeout_set) {
+        conf->captcha_timeout = timeout;
+    }
     return NULL;
 }
 
@@ -388,7 +431,11 @@ static const char *set_api_timeout_ms(cmd_parms *cmd, void *config, const char *
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    conf->api_timeout_ms = atoi(api_timeout_ms);
+    long timeout = atoi(api_timeout_ms);
+    conf->api_timeout_ms = timeout;
+    if (!conf->is_captcha_timeout_set) {
+        conf->captcha_timeout = timeout;
+    }
     return NULL;
 }
 
@@ -604,6 +651,43 @@ static const char* set_proxy_url(cmd_parms *cmd, void *config, const char *proxy
     return NULL;
 }
 
+static const char* set_captcha_timeout(cmd_parms *cmd, void *config, const char *captcha_timeout) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->captcha_timeout = atoi(captcha_timeout);
+    conf->is_captcha_timeout_set = true;
+    return NULL;
+}
+
+static const char* set_score_header(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->score_header_enabled = arg ? true : false;
+    return NULL;
+}
+
+static const char* set_score_header_name(cmd_parms *cmd, void *config, const char *score_header_name) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->score_header_name = score_header_name;
+    return NULL;
+}
+
+static const char *enable_token_via_header(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->enable_token_via_header = arg ? true : false;
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     return px_handle_request(r, conf);
@@ -614,10 +698,11 @@ static void *create_config(apr_pool_t *p) {
     if (conf) {
         conf->module_enabled = false;
         conf->api_timeout_ms = 1000L;
+        conf->captcha_timeout = 1000L;
         conf->send_page_activities = true;
         conf->blocking_score = 70;
         conf->captcha_enabled = true;
-        conf->module_version = "Apache Module v2.3.1";
+        conf->module_version = "Apache Module v2.4.0-rc.1";
         conf->skip_mod_by_envvar = false;
         conf->curl_pool_size = 40;
         conf->base_url = DEFAULT_BASE_URL;
@@ -633,12 +718,13 @@ static void *create_config(apr_pool_t *p) {
         conf->sensitive_routes = apr_array_make(p, 0, sizeof(char*));
         conf->enabled_hostnames = apr_array_make(p, 0, sizeof(char*));
         conf->sensitive_routes_prefix = apr_array_make(p, 0, sizeof(char*));
-        conf->background_activity_send = true;
+        conf->background_activity_send = false;
         conf->background_activity_workers = 10;
         conf->background_activity_queue_size = 1000;
         conf->px_errors_threshold = 100;
         conf->health_check_interval = 60000000; // 1 minute
         conf->px_service_monitor = false;
+        conf->score_header_name = "X-PX-SCORE";
     }
     return conf;
 }
@@ -699,6 +785,11 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Set timeout for risk API request in milliseconds"),
+    AP_INIT_TAKE1("CaptchaTimeout",
+            set_captcha_timeout,
+            NULL,
+            OR_ALL,
+            "Set timeout for captcha API request in milliseconds"),
     AP_INIT_FLAG("ReportPageRequest",
             set_pagerequest_enabled,
             NULL,
@@ -794,6 +885,21 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Proxy URL for outgoing PerimeterX service API"),
+    AP_INIT_FLAG("ScoreHeader",
+            set_score_header,
+            NULL,
+            OR_ALL,
+            "Allow module to place request score on response header"),
+    AP_INIT_TAKE1("ScoreHeaderName",
+            set_score_header_name,
+            NULL,
+            OR_ALL,
+            "Set the name of the score header"),
+    AP_INIT_FLAG("EnableTokenViaHeader",
+            enable_token_via_header,
+            NULL,
+            OR_ALL,
+            "Enable header based token send"),
     { NULL }
 };
 

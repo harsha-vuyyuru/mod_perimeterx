@@ -8,6 +8,7 @@
 
 static const char *JSON_CONTENT_TYPE = "Content-Type: application/json";
 static const char *EXPECT = "Expect:";
+static const char *MOBILE_SDK_HEADER = "X-PX-AUTHORIZATION";
 
 void update_and_notify_health_check(px_config *conf, server_rec *server) {
     if (!conf->px_service_monitor) {
@@ -22,7 +23,7 @@ void update_and_notify_health_check(px_config *conf, server_rec *server) {
     apr_thread_mutex_unlock(conf->health_check_cond_mutex);
 }
 
-CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, px_config *conf, server_rec *server, char **response_data) {
+CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, long timeout, px_config *conf, server_rec *server, char **response_data) {
     struct response_t response;
     struct curl_slist *headers = NULL;
     long status_code;
@@ -41,7 +42,7 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, p
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, conf->api_timeout_ms);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_response_cb);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*) &response);
     if (conf->proxy_url) {
@@ -108,11 +109,7 @@ const char* extract_first_ip(apr_pool_t *p, const char *ip) {
 }
 
 const char *get_request_ip(const request_rec *r, const px_config *conf) {
-# if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 4
     const char* socket_ip =  r->useragent_ip;
-# else
-    const char* socket_ip = r->connection->remote_ip;
-#endif
     const apr_array_header_t *ip_header_keys = conf->ip_header_keys;
     // looking for the first valid ip address in the configured IPHeader list
     for (int i = 0; i < ip_header_keys->nelts; i++) {
@@ -123,11 +120,30 @@ const char *get_request_ip(const request_rec *r, const px_config *conf) {
             const char *first_ip = extract_first_ip(r->pool, ip);
             // validation ip
             in_addr_t addr;
-            if (inet_pton(AF_INET, first_ip, &addr) == 1 || inet_pton(AF_INET6, first_ip, &addr) == 1) {
+            struct in6_addr ipv6_addr;
+            if (inet_pton(AF_INET, first_ip, &addr) == 1 || inet_pton(AF_INET6, first_ip, &ipv6_addr) == 1) {
                 return first_ip;
             }
         }
     }
     // no valid ip found in IPHeader values - using socket_ip as a fallback
     return socket_ip;
+}
+
+// returns the token version, -1 if header not found
+int extract_token_and_version_from_header(apr_pool_t *pool, apr_table_t *headers, const char **token) {
+    *token = NULL;
+    const char *header_value = apr_table_get(headers, MOBILE_SDK_HEADER);
+    if (header_value) {
+        char *rest;
+        char *header_cpy = apr_pstrdup(pool, header_value);
+        const char *version = apr_strtok(header_cpy, ":", &rest);
+        if (version == NULL) {
+            return 0;
+        }
+        const char *px_token = apr_strtok(NULL, "", &rest);
+        *token =  px_token;
+        return apr_atoi64(version);
+    }
+    return -1;
 }
