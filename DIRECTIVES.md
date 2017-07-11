@@ -4,7 +4,6 @@ Directives
 - [Basic](#basic)
 - [Filters](#filters)
 - [Customizing block page](#blockpage)
-- [Background activities send](#backgroundactivitiessend)
 - [PerimeterX Service monitor](#servicemonitor)
 
 
@@ -20,10 +19,13 @@ Directives
 | Captcha | Enable reCaptcha on the blocking page  | On  | On / Off  | When using a custom block page with captcha abilities implementation, this option must be `On`.
 | ReportPageRequest | Boolean flag to enable or disable sending activities and metrics to PerimeterX on each page request. Enabling this feature will provide data that populates the PerimeterX portal with valuable information	  |  On | On / Off  |
 | APITimeoutMS |  REST API timeout in milliseconds | 1000  | Integer  | In case APITimeoutMS and APITimeout (deprecated but supported for backward compatibility) are both set in the module configuration - the one that is set later in the file will be the one that will be used. Any other value set prior of it will be discarded.
+| CaptchaTimeout |  Captcha timeout in milliseconds | APITimeoutMS  | Integer  |  If not set - CaptchaTimeout is the same as APITimeoutMS
 | IPHeader | List of HTTP header names that contain the real client IP address. Use this feature when your server is behind a CDN. | NULL | List |  [IPHeader Importacne](#ipheader)
 | CurlPoolSize | The number of active curl handles for each server  | 40  | Integer 1-1000  | For optimized performance, it is best to use the number of running worker threads in your Apache server as the CurlPoolSize.
 | BaseURL |  Determines PerimeterX server base URL. | https://sapi-\<app_id\>.perimeterx.net  | String |
 | ProxyURL |  Proxy URL for outgoing PerimeterX service API | NULL  | String |
+| ScoreHeader |  Enable request score to be placed on the response headers | Off  | On / Off |
+| ScoreHeaderName |  Proxy URL for outgoing PerimeterX service API | X-PX-SCORE  | String | Works only when `ScoreHeader` is set to On
 
 
 #### <a name="ipheader">IPHeader Importacne</a>: 
@@ -86,17 +88,6 @@ SetEnvIf User-Agent good-bot PX_SKIP_MODULE true
 Read more on `mod_setenvif` [here](https://httpd.apache.org/docs/current/mod/mod_setenvif.html).
  
 **`mod_env` is not supported with this feature. Though the syntax is similar to mod_setenvif, the module is different. Mod_env will only run after the PerimeterX module in the Apache fixups phase. You should NOT use the `SetEnv` directive to set the `PX_SKIP_MODULE`
-
-## <a name="#backgroundactivitiessend"></a> Background activities send
-
-When `BackgroundActivitySend` is set to `On` - `page_requested` and `block` activities will be pushed to queue, each worker from the `BackgroundActivityWorkers` will consume this queue for activity and send it.
-
-|        Directive Name       |                                                                   Description                                                                   | Default value |  Values  |                                                           Note                                                           |
-|:---------------------------:|:-----------------------------------------------------------------------------------------------------------------------------------------------:|:-------------:|:--------:|:------------------------------------------------------------------------------------------------------------------------:|
-|    BackgroundActivitySend   |  Boolean flag to allow background activity (page_requested / activity) send without blocking the original request from continue with processing |      On      | On / Off |                                                                                                                          |
-|  BackgroundActivityWorkers  | Number of worker thread in the thread pool that will handle the background send (fetching from activities queue and send to PerimeterX servers) |       10      |  Integer |                                                                                                                          |
-| BackgroundActivityQueueSize |                                Activities queue size from which the workers will fetch activities from and send.                                |      1000     |  Integer | When queue reaches it's full capacity - the push operation will block until queue size is less than the max size we set. |
-
 
 ## <a name="#filters"></a>PerimeterX Service monitor
 

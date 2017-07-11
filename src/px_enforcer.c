@@ -2,9 +2,7 @@
 
 #include <apr_strings.h>
 #include <http_log.h>
-#if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 4
 #include <util_cookies.h>
-#endif
 
 #include "px_cookie.h"
 #include "px_json.h"
@@ -22,15 +20,18 @@ static const char* FILE_EXT_WHITELIST[] = {
     ".ico", ".pls", ".midi", ".svgz", ".class", ".png", ".ppt", ".mid", "webp", ".jar"
 };
 
-static CURLcode post_request(const char *url, const char *payload, const request_context *ctx, px_config *conf, char **response_data) {
+static CURLcode post_request(const char *url, const char *payload, long timeout, px_config *conf, const request_context *ctx, char **response_data, double *request_rtt) {
     CURL *curl = curl_pool_get_wait(conf->curl_pool);
     if (curl == NULL) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server,
-                "[%s]: post_req_request: could not obtain curl handle", ctx->app_id);
+        ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s]: post_req_request: could not obtain curl handle", ctx->app_id);
         return CURLE_FAILED_INIT;
     }
-
-    CURLcode status = post_request_helper(curl, url, payload, conf, ctx->r->server, response_data);
+    CURLcode status = post_request_helper(curl, url, payload, timeout, conf, ctx->r->server, response_data);
+    if (request_rtt) {
+        if (CURLE_OK != curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME, request_rtt)) {
+            *request_rtt = 0;
+        }
+    }
     curl_pool_put(conf->curl_pool, curl);
     return status;
 }
@@ -97,7 +98,7 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     }
 
     // preventing reuse of captcha cookie by deleting it
-    apr_status_t res = ap_cookie_remove2(ctx->r, CAPTCHA_COOKIE, NULL, ctx->r->headers_out, ctx->r->err_headers_out, NULL);
+    apr_status_t res = ap_cookie_remove(ctx->r, CAPTCHA_COOKIE, NULL, ctx->r->headers_out, ctx->r->err_headers_out, NULL);
     if (res != APR_SUCCESS) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: could not remove _pxCaptcha from request", ctx->app_id);
     }
@@ -111,7 +112,7 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
 
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: verify_captcha: request - (%s)", ctx->app_id, payload);
     char *response_str = NULL;
-    CURLcode status = post_request(conf->captcha_api_url, payload, ctx, conf, &response_str);
+    CURLcode status = post_request(conf->captcha_api_url, payload, conf->captcha_timeout, conf, ctx, &response_str, &ctx->api_rtt);
     free(payload);
     if (status == CURLE_OK) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: verify_captcha: server response (%s)", ctx->app_id, response_str);
@@ -139,7 +140,7 @@ static void post_verification(request_context *ctx, px_config *conf, bool reques
         if (conf->background_activity_send) {
             apr_queue_push(conf->activity_queue, activity);
         } else {
-            post_request(conf->activities_api_url, activity, ctx, conf, NULL);
+            post_request(conf->activities_api_url, activity, conf->api_timeout_ms, conf, ctx, NULL, NULL);
             free(activity);
         }
     }
@@ -205,9 +206,10 @@ risk_response* risk_api_get(request_context *ctx, px_config *conf) {
         ctx->pass_reason = PASS_REASON_ERROR;
         return NULL;
     }
+
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: risk payload: %s", ctx->app_id, risk_payload);
     char *risk_response_str;
-    CURLcode status = post_request(conf->risk_api_url, risk_payload, ctx, conf, &risk_response_str);
+    CURLcode status = post_request(conf->risk_api_url, risk_payload, conf->api_timeout_ms, conf, ctx, &risk_response_str, &ctx->api_rtt);
     ctx->made_api_call = true;
     free(risk_payload);
     if (status == CURLE_OK) {
@@ -221,75 +223,42 @@ risk_response* risk_api_get(request_context *ctx, px_config *conf) {
     return NULL;
 }
 
-int populate_captcha_cookie_data(apr_pool_t *p, const char *captcha_cookie, request_context *ctx) {
-    const char *delim = ":";
-    char *saveptr;
-    char *str = apr_pstrdup(p, captcha_cookie);
-    ctx->px_captcha = apr_strtok(str, delim, &saveptr);
-    ctx->uuid = apr_strtok(NULL, delim, &saveptr);
-    ctx->vid = apr_strtok(NULL, delim, &saveptr);
-}
-
 request_context* create_context(request_rec *r, const px_config *conf) {
     request_context *ctx = (request_context*) apr_pcalloc(r->pool, sizeof(request_context));
 
+    ctx->r = r;
     ctx->app_id = conf->app_id;
-    const char *px_cookie = NULL;
-    const char *px_captcha_cookie = NULL;
-    char *captcha_cookie = NULL;
-# if AP_SERVER_MAJORVERSION_NUMBER == 2 && AP_SERVER_MINORVERSION_NUMBER == 4
-    apr_status_t status = ap_cookie_read(r, PX_COOKIE, &px_cookie, 0);
-    status = ap_cookie_read(r, CAPTCHA_COOKIE, &px_captcha_cookie, 0);
-    if (status == APR_SUCCESS) {
-        captcha_cookie = apr_pstrdup(r->pool, px_captcha_cookie);
-    }
+    ctx->captcha_type = CAPTCHA_TYPE_RECAPTCHA;
 
-# else
-    char *cookie = NULL;
-    char *strtok_ctx = NULL;
+    const char *px_token = NULL;
+    ctx->token_origin = TOKEN_ORIGIN_COOKIE;
 
-    char *cookies = apr_pstrdup(r->pool, (char *) apr_table_get(r->headers_in, "Cookie"));
-    if (cookies) {
-        cookie = apr_strtok(cookies, ";", &strtok_ctx);
-
-        while (cookie) {
-            char *val_ctx;
-            //trim leading space
-            if (*cookie == ' ') {
-                cookie ++;
-            }
-            if (strncmp(cookie, CAPTCHA_COOKIE, 10) == 0) {
-                apr_pstrdup(r->pool, apr_strtok(cookie, "=", &val_ctx));
-                captcha_cookie = apr_pstrdup(r->pool, apr_strtok(NULL, "", &val_ctx));
-            } else if (strncmp(cookie, PX_COOKIE, 3) == 0) {
-                apr_strtok(cookie, "=", &val_ctx);
-                px_cookie = apr_pstrdup(r->pool, apr_strtok(NULL, "", &val_ctx));
-            }
-            cookie = apr_strtok(NULL, ";", &strtok_ctx);
+    if (conf->enable_token_via_header) {
+        int token_version = extract_token_and_version_from_header(r->pool, r->headers_in, &px_token);
+        if (token_version > -1) {
+            ctx->token_origin = TOKEN_ORIGIN_HEADER;
+        } else {
+            ap_cookie_read(r, PX_COOKIE, &px_token, 0);
         }
+    } else {
+        ap_cookie_read(r, PX_COOKIE, &px_token, 0);
     }
-#endif
+
+    ap_cookie_read(r, CAPTCHA_COOKIE, &ctx->px_captcha, 1);
 
     ctx->ip = get_request_ip(r, conf);
     if (!ctx->ip) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_context: request IP is NULL", conf->app_id);
     }
 
-    ctx->px_cookie = px_cookie;
-    ctx->px_cookie_decrypted = NULL;
-    ctx->px_cookie_orig = NULL;
+    ctx->px_cookie = apr_pstrdup(r->pool, px_token);
     ctx->uri = r->unparsed_uri;
     ctx->hostname = r->hostname;
     ctx->http_method = r->method;
     ctx->useragent = apr_table_get(r->headers_in, "User-Agent");
+    ctx->action = conf->captcha_enabled ? ACTION_CAPTCHA : ACTION_BLOCK;
     // TODO(barak): full_url is missing the protocol like http:// or https://
     ctx->full_url = apr_pstrcat(r->pool, r->hostname, r->unparsed_uri, NULL);
-    ctx->vid = NULL;
-    ctx->px_cookie_orig = NULL;
-
-    if (captcha_cookie) {
-        populate_captcha_cookie_data(r->pool, captcha_cookie, ctx);
-    }
 
     // TODO(barak): parse without strtok
     char *saveptr;
@@ -304,7 +273,6 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     ctx->call_reason = CALL_REASON_NONE;
     ctx->pass_reason = PASS_REASON_NONE; // initial value, should always get changed if request passes
     ctx->block_enabled = enable_block_for_hostname(r, conf->enabled_hostnames);
-    ctx->r = r;
 
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_context: useragent: (%s), px_cookie: (%s), full_url: (%s), hostname: (%s) , http_method: (%s), http_version: (%s), uri: (%s), ip: (%s), block_enabled: (%d)", conf->app_id, ctx->useragent, ctx->px_cookie, ctx->full_url, ctx->hostname, ctx->http_method, ctx->http_version, ctx->uri, ctx->ip, ctx->block_enabled);
 
@@ -323,15 +291,11 @@ bool px_verify_request(request_context *ctx, px_config *conf) {
             apr_status_t res = ap_cookie_remove2(ctx->r, PX_COOKIE, NULL, ctx->r->headers_out, ctx->r->err_headers_out, NULL);
             if (res != APR_SUCCESS) {
                 ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s] could not remove _px from request", ctx->app_id);
-
             }
             post_verification(ctx, conf, true);
             return request_valid;
         } else {
             ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s] verify_captcha: validation status false, creating risk_api for this request", ctx->app_id);
-            // pxCaptcha is not valid: removing captcha cookie data
-            ctx->uuid = NULL;
-            ctx->vid = NULL;
             ctx->call_reason = CALL_REASON_CAPTCHA_FAILED;
             risk_response = risk_api_get(ctx, conf);
             goto handle_response;
