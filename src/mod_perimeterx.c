@@ -134,7 +134,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
 
         if (conf->score_header_enabled) {
             const char *score_str = apr_itoa(r->pool, ctx->score);
-            apr_table_set(r->headers_out, conf->score_header_name, score_str);
+            apr_table_set(r->headers_in, conf->score_header_name, score_str);
         }
 
         if (!request_valid && ctx->block_enabled) {
@@ -702,7 +702,7 @@ static void *create_config(apr_pool_t *p) {
         conf->send_page_activities = true;
         conf->blocking_score = 70;
         conf->captcha_enabled = true;
-        conf->module_version = "Apache Module v2.4.0";
+        conf->module_version = "Apache Module v2.4.1";
         conf->skip_mod_by_envvar = false;
         conf->curl_pool_size = 40;
         conf->base_url = DEFAULT_BASE_URL;
