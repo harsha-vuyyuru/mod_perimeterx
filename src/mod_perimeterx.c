@@ -134,7 +134,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
 
         if (conf->score_header_enabled) {
             const char *score_str = apr_itoa(r->pool, ctx->score);
-            apr_table_set(r->headers_out, conf->score_header_name, score_str);
+            apr_table_set(r->headers_in, conf->score_header_name, score_str);
         }
 
         if (!request_valid && ctx->block_enabled) {
