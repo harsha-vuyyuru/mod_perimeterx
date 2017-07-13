@@ -1,3 +1,17 @@
+libapache-mod-perimeterx (2.4.1) jessie; urgency=medium
+
+  * Add ScoreHeader on request instead of response.
+
+ -- pxaviad <pxaviad@github>  Thu, 13 Jul 2017 12:40:00 +0000
+
+libapache-mod-perimeterx (2.4.0) jessie; urgency=medium
+
+  * Add UUID to page_requested.
+  * Add score header to response.
+  * Add CaptchaTimeout for captcha requests.
+
+ -- pxaviad <pxaviad@github>  Mon, 10 Jul 2017 09:00:00 +0000
+
 libapache-mod-perimeterx (2.2.0) jessie; urgency=medium
 
   * Disable mod_perimeterx when reaching errors threshod.
