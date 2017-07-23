@@ -102,6 +102,7 @@ char* create_response(px_config *conf, request_context *ctx) {
 int px_handle_request(request_rec *r, px_config *conf) {
     // fail open mode
     if (conf->px_errors_count >= conf->px_errors_threshold) {
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: exceeding the error threshold, not going through module: %d", conf->app_id, conf->px_errors_count);
         return OK;
     }
 
@@ -185,31 +186,36 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
     const char *health_check_url = apr_pstrcat(hc->server->process->pool, hc->config->base_url, HEALTH_CHECK_API, NULL);
     CURL *curl = curl_easy_init();
     CURLcode res;
-    while (true) {
+    while (!conf->should_exit_thread) { //TODO: change to should_stop_health_check // align service_monitor / health_check
         // wait for condition and reset errors count on internal
         apr_thread_mutex_lock(conf->health_check_cond_mutex);
-        while (apr_atomic_read32(&conf->px_errors_count) < conf->px_errors_threshold) {
+        while (!conf->should_exit_thread && apr_atomic_read32(&conf->px_errors_count) < conf->px_errors_threshold) {
             if (apr_thread_cond_timedwait(conf->health_check_cond, conf->health_check_cond_mutex, conf->health_check_interval) == APR_TIMEUP) {
-                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "health_check: reset error counter after timeout reached");
                 apr_atomic_set32(&conf->px_errors_count, 0);
             }
         }
+
         apr_thread_mutex_unlock(conf->health_check_cond_mutex);
+        if (conf->should_exit_thread) {
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, "health_check: marked to exit");
+            goto exit_health_check;
+        }
 
         // do health check until success
         CURLcode res = CURLE_AGAIN;
-        while (res != CURLE_OK) {
+        while (!conf->should_exit_thread && res != CURLE_OK) {
             curl_easy_setopt(curl, CURLOPT_URL, health_check_url);
             curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, conf->api_timeout_ms);
             res = curl_easy_perform(curl);
             if (res != CURLE_OK && res != CURLE_OPERATION_TIMEDOUT) {
+                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, "health_check: PX Service is stil unavailable, continue with check");
                 apr_sleep(1000); // TODO(barak): should be configured with nice default
             }
         }
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, "health_check: PX Service is back to normal, resetting error count");
         apr_atomic_set32(&conf->px_errors_count, 0);
     }
 
+exit_health_check:
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, "health_check: thread exiting");
     curl_easy_cleanup(curl);
     apr_thread_exit(thd, 0);
@@ -308,8 +314,14 @@ static void background_activity_send_init(apr_pool_t *pool, server_rec *s, px_co
 static apr_status_t px_child_exit(void *data) {
     server_rec *s = (server_rec*)data;
     px_config *cfg = ap_get_module_config(s->module_config, &perimeterx_module);
+
     // terminating the curl pool
     curl_pool_destroy(cfg->curl_pool);
+
+    // signaling health check thread
+    cfg->should_exit_thread = true;
+    apr_thread_cond_signal(cfg->health_check_cond);
+
     // terminate the queue and wake up all waiting threads
     apr_status_t rv = apr_queue_term(cfg->activity_queue);
     if (rv != APR_SUCCESS) {

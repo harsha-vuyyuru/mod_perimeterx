@@ -14,10 +14,9 @@ void update_and_notify_health_check(px_config *conf, server_rec *server) {
     if (!conf->px_service_monitor) {
         return;
     }
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server, "[%s]: previous number of px service errors reached: %u", conf->app_id, conf->px_errors_count);
     apr_uint32_t old_value = apr_atomic_inc32(&conf->px_errors_count);
     apr_thread_mutex_lock(conf->health_check_cond_mutex);
-    if (old_value == conf->px_errors_threshold) {
+    if (old_value >= conf->px_errors_threshold - 1) {
         apr_thread_cond_signal(conf->health_check_cond);
     }
     apr_thread_mutex_unlock(conf->health_check_cond_mutex);
