@@ -185,11 +185,12 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
     const char *health_check_url = apr_pstrcat(hc->server->process->pool, hc->config->base_url, HEALTH_CHECK_API, NULL);
     CURL *curl = curl_easy_init();
     CURLcode res;
-    while (1) {
+    while (true) {
         // wait for condition and reset errors count on internal
         apr_thread_mutex_lock(conf->health_check_cond_mutex);
         while (apr_atomic_read32(&conf->px_errors_count) < conf->px_errors_threshold) {
             if (apr_thread_cond_timedwait(conf->health_check_cond, conf->health_check_cond_mutex, conf->health_check_interval) == APR_TIMEUP) {
+                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "health_check: reset error counter after timeout reached");
                 apr_atomic_set32(&conf->px_errors_count, 0);
             }
         }
@@ -205,10 +206,11 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
                 apr_sleep(1000); // TODO(barak): should be configured with nice default
             }
         }
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, "health_check: PX Service is back to normal, resetting error count");
         apr_atomic_set32(&conf->px_errors_count, 0);
     }
 
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, "health_check thread exiting");
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, "health_check: thread exiting");
     curl_easy_cleanup(curl);
     apr_thread_exit(thd, 0);
     return NULL;
@@ -225,10 +227,12 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
     }
     while (true) {
         apr_status_t rv = apr_queue_pop(conf->activity_queue, &v);
-        if (rv == APR_EINTR)
+        if (rv == APR_EINTR) {
             continue;
-        if (rv == APR_EOF)
+        }
+        if (rv == APR_EOF) {
             break;
+        }
         if (rv == APR_SUCCESS && v) {
             char *activity = (char *)v;
             post_request_helper(curl, conf->activities_api_url, activity, conf->api_timeout_ms, conf, consumer_data->server, NULL);
@@ -236,6 +240,7 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
         }
     }
     curl_easy_cleanup(curl);
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, consumer_data->server, "[%s]: activity consumer thread exited", conf->app_id);
     apr_thread_exit(thd, 0);
     return NULL;
 }
@@ -245,12 +250,6 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
 static apr_status_t destroy_thread_pool(void *t) {
     apr_thread_pool_t *thread_pool = (apr_thread_pool_t*)t;
     apr_thread_pool_destroy(thread_pool);
-    return APR_SUCCESS;
-}
-
-static apr_status_t destroy_activity_queue(void *q) {
-    apr_queue_t *queue = (apr_queue_t*)q;
-    apr_queue_term(queue);
     return APR_SUCCESS;
 }
 
@@ -284,8 +283,8 @@ static apr_status_t create_service_monitor(server_rec *s, px_config *cfg) {
     }
 }
 
-static void background_activity_send_init(server_rec *s, px_config *cfg) {
-    apr_status_t rv = apr_queue_create(&cfg->activity_queue, cfg->background_activity_queue_size, s->process->pool);
+static void background_activity_send_init(apr_pool_t *pool, server_rec *s, px_config *cfg) {
+    apr_status_t rv = apr_queue_create(&cfg->activity_queue, cfg->background_activity_queue_size, pool);
     if (rv != APR_SUCCESS) {
         ap_log_error(APLOG_MARK, LOG_ERR, 0, s, "[%s]: failed to initialize background activity queue", cfg->app_id);
         exit(1);
@@ -293,7 +292,7 @@ static void background_activity_send_init(server_rec *s, px_config *cfg) {
     activity_consumer_data *consumer_data = apr_palloc(s->process->pool, sizeof(activity_consumer_data));
     consumer_data->server = s;
     consumer_data->config = cfg;
-    rv = apr_thread_pool_create(&cfg->activity_thread_pool, 0, cfg->background_activity_workers, s->process->pool);
+    rv = apr_thread_pool_create(&cfg->activity_thread_pool, 0, cfg->background_activity_workers, pool);
     if (rv != APR_SUCCESS) {
         ap_log_error(APLOG_MARK, LOG_ERR, 0, s, "[%s]: failed to initialize background activity thread pool", cfg->app_id);
         exit(1);
@@ -306,24 +305,38 @@ static void background_activity_send_init(server_rec *s, px_config *cfg) {
     }
 }
 
+static apr_status_t px_child_exit(void *data) {
+    server_rec *s = (server_rec*)data;
+    px_config *cfg = ap_get_module_config(s->module_config, &perimeterx_module);
+    // terminating the curl pool
+    curl_pool_destroy(cfg->curl_pool);
+    // terminate the queue and wake up all waiting threads
+    apr_status_t rv = apr_queue_term(cfg->activity_queue);
+    if (rv != APR_SUCCESS) {
+        char buf[128];
+        char *err = apr_strerror(rv, buf, 128);
+        ap_log_error(APLOG_MARK, LOG_ERR, 0, s, "could not terminate the queue: %s", err);
+    }
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "px child cleanup finished");
+}
+
 static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
     curl_global_init(CURL_GLOBAL_ALL);
     // init each virtual host
     for (server_rec *vs = s; vs; vs = vs->next) {
         px_config *cfg = ap_get_module_config(vs->module_config, &perimeterx_module);
-        cfg->curl_pool = curl_pool_create(vs->process->pool, cfg->curl_pool_size);
+        cfg->curl_pool = curl_pool_create(p, cfg->curl_pool_size);
         if (cfg->background_activity_send) {
-            background_activity_send_init(vs, cfg);
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "Start init for background_activity_send");
+            background_activity_send_init(vs->process->pool, vs, cfg);
         }
         if (cfg->px_service_monitor) {
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "Setting up health_check thread");
             create_service_monitor(vs, cfg);
         }
-        apr_pool_cleanup_register(vs->process->pool, cfg->activity_queue, destroy_activity_queue, apr_pool_cleanup_null);
-        apr_pool_cleanup_register(vs->process->pool, cfg->activity_thread_pool, destroy_thread_pool, apr_pool_cleanup_null);
-        apr_pool_cleanup_register(vs->process->pool, cfg->curl_pool, destroy_curl_pool, apr_pool_cleanup_null);
+        apr_pool_cleanup_register(p, s, px_child_exit, apr_pool_cleanup_null);
     }
 }
-
 
 static apr_status_t px_cleanup_pre_config(void *data) {
     ERR_free_strings();

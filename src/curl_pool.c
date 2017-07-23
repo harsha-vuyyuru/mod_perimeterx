@@ -23,9 +23,9 @@ void curl_pool_destroy(curl_pool *pool) {
     pool->size = 0;
     pool->used = 0;
     pool->data = NULL;
-    apr_thread_mutex_destroy(pool->mutex);
+    /*apr_thread_mutex_destroy(pool->mutex);*/
     pool->mutex = NULL;
-    apr_thread_cond_destroy(pool->cond);
+    /*apr_thread_cond_destroy(pool->cond);*/
     pool->cond = NULL;
 }
 
