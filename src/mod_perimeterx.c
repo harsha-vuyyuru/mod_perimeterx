@@ -138,9 +138,6 @@ int px_handle_request(request_rec *r, px_config *conf) {
         }
 
         if (!request_valid && ctx->block_enabled) {
-            if (r->method && strcmp(r->method, "POST") == 0) {
-                return HTTP_FORBIDDEN;
-            }
             // redirecting requests to custom block page if exists
             if (conf->block_page_url) {
                 const char *redirect_url;
