@@ -102,7 +102,6 @@ char* create_response(px_config *conf, request_context *ctx) {
 int px_handle_request(request_rec *r, px_config *conf) {
     // fail open mode
     if (conf->px_errors_count >= conf->px_errors_threshold) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: exceeding the error threshold, not going through module: %d", conf->app_id, conf->px_errors_count);
         return OK;
     }
 
@@ -186,7 +185,7 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
     const char *health_check_url = apr_pstrcat(hc->server->process->pool, hc->config->base_url, HEALTH_CHECK_API, NULL);
     CURL *curl = curl_easy_init();
     CURLcode res;
-    while (!conf->should_exit_thread) { //TODO: change to should_stop_health_check // align service_monitor / health_check
+    while (!conf->should_exit_thread) {
         // wait for condition and reset errors count on internal
         apr_thread_mutex_lock(conf->health_check_cond_mutex);
         while (!conf->should_exit_thread && apr_atomic_read32(&conf->px_errors_count) < conf->px_errors_threshold) {
@@ -311,6 +310,7 @@ static void background_activity_send_init(apr_pool_t *pool, server_rec *s, px_co
     }
 }
 
+// free all (apache) unmanaged resources
 static apr_status_t px_child_exit(void *data) {
     server_rec *s = (server_rec*)data;
     px_config *cfg = ap_get_module_config(s->module_config, &perimeterx_module);
@@ -318,18 +318,18 @@ static apr_status_t px_child_exit(void *data) {
     // terminating the curl pool
     curl_pool_destroy(cfg->curl_pool);
 
-    // signaling health check thread
+    // signaling health check thread to exit
     cfg->should_exit_thread = true;
     apr_thread_cond_signal(cfg->health_check_cond);
 
-    // terminate the queue and wake up all waiting threads
+    // terminate the queue and wake up all idle threads
     apr_status_t rv = apr_queue_term(cfg->activity_queue);
     if (rv != APR_SUCCESS) {
         char buf[128];
         char *err = apr_strerror(rv, buf, 128);
-        ap_log_error(APLOG_MARK, LOG_ERR, 0, s, "could not terminate the queue: %s", err);
+        ap_log_error(APLOG_MARK, LOG_ERR, 0, s, "px_child_exit: could not terminate the queue - %s", err);
     }
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "px child cleanup finished");
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "px_child_exit: cleanup finished");
 }
 
 static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
