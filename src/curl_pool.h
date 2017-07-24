@@ -17,7 +17,7 @@ typedef struct curl_pool_t {
 } curl_pool;
 
 curl_pool *curl_pool_create(apr_pool_t *p, int size);
-void curl_pool_destroy(curl_pool *pool);
+//void curl_pool_destroy(curl_pool *pool);
 CURL *curl_pool_get(curl_pool *pool);
 CURL *curl_pool_get_wait(curl_pool *pool);
 CURL *curl_pool_get_timedwait(curl_pool *pool, apr_interval_time_t timeout);
