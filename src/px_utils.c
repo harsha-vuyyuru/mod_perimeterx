@@ -11,7 +11,7 @@ static const char *EXPECT = "Expect:";
 static const char *MOBILE_SDK_HEADER = "X-PX-AUTHORIZATION";
 
 void update_and_notify_health_check(px_config *conf, server_rec *server) {
-    if (!conf->px_service_monitor) {
+    if (!conf->px_health_check) {
         return;
     }
     apr_atomic_inc32(&conf->px_errors_count);

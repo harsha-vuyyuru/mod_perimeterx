@@ -228,7 +228,8 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
     CURL *curl = curl_easy_init();
     void *v;
     if (!curl) {
-        ap_log_error(APLOG_MARK, LOG_ERR, 0, consumer_data->server, "[%s]: could not create curl handle, thread will not run to consume messages", conf->app_id);
+        ap_log_error(APLOG_MARK, LOG_ERR, 0, consumer_data->server,
+                "[%s]: could not create curl handle, thread will not run to consume messages", conf->app_id);
         return NULL;
     }
     while (true) {
@@ -255,7 +256,7 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
 //
 
 static apr_status_t create_health_check(apr_pool_t *p, server_rec *s, px_config *cfg) {
-    apr_status_t rv = APR_SUCCESS;
+    apr_status_t rv;
 
     health_check_data *hc_data= (health_check_data*)apr_palloc(p, sizeof(health_check_data));
     cfg->px_errors_count = 0;
@@ -320,6 +321,7 @@ static apr_status_t px_child_exit(void *data) {
     server_rec *s = (server_rec*)data;
     px_config *cfg = ap_get_module_config(s->module_config, &perimeterx_module);
 
+
     // signaling health check thread to exit
     /*cfg->should_exit_thread = true;*/
     /*apr_thread_cond_signal(cfg->health_check_cond);*/
@@ -334,7 +336,7 @@ static apr_status_t px_child_exit(void *data) {
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "px_child_exit: cleanup finished");
 }
 
-static apr_status_t px_setup_init(apr_pool_t *p, server_rec *s) {
+static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
     curl_global_init(CURL_GLOBAL_ALL);
 
     apr_status_t rv;
@@ -352,19 +354,23 @@ static apr_status_t px_setup_init(apr_pool_t *p, server_rec *s) {
         cfg->curl_pool = curl_pool_create(cfg->pool, cfg->curl_pool_size);
 
         if (cfg->background_activity_send) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "px_hook_child_init: start init for background_activity_send");
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s,
+                    "px_hook_child_init: start init for background_activity_send");
             rv = background_activity_send_init(cfg->pool, vs, cfg);
             if (rv != APR_SUCCESS) {
-                ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "px_hook_child_init: error while trying to init background_activity_consumer");
+                ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s,
+                        "px_hook_child_init: error while trying to init background_activity_consumer");
                 return rv;
             }
         }
 
-        if (cfg->px_service_monitor) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "px_hook_child_init: setting up health_check thread");
+        if (cfg->px_health_check) {
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s,
+                    "px_hook_child_init: setting up health_check thread");
             rv = create_health_check(cfg->pool, vs, cfg);
             if (rv != APR_SUCCESS) {
-                ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "px_hook_child_init: error while trying to init health_check_thread");
+                ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s,
+                        "px_hook_child_init: error while trying to init health_check_thread");
                 return rv;
             }
         }
@@ -375,7 +381,7 @@ static apr_status_t px_setup_init(apr_pool_t *p, server_rec *s) {
 }
 
 static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
-    apr_status_t rv = px_setup_init(p, s);
+    apr_status_t rv = px_child_setup(p, s);
     if (rv != APR_SUCCESS) {
         ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "child init failed!");
     }
@@ -646,12 +652,12 @@ static const char *set_background_activity_send(cmd_parms *cmd, void *config, in
     return NULL;
 }
 
-static const char *set_px_service_monitor(cmd_parms *cmd, void *config, int arg) {
+static const char *set_px_health_check(cmd_parms *cmd, void *config, int arg) {
     px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    conf->px_service_monitor = arg ? true : false;
+    conf->px_health_check = arg ? true : false;
     return NULL;
 }
 
@@ -779,7 +785,7 @@ static void *create_config(apr_pool_t *p) {
         conf->background_activity_queue_size = 1000;
         conf->px_errors_threshold = 100;
         conf->health_check_interval = 60000000; // 1 minute
-        conf->px_service_monitor = false;
+        conf->px_health_check = false;
         conf->score_header_name = "X-PX-SCORE";
     }
     return conf;
@@ -921,8 +927,14 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Queue size for background activity send"),
+    /* This should be removed in later version, replaced by PXHealthCheck */
     AP_INIT_FLAG("PXServiceMonitor",
-            set_px_service_monitor,
+            set_px_health_check,
+            NULL,
+            OR_ALL,
+            "Background monitoring on PerimeterX service"),
+    AP_INIT_FLAG("PXHealthCheck",
+            set_px_health_check,
             NULL,
             OR_ALL,
             "Background monitoring on PerimeterX service"),
@@ -962,6 +974,7 @@ static const command_rec px_directives[] = {
 static void perimeterx_register_hooks(apr_pool_t *pool) {
     static const char *const asz_pre[] =
     { "mod_setenvif.c", NULL };
+
     ap_hook_post_read_request(px_hook_post_request, asz_pre, NULL, APR_HOOK_MIDDLE);
     ap_hook_child_init(px_hook_child_init, NULL, NULL, APR_HOOK_MIDDLE);
     ap_hook_pre_config(px_hook_pre_config, NULL, NULL, APR_HOOK_MIDDLE);

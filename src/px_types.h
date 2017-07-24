@@ -53,7 +53,7 @@ typedef struct px_config_t {
     apr_queue_t *activity_queue;
     apr_thread_pool_t *activity_thread_pool;
 
-    bool px_service_monitor;
+    bool px_health_check;
     apr_thread_mutex_t *health_check_cond_mutex;
     apr_thread_t *health_check_thread;
     apr_thread_cond_t *health_check_cond;
