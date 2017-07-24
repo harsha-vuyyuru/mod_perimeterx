@@ -1,5 +1,5 @@
 CC = apxs
-CFLAGS = -Wc,-std=gnu99 -c
+CFLAGS = -Wunused-variable,c,-std=gnu99 -c
 LDFLAGS = `pkg-config --cflags --libs jansson openssl libcurl json-c`
 DBG_CFLAGS = -g -DDEBUG
 

@@ -10,7 +10,7 @@
 #include "curl_pool.h"
 
 typedef struct px_config_t {
-    // module memory pool
+    // px module server memory pool
     apr_pool_t *pool;
 
     const char *app_id;

@@ -21,6 +21,7 @@
 #include <apr_portable.h>
 #include <apr_signal.h>
 #include <apr_base64.h>
+#include <apr_time.h>
 
 #include "px_utils.h"
 #include "px_types.h"
@@ -342,8 +343,6 @@ static apr_status_t px_child_exit(void *data) {
 }
 
 static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
-    curl_global_init(CURL_GLOBAL_ALL);
-
     apr_status_t rv;
 
     // init each virtual host
@@ -399,6 +398,7 @@ static apr_status_t px_cleanup_pre_config(void *data) {
 }
 
 static int px_hook_pre_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp) {
+    curl_global_init(CURL_GLOBAL_ALL);
     ERR_load_crypto_strings();
     OpenSSL_add_all_algorithms();
     apr_pool_cleanup_register(p, NULL, px_cleanup_pre_config, apr_pool_cleanup_null);
@@ -789,7 +789,7 @@ static void *create_config(apr_pool_t *p) {
         conf->background_activity_workers = 10;
         conf->background_activity_queue_size = 1000;
         conf->px_errors_threshold = 100;
-        conf->health_check_interval = 60000000; // 1 minute
+        conf->health_check_interval = apr_time_sec(60); // 1 minute
         conf->px_health_check = false;
         conf->score_header_name = "X-PX-SCORE";
     }
