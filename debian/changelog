@@ -1,3 +1,9 @@
+libapache-mod-perimeterx (2.4.2) jessie; urgency=medium
+
+    * Remove special handling for POST requests.
+
+ -- pxaviad <pxaviad@github>  Thu, 24 Jul 2017 09:33:00 +0000
+
 libapache-mod-perimeterx (2.4.1) jessie; urgency=medium
 
   * Add ScoreHeader on request instead of response.
