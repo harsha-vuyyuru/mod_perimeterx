@@ -56,14 +56,16 @@ risk_cookie *parse_risk_cookie(const char *raw_cookie, request_context *ctx) {
                 "b", &b_val,
                 "t", &ts,
                 "h", &hash)) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: cookie data: unpack json failed. raw_cookie: (%s)", ctx->app_id, raw_cookie);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
+                "[%s]: cookie data: unpack json failed. raw_cookie: (%s)", ctx->app_id, raw_cookie);
         json_decref(j_cookie);
         return NULL;
     }
 
     risk_cookie *cookie = (risk_cookie*)apr_palloc(ctx->r->pool, sizeof(risk_cookie));
     if (!cookie) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: cookie data: failed to allocate risk cookie struct. raw_cookie: (%s)", ctx->app_id, raw_cookie);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
+                "[%s]: cookie data: failed to allocate risk cookie struct. raw_cookie: (%s)", ctx->app_id, raw_cookie);
         json_decref(j_cookie);
         return NULL;
     }
@@ -80,7 +82,10 @@ risk_cookie *parse_risk_cookie(const char *raw_cookie, request_context *ctx) {
     cookie->a = apr_psprintf(ctx->r->pool, "%d", a_val);
     cookie->b = apr_psprintf(ctx->r->pool, "%d", b_val);
 
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: cookie data: timestamp %s, vid %s, uuid %s hash %s scores: a %s b %s", ctx->app_id, cookie->timestamp, cookie->vid, cookie->uuid, cookie->hash, cookie->a, cookie->b);
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
+            "[%s]: cookie data: timestamp %s, vid %s, uuid %s hash %s scores: a %s b %s",
+            ctx->app_id, cookie->timestamp, cookie->vid, cookie->uuid, cookie->hash, cookie->a, cookie->b);
+
     json_decref(j_cookie);
     return cookie;
 }
@@ -130,23 +135,27 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
     const char* delimieter = ":";
     const char* encoded_salt = strtok_r(px_cookie_cpy, delimieter, &saveptr);
     if (encoded_salt == NULL) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_cookie: stoping cookie decryption: no valid salt in cookie", r_ctx->app_id);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server,
+                "[%s]: decode_cookie: stoping cookie decryption: no valid salt in cookie", r_ctx->app_id);
         return NULL;
     }
     const char* iterations_str = strtok_r(NULL, delimieter, &saveptr);
     if (iterations_str == NULL) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_cookie: no valid iterations in cookie", r_ctx->app_id);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server,
+                "[%s]: decode_cookie: no valid iterations in cookie", r_ctx->app_id);
         return NULL;
     }
     apr_int64_t iterations = apr_atoi64(iterations_str);
     // make sure iteratins is valid and not too big
     if (iterations < ITERATIONS_LOWER_BOUND || iterations > ITERATIONS_UPPER_BOUND) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_cookie: number of iterations is illegal - %"APR_INT64_T_FMT, r_ctx->app_id, iterations);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server,
+                "[%s]: decode_cookie: number of iterations is illegal - %"APR_INT64_T_FMT, r_ctx->app_id, iterations);
         return NULL;
     }
     const char* encoded_payload = strtok_r(NULL, delimieter, &saveptr);
     if (encoded_payload == NULL) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_cookie: stoping cookie decryption: no valid encoded_payload in cookie", r_ctx->app_id);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server,
+                "[%s]: decode_cookie: stoping cookie decryption: no valid encoded_payload in cookie", r_ctx->app_id);
         return NULL;
     }
 
@@ -175,7 +184,8 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
     // decrypt aes-256-cbc
     EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
     if (EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), NULL, key, iv) != 1) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_cookie: decryption failed in: Init", r_ctx->app_id);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server,
+                "[%s]: decode_cookie: decryption failed in: Init", r_ctx->app_id);
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
     }
@@ -183,13 +193,15 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
     int len;
     int dpayload_len;
     if (EVP_DecryptUpdate(ctx, dpayload, &len, payload, payload_len) != 1) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_cookie: decryption failed in: Update", r_ctx->app_id);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server,
+                "[%s]: decode_cookie: decryption failed in: Update", r_ctx->app_id);
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
     }
     dpayload_len = len;
     if (EVP_DecryptFinal_ex(ctx, dpayload + len, &len) != 1) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_cookie: decryption failed in: Final", r_ctx->app_id);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server,
+                "[%s]: decode_cookie: decryption failed in: Final", r_ctx->app_id);
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
     }
@@ -208,12 +220,14 @@ risk_cookie *decode_cookie(const char *px_cookie, const char *cookie_key, reques
 
 validation_result_t validate_cookie(const risk_cookie *cookie, request_context *ctx, const char *cookie_key) {
     if (cookie == NULL) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: validate_cookie: no _px cookie", ctx->app_id);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
+                "[%s]: validate_cookie: no _px cookie", ctx->app_id);
         return VALIDATION_RESULT_NULL_COOKIE;
     }
 
     if (cookie->hash == NULL || strlen(cookie->hash) == 0) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: validate_cookie: no hash", ctx->app_id);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
+                "[%s]: validate_cookie: no hash", ctx->app_id);
         return VALIDATION_RESULT_NO_SIGNING;
     }
 
@@ -221,7 +235,8 @@ validation_result_t validate_cookie(const risk_cookie *cookie, request_context *
     gettimeofday(&te, NULL);
     long long currenttime = te.tv_sec * 1000LL + te.tv_usec / 1000;
     if (currenttime > cookie->ts) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: validate_cookie: cookie expired", ctx->app_id);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
+                "[%s]: validate_cookie: cookie expired", ctx->app_id);
         return VALIDATION_RESULT_EXPIRED;
     }
 
@@ -231,7 +246,8 @@ validation_result_t validate_cookie(const risk_cookie *cookie, request_context *
     digest_cookie(cookie, ctx, cookie_key, signing_fields, signature, HASH_LEN);
 
     if (memcmp(signature, cookie->hash, 64) != 0) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: validate_cookie: invalid signature", ctx->app_id);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
+                "[%s]: validate_cookie: invalid signature", ctx->app_id);
         return VALIDATION_RESULT_INVALID;
     }
 

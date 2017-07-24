@@ -114,7 +114,8 @@ int px_handle_request(request_rec *r, px_config *conf) {
     if (conf->skip_mod_by_envvar) {
         const char *skip_px = apr_table_get(r->subprocess_env, "PX_SKIP_MODULE");
         if  (skip_px != NULL) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: px_handle_request: PX_SKIP_MODULE was set on the request", conf->app_id);
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server,
+                    "[%s]: px_handle_request: PX_SKIP_MODULE was set on the request", conf->app_id);
             return OK;
         }
     }
@@ -171,7 +172,8 @@ int px_handle_request(request_rec *r, px_config *conf) {
                 return DONE;
             }
             // failed to create response
-            ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server, "[%s]: Could not create block page with template, passing request", conf->app_id);
+            ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server,
+                    "[%s]: Could not create block page with template, passing request", conf->app_id);
         }
     }
     r->status = HTTP_OK;
@@ -209,7 +211,6 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
             curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, conf->api_timeout_ms);
             res = curl_easy_perform(curl);
             if (res != CURLE_OK && res != CURLE_OPERATION_TIMEDOUT) {
-                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, "health_check: PX Service is stil unavailable, continue with check");
                 apr_sleep(1000); // TODO(barak): should be configured with nice default
             }
         }
@@ -226,12 +227,14 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
     activity_consumer_data *consumer_data = (activity_consumer_data*)data;
     px_config *conf = consumer_data->config;
     CURL *curl = curl_easy_init();
+
     void *v;
     if (!curl) {
         ap_log_error(APLOG_MARK, LOG_ERR, 0, consumer_data->server,
                 "[%s]: could not create curl handle, thread will not run to consume messages", conf->app_id);
         return NULL;
     }
+
     while (true) {
         apr_status_t rv = apr_queue_pop(conf->activity_queue, &v);
         if (rv == APR_EINTR) {
@@ -246,8 +249,10 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
             free(activity);
         }
     }
+
     curl_easy_cleanup(curl);
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, consumer_data->server, "[%s]: activity consumer thread exited", conf->app_id);
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, consumer_data->server,
+            "[%s]: activity consumer thread exited", conf->app_id);
     apr_thread_exit(thd, 0);
     return NULL;
 }
