@@ -197,7 +197,7 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
         apr_thread_mutex_unlock(conf->health_check_cond_mutex);
         if (conf->should_exit_thread) {
             ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, "health_check: marked to exit");
-            goto exit_health_check;
+            break;
         }
 
         // do health check until success
@@ -214,7 +214,6 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
         apr_atomic_set32(&conf->px_errors_count, 0);
     }
 
-exit_health_check:
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, "health_check: thread exiting");
     curl_easy_cleanup(curl);
     apr_thread_exit(thd, 0);
