@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/) 
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [2.4.2] - 7-24-2017
+
+* Remove special handling for POST requests.
+
 ## [2.4.1] - 7-13-2017
 
 * Add ScoreHeader on request instead of response.

@@ -142,9 +142,6 @@ int px_handle_request(request_rec *r, px_config *conf) {
         }
 
         if (!request_valid && ctx->block_enabled) {
-            if (r->method && strcmp(r->method, "POST") == 0) {
-                return HTTP_FORBIDDEN;
-            }
             // redirecting requests to custom block page if exists
             if (conf->block_page_url) {
                 const char *redirect_url;
@@ -769,7 +766,7 @@ static void *create_config(apr_pool_t *p) {
         conf->send_page_activities = true;
         conf->blocking_score = 70;
         conf->captcha_enabled = true;
-        conf->module_version = "Apache Module v2.4.0-rc.1";
+        conf->module_version = "Apache Module v2.4.2";
         conf->skip_mod_by_envvar = false;
         conf->curl_pool_size = 40;
         conf->base_url = DEFAULT_BASE_URL;
