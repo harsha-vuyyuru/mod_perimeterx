@@ -324,17 +324,19 @@ static apr_status_t px_child_exit(void *data) {
     server_rec *s = (server_rec*)data;
     px_config *cfg = ap_get_module_config(s->module_config, &perimeterx_module);
 
-
     // signaling health check thread to exit
-    /*cfg->should_exit_thread = true;*/
-    /*apr_thread_cond_signal(cfg->health_check_cond);*/
-
+    if (cfg->px_health_check) {
+        cfg->should_exit_thread = true;
+        apr_thread_cond_signal(cfg->health_check_cond);
+    }
     // terminate the queue and wake up all idle threads
-    apr_status_t rv = apr_queue_term(cfg->activity_queue);
-    if (rv != APR_SUCCESS) {
-        char buf[ERR_BUF_SIZE];
-        char *err = apr_strerror(rv, buf, sizeof(buf));
-        ap_log_error(APLOG_MARK, LOG_ERR, 0, s, "px_child_exit: could not terminate the queue - %s", err);
+    if (cfg->activity_queue) {
+        apr_status_t rv = apr_queue_term(cfg->activity_queue);
+        if (rv != APR_SUCCESS) {
+            char buf[ERR_BUF_SIZE];
+            char *err = apr_strerror(rv, buf, sizeof(buf));
+            ap_log_error(APLOG_MARK, LOG_ERR, 0, s, "px_child_exit: could not terminate the queue - %s", err);
+        }
     }
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "px_child_exit: cleanup finished");
 }
