@@ -45,6 +45,10 @@ static const char *CONTENT_TYPE_HTML = "text/html";
 
 // constants
 //
+static const char *SCORE_HEADER_NAME = "X-PX-SCORE";
+static const char *VID_HEADER_NAME = "X-PX-VID";
+static const char *UUID_HEADER_NAME = "X-PX-UUID";
+
 static const char *CAPTCHA_COOKIE = "_pxCaptcha";
 static const int MAX_CURL_POOL_SIZE = 10000;
 
@@ -768,11 +772,11 @@ static void *create_config(apr_pool_t *p) {
         conf->px_errors_threshold = 100;
         conf->health_check_interval = 60000000; // 1 minute
         conf->px_service_monitor = false;
-        conf->score_header_name = "X-PX-SCORE";
+        conf->score_header_name = SCORE_HEADER_NAME;
         conf->vid_header_enabled = false;
         conf->uuid_header_enabled = false;
-        conf->uuid_header_name = "X-PX-UUID";
-        conf->vid_header_name = "X-PX-VID";
+        conf->uuid_header_name = UUID_HEADER_NAME;
+        conf->vid_header_name = VID_HEADER_NAME;
     }
     return conf;
 }
