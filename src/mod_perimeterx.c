@@ -163,13 +163,11 @@ int px_handle_request(request_rec *r, px_config *conf) {
 
 				// allow vid on header
 				if (conf->vid_header_enabled && ctx->vid) {
-            		ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server, "[%s]: Added VID to response header", conf->app_id);
 					apr_table_set(r->headers_out, conf->vid_header_name, ctx->vid);
 				}
 
 				// allow uuid on header
 				if (conf->uuid_header_enabled && ctx->uuid) {
-            		ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server, "[%s]: Added UUID to response header", conf->app_id);
 					apr_table_set(r->headers_out, conf->uuid_header_name, ctx->uuid);
 				}
 
