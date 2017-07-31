@@ -62,8 +62,8 @@ typedef struct px_config_t {
 
 		bool uuid_header_enabled; 
 		bool vid_header_enabled; 
-    const char *vid_header_name;
-    const char *uuid_header_name;
+		const char *vid_header_name;
+		const char *uuid_header_name;
 
 } px_config;
 

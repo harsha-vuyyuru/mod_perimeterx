@@ -161,15 +161,15 @@ int px_handle_request(request_rec *r, px_config *conf) {
                 const char *content_type = ctx->token_origin == TOKEN_ORIGIN_COOKIE ? CONTENT_TYPE_HTML : CONTENT_TYPE_JSON;
                 ap_set_content_type(ctx->r, content_type);
 
-				// allow vid on header
-				if (conf->vid_header_enabled && ctx->vid) {
-					apr_table_set(r->headers_out, conf->vid_header_name, ctx->vid);
-				}
+                // allow vid on header
+                if (conf->vid_header_enabled && ctx->vid) {
+                    apr_table_set(r->headers_out, conf->vid_header_name, ctx->vid);
+                }
 
-				// allow uuid on header
-				if (conf->uuid_header_enabled && ctx->uuid) {
-					apr_table_set(r->headers_out, conf->uuid_header_name, ctx->uuid);
-				}
+                // allow uuid on header
+                if (conf->uuid_header_enabled && ctx->uuid) {
+                    apr_table_set(r->headers_out, conf->uuid_header_name, ctx->uuid);
+                }
 
                 ctx->r->status = HTTP_FORBIDDEN;
                 ap_rwrite(response, strlen(response), ctx->r);
