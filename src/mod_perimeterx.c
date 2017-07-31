@@ -160,6 +160,19 @@ int px_handle_request(request_rec *r, px_config *conf) {
             if (response) {
                 const char *content_type = ctx->token_origin == TOKEN_ORIGIN_COOKIE ? CONTENT_TYPE_HTML : CONTENT_TYPE_JSON;
                 ap_set_content_type(ctx->r, content_type);
+
+				// allow vid on header
+				if (conf->vid_header_enabled && ctx->vid) {
+            		ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server, "[%s]: Added VID to response header", conf->app_id);
+					apr_table_set(r->headers_out, conf->vid_header_name, ctx->vid);
+				}
+
+				// allow uuid on header
+				if (conf->uuid_header_enabled && ctx->uuid) {
+            		ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server, "[%s]: Added UUID to response header", conf->app_id);
+					apr_table_set(r->headers_out, conf->uuid_header_name, ctx->uuid);
+				}
+
                 ctx->r->status = HTTP_FORBIDDEN;
                 ap_rwrite(response, strlen(response), ctx->r);
                 free(response);
@@ -685,6 +698,42 @@ static const char *enable_token_via_header(cmd_parms *cmd, void *config, int arg
     return NULL;
 }
 
+static const char *enable_vid_header(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->vid_header_enabled = arg ? true : false;
+    return NULL;
+}
+
+static const char *enable_uuid_header(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->uuid_header_enabled = arg ? true : false;
+    return NULL;
+}
+
+static const char* set_uuid_header_name(cmd_parms *cmd, void *config, const char *uuid_header_name) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->uuid_header_name = uuid_header_name;
+    return NULL;
+}
+
+static const char* set_vid_header_name(cmd_parms *cmd, void *config, const char *vid_header_name) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->vid_header_name = vid_header_name;
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     return px_handle_request(r, conf);
@@ -722,6 +771,10 @@ static void *create_config(apr_pool_t *p) {
         conf->health_check_interval = 60000000; // 1 minute
         conf->px_service_monitor = false;
         conf->score_header_name = "X-PX-SCORE";
+        conf->vid_header_enabled = false;
+        conf->uuid_header_enabled = false;
+        conf->uuid_header_name = "X-PX-UUID";
+        conf->vid_header_name = "X-PX-VID";
     }
     return conf;
 }
@@ -897,6 +950,26 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Enable header based token send"),
+    AP_INIT_FLAG("EnableVidHeader",
+            enable_vid_header,
+            NULL,
+            OR_ALL,
+            "Enable module to place vid on response header"),
+    AP_INIT_TAKE1("VidHeaderName",
+            set_vid_header_name,
+            NULL,
+            OR_ALL,
+            "Sets the name of vid response header"),
+    AP_INIT_TAKE1("UuidHeaderName",
+            set_uuid_header_name,
+            NULL,
+            OR_ALL,
+            "Sets the name of uuid response header"),
+    AP_INIT_FLAG("EnableUuidHeader",
+            enable_uuid_header,
+            NULL,
+            OR_ALL,
+            "Enable module to place uuid on response header"),
     { NULL }
 };
 
