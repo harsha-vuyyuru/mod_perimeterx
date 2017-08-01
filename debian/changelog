@@ -2,7 +2,7 @@ libapache-mod-perimeterx (2.5.0) jessie; urgency=medium
 
     * Added support for passing UUID/VID on reponse headers
 
- -- nitzanpx <nitzanpx@github>  Thu, 01 Aug 2017 09:22:00 +000
+ -- nitzanpx <nitzanpx@github>  Tue, 01 Aug 2017 09:22:00 +000
  
 libapache-mod-perimeterx (2.4.2) jessie; urgency=medium
 
