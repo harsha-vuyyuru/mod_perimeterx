@@ -63,6 +63,12 @@ typedef struct px_config_t {
     bool should_exit_thread;
 
     bool enable_token_via_header;
+
+    bool uuid_header_enabled; 
+    bool vid_header_enabled; 
+    const char *vid_header_name;
+    const char *uuid_header_name;
+
 } px_config;
 
 typedef struct health_check_data_t {
