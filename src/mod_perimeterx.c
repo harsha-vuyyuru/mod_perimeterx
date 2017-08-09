@@ -173,7 +173,13 @@ int px_handle_request(request_rec *r, px_config *conf) {
 
             char *response = create_response(conf, ctx);
             if (response) {
-                const char *content_type = ctx->token_origin == TOKEN_ORIGIN_COOKIE ? CONTENT_TYPE_HTML : CONTENT_TYPE_JSON;
+                const char *accept_header = apr_table_get(ctx->r->headers_in, ACCEPT_HEADER_NAME);       
+                const char *content_type = CONTENT_TYPE_HTML; 
+                bool match_application_json = accept_header && strstr(accept_header, CONTENT_TYPE_JSON);
+
+                if (ctx->token_origin == TOKEN_ORIGIN_HEADER || match_application_json) {
+                    content_type = CONTENT_TYPE_JSON;
+                } 
                 ap_set_content_type(ctx->r, content_type);
 
 
