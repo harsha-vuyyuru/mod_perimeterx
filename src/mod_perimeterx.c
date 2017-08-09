@@ -110,6 +110,7 @@ char* create_response(px_config *conf, request_context *ctx) {
         if (encoded_html == 0) {
             return NULL;
         }
+        ctx->match_application_json = true;
         return create_mobile_response(conf, ctx, encoded_html);
     }
     return html;
@@ -176,7 +177,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
             if (response) {
                 const char *content_type = CONTENT_TYPE_HTML; 
 
-                if (ctx->token_origin == TOKEN_ORIGIN_HEADER || ctx->match_application_json) {
+                if (ctx->match_application_json) {
                     content_type = CONTENT_TYPE_JSON;
                 } 
                 ap_set_content_type(ctx->r, content_type);
