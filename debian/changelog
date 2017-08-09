@@ -1,4 +1,4 @@
-libapache-mod-perimeterx (2.6.0) jessie; urgency=medium
+libapache-mod-perimeterx (2.6.1) jessie; urgency=medium
 
    * Sending content-type application/json when needed
 

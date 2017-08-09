@@ -177,13 +177,10 @@ int px_handle_request(request_rec *r, px_config *conf) {
             char *response = create_response(conf, ctx);
             if (response) {
                 const char *content_type = CONTENT_TYPE_HTML; 
-
                 if (ctx->response_application_json) {
                     content_type = CONTENT_TYPE_JSON;
                 } 
                 ap_set_content_type(ctx->r, content_type);
-
-
                 ctx->r->status = HTTP_FORBIDDEN;
                 ap_rwrite(response, strlen(response), ctx->r);
                 free(response);
