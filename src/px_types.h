@@ -180,6 +180,7 @@ typedef struct request_context_t {
     token_origin_t token_origin;
     action_t action;
     captcha_type_t captcha_type;
+    bool response_application_json;
 } request_context;
 
 #endif

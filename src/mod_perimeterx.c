@@ -70,10 +70,13 @@ extern const char *CALL_REASON_STR[];
 #endif // DEBUG
 
 char* create_response(px_config *conf, request_context *ctx) {
-    if (conf->json_response_enabled) {
+    if (ctx->token_origin == TOKEN_ORIGIN_HEADER) {
+        ctx->response_application_json = true;
+    } else if (conf->json_response_enabled) {
         const char *accept_header = apr_table_get(ctx->r->headers_in, ACCEPT_HEADER_NAME);       
         bool match = accept_header && strstr(accept_header, CONTENT_TYPE_JSON);
         if (match) {
+            ctx->response_application_json = true;
             return create_json_response(conf, ctx);
         }
     }
@@ -173,10 +176,11 @@ int px_handle_request(request_rec *r, px_config *conf) {
 
             char *response = create_response(conf, ctx);
             if (response) {
-                const char *content_type = ctx->token_origin == TOKEN_ORIGIN_COOKIE ? CONTENT_TYPE_HTML : CONTENT_TYPE_JSON;
+                const char *content_type = CONTENT_TYPE_HTML; 
+                if (ctx->response_application_json) {
+                    content_type = CONTENT_TYPE_JSON;
+                } 
                 ap_set_content_type(ctx->r, content_type);
-
-
                 ctx->r->status = HTTP_FORBIDDEN;
                 ap_rwrite(response, strlen(response), ctx->r);
                 free(response);
@@ -761,7 +765,7 @@ static void *create_config(apr_pool_t *p) {
         conf->send_page_activities = true;
         conf->blocking_score = 70;
         conf->captcha_enabled = true;
-        conf->module_version = "Apache Module v2.6.0";
+        conf->module_version = "Apache Module v2.6.1";
         conf->skip_mod_by_envvar = false;
         conf->curl_pool_size = 40;
         conf->base_url = DEFAULT_BASE_URL;
