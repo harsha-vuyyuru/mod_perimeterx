@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/) 
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [2.6.0] - 8-09-2017
+
+* Added support for a json response when expecting application/json response 
+* Remove json-c dependency.
+
 ## [2.5.0] - 7-31-2017
 * Added UuidHeader on response 
 * Added VidHeader on response 

@@ -48,6 +48,7 @@ static const char *CONTENT_TYPE_HTML = "text/html";
 static const char *SCORE_HEADER_NAME = "X-PX-SCORE";
 static const char *VID_HEADER_NAME = "X-PX-VID";
 static const char *UUID_HEADER_NAME = "X-PX-UUID";
+static const char *ACCEPT_HEADER_NAME = "Accept";
 
 static const char *CAPTCHA_COOKIE = "_pxCaptcha";
 static const int MAX_CURL_POOL_SIZE = 10000;
@@ -69,10 +70,21 @@ extern const char *CALL_REASON_STR[];
 #endif // DEBUG
 
 char* create_response(px_config *conf, request_context *ctx) {
-    char *response;
-    size_t html_size;
-    char *html = NULL;
+    if (conf->json_response_enabled) {
+        const char *accept_header = apr_table_get(ctx->r->headers_in, ACCEPT_HEADER_NAME);       
+        bool match = accept_header && strstr(accept_header, CONTENT_TYPE_JSON);
+        if (match) {
+            return create_json_response(conf, ctx);
+        }
+    }
+    
+    if (conf->vid_header_enabled && ctx->vid) {
+        apr_table_set(ctx->r->headers_out, conf->vid_header_name, ctx->vid);
+    }
 
+    if (conf->uuid_header_enabled && ctx->uuid) {
+        apr_table_set(ctx->r->headers_out, conf->uuid_header_name, ctx->uuid);
+    }
     // which template to use in response
     const char *template = block_tpl;
     if (ctx->action == ACTION_CAPTCHA) {
@@ -80,6 +92,8 @@ char* create_response(px_config *conf, request_context *ctx) {
     }
 
     // render html page with the relevant template
+    size_t html_size;
+    char *html = NULL;
     int res = render_template(template, &html, ctx, conf, &html_size);
     if (res) {
         // failed to render
@@ -95,12 +109,9 @@ char* create_response(px_config *conf, request_context *ctx) {
         if (encoded_html == 0) {
             return NULL;
         }
-        response = create_mobile_response(conf, ctx, encoded_html);
-    } else {
-        response = html;
+        return create_mobile_response(conf, ctx, encoded_html);
     }
-
-    return response;
+    return html;
 }
 
 int px_handle_request(request_rec *r, px_config *conf) {
@@ -165,15 +176,6 @@ int px_handle_request(request_rec *r, px_config *conf) {
                 const char *content_type = ctx->token_origin == TOKEN_ORIGIN_COOKIE ? CONTENT_TYPE_HTML : CONTENT_TYPE_JSON;
                 ap_set_content_type(ctx->r, content_type);
 
-                // allow vid on header
-                if (conf->vid_header_enabled && ctx->vid) {
-                    apr_table_set(r->headers_out, conf->vid_header_name, ctx->vid);
-                }
-
-                // allow uuid on header
-                if (conf->uuid_header_enabled && ctx->uuid) {
-                    apr_table_set(r->headers_out, conf->uuid_header_name, ctx->uuid);
-                }
 
                 ctx->r->status = HTTP_FORBIDDEN;
                 ap_rwrite(response, strlen(response), ctx->r);
@@ -736,6 +738,15 @@ static const char* set_vid_header_name(cmd_parms *cmd, void *config, const char 
     return NULL;
 }
 
+static const char *enable_json_response(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->json_response_enabled = arg ? true : false;
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     return px_handle_request(r, conf);
@@ -750,7 +761,7 @@ static void *create_config(apr_pool_t *p) {
         conf->send_page_activities = true;
         conf->blocking_score = 70;
         conf->captcha_enabled = true;
-        conf->module_version = "Apache Module v2.5.0";
+        conf->module_version = "Apache Module v2.6.0";
         conf->skip_mod_by_envvar = false;
         conf->curl_pool_size = 40;
         conf->base_url = DEFAULT_BASE_URL;
@@ -777,6 +788,7 @@ static void *create_config(apr_pool_t *p) {
         conf->uuid_header_enabled = false;
         conf->uuid_header_name = UUID_HEADER_NAME;
         conf->vid_header_name = VID_HEADER_NAME;
+        conf->json_response_enabled = false;
     }
     return conf;
 }
@@ -972,6 +984,12 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Enable module to place uuid on response header"),
+    AP_INIT_FLAG("EnableJsonResponse",
+            enable_json_response,
+            NULL,
+            OR_ALL,
+            "Enable module to return a json response"),
+
     { NULL }
 };
 
