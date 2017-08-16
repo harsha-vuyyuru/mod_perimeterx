@@ -385,12 +385,12 @@ static const char *set_app_id(cmd_parms *cmd, void *config, const char *app_id) 
     return NULL;
 }
 
-static const char *set_cookie_key(cmd_parms *cmd, void *config, const char *cookie_key) {
+static const char *set_payload_key(cmd_parms *cmd, void *config, const char *payload_key) {
     px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    conf->cookie_key = cookie_key;
+    conf->payload_key = payload_key;
     return NULL;
 }
 
@@ -765,7 +765,7 @@ static void *create_config(apr_pool_t *p) {
         conf->send_page_activities = true;
         conf->blocking_score = 70;
         conf->captcha_enabled = true;
-        conf->module_version = "Apache Module v2.6.1";
+        conf->module_version = "Apache Module v2.6.2";
         conf->skip_mod_by_envvar = false;
         conf->curl_pool_size = 40;
         conf->base_url = DEFAULT_BASE_URL;
@@ -814,7 +814,7 @@ static const command_rec px_directives[] = {
             OR_ALL,
             "PX Application ID"),
     AP_INIT_TAKE1("CookieKey",
-            set_cookie_key,
+            set_payload_key,
             NULL,
             OR_ALL,
             "Cookie decryption key"),

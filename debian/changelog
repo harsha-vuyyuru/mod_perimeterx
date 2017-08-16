@@ -1,14 +1,22 @@
+libapache-mod-perimeterx (2.6.2) jessie; urgency=medium
+
+   * New call reason for mobile sdk 
+
+ -- nitzanpx <nitzanpx@github>  Wed, 16 Aug 2017 10:00:00 +0000
+
 libapache-mod-perimeterx (2.6.1) jessie; urgency=medium
 
    * Sending content-type application/json when needed
 
  -- nitzanpx <nitzanpx@github>  Wed, 09 Aug 2017 22:00:00 +0000
+
 libapache-mod-perimeterx (2.6.0) jessie; urgency=medium
 
     * Adding support for response body when expecting application/json
     * Remove json-c dependency.
 
  -- nitzanpx <nitzanpx@github>  Wed, 09 Aug 2017 19:00:00 +0000
+
 libapache-mod-perimeterx (2.5.0) jessie; urgency=medium
 
     * Added support for passing UUID/VID on reponse headers

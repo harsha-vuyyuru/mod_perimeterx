@@ -130,20 +130,22 @@ const char *get_request_ip(const request_rec *r, const px_config *conf) {
     return socket_ip;
 }
 
-// returns the token version, -1 if header not found
-int extract_token_and_version_from_header(apr_pool_t *pool, apr_table_t *headers, const char **token) {
-    *token = NULL;
+// returns the payload version, 0 if error msg, -1 if header not found
+int extract_payload_from_header(apr_pool_t *pool, apr_table_t *headers, const char **payload) {
+    *payload = NULL;
     const char *header_value = apr_table_get(headers, MOBILE_SDK_HEADER);
     if (header_value) {
         char *rest;
         char *header_cpy = apr_pstrdup(pool, header_value);
-        const char *version = apr_strtok(header_cpy, ":", &rest);
-        if (version == NULL) {
+        const char *prefix = apr_strtok(header_cpy, ":", &rest);
+        const char *postfix = apr_strtok(NULL, "", &rest);
+        // if postfix is empty, use prefix as payload number, in this case version will be 0
+        if (postfix == NULL) {
+            *payload = prefix;
             return 0;
         }
-        const char *px_token = apr_strtok(NULL, "", &rest);
-        *token =  px_token;
-        return apr_atoi64(version);
+        *payload = postfix;
+        return apr_atoi64(prefix);
     }
     return -1;
 }
