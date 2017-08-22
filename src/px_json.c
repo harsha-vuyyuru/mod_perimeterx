@@ -39,7 +39,6 @@ static const char *CALL_REASON_STR[] = {
 // using cookie as value instead of payload, changing it will effect the collector
 static const char *BLOCK_REASON_STR[] = {
     [BLOCK_REASON_NONE] = "none",
-
     [BLOCK_REASON_PAYLOAD] = "cookie_high_score",
     [BLOCK_REASON_SERVER] = "s2s_high_score",
 };
