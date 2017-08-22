@@ -13,6 +13,10 @@
 #include <apr_strings.h>
 #include <http_log.h>
 
+#ifdef APLOG_USE_MODULE
+APLOG_USE_MODULE(perimeterx);
+#endif
+
 static const int ITERATIONS_UPPER_BOUND = 10000;
 static const int ITERATIONS_LOWER_BOUND = 0;
 static const int IV_LEN = 16;

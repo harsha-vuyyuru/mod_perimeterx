@@ -6,6 +6,10 @@
 #include <apr_strings.h>
 #include <http_log.h>
 
+#ifdef APLOG_USE_MODULE
+APLOG_USE_MODULE(perimeterx);
+#endif
+
 static const char *JSON_CONTENT_TYPE = "Content-Type: application/json";
 static const char *EXPECT = "Expect:";
 static const char *MOBILE_SDK_HEADER = "X-PX-AUTHORIZATION";

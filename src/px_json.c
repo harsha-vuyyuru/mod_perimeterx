@@ -5,10 +5,14 @@
 #include <http_log.h>
 #include <apr_strings.h>
 
+#ifdef APLOG_USE_MODULE
+APLOG_USE_MODULE(perimeterx);
+#endif
+
 static const char *BLOCKED_ACTIVITY_TYPE = "block";
 static const char *PAGE_REQUESTED_ACTIVITY_TYPE = "page_requested";
 
-// using cookie as value instead of payload, changing it will effect the collector 
+// using cookie as value instead of payload, changing it will effect the collector
 static const char *PASS_REASON_STR[] = {
     [PASS_REASON_NONE] = "none",
     [PASS_REASON_PAYLOAD] = "cookie",
@@ -20,7 +24,7 @@ static const char *PASS_REASON_STR[] = {
     [PASS_REASON_ERROR] = "error",
 };
 
-// using cookie as value instead of payload, changing it will effect the collector 
+// using cookie as value instead of payload, changing it will effect the collector
 static const char *CALL_REASON_STR[] = {
     [CALL_REASON_NONE] = "none",
     [CALL_REASON_NO_PAYLOAD] = "no_cookie",
@@ -32,7 +36,7 @@ static const char *CALL_REASON_STR[] = {
     [CALL_REASON_MOBILE_SDK_CONNECTION_ERROR] = "mobile_sdk_connection_error",
 };
 
-// using cookie as value instead of payload, changing it will effect the collector 
+// using cookie as value instead of payload, changing it will effect the collector
 static const char *BLOCK_REASON_STR[] = {
     [BLOCK_REASON_NONE] = "none",
     [BLOCK_REASON_PAYLOAD] = "cookie_high_score",

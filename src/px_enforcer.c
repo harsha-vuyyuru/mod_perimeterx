@@ -9,6 +9,10 @@
 #include "px_utils.h"
 #include "curl_pool.h"
 
+#ifdef APLOG_USE_MODULE
+APLOG_USE_MODULE(perimeterx);
+#endif
+
 static const char *PX_PAYLOAD_COOKIE_PREFIX = "_px";
 static const char *CAPTCHA_COOKIE = "_pxCaptcha";
 static const char *BLOCKED_ACTIVITY_TYPE = "block";
@@ -16,8 +20,6 @@ static const char *PAGE_REQUESTED_ACTIVITY_TYPE = "page_requested";
 
 static const char *NO_TOKEN = "1";
 static const char *MOBILE_SDK_CONNECTION_ERROR = "2";
-
-
 
 static const char* FILE_EXT_WHITELIST[] = {
     ".css", ".bmp", ".tif", ".ttf", ".docx", ".woff2", ".js", ".pict", ".tiff", ".eot", ".xlsx", ".jpg", ".csv",
