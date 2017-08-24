@@ -49,6 +49,9 @@ static const char *SCORE_HEADER_NAME = "X-PX-SCORE";
 static const char *VID_HEADER_NAME = "X-PX-VID";
 static const char *UUID_HEADER_NAME = "X-PX-UUID";
 static const char *ACCEPT_HEADER_NAME = "Accept";
+static const char *CORS_HEADER_NAME = "Access-Control-Allow-Origin";
+static const char *ORIGIN_HEADER_NAME = "Origin";
+static const char *ORIGIN_DEFAULT_VALUE = "*";
 
 static const char *CAPTCHA_COOKIE = "_pxCaptcha";
 static const int MAX_CURL_POOL_SIZE = 10000;
@@ -70,6 +73,13 @@ extern const char *CALL_REASON_STR[];
 #endif // DEBUG
 
 char* create_response(px_config *conf, request_context *ctx) {
+    // suppoort for cors headers
+    if (conf->cors_headers_enabled) {
+        const char *origin_header = apr_table_get(ctx->r->headers_in, ORIGIN_HEADER_NAME);               
+        const char *origin_value = origin_header ? origin_header : ORIGIN_DEFAULT_VALUE; 
+        apr_table_set(ctx->r->headers_out, CORS_HEADER_NAME, origin_value);        
+    }
+
     if (ctx->token_origin == TOKEN_ORIGIN_HEADER) {
         ctx->response_application_json = true;
     } else if (conf->json_response_enabled) {
@@ -751,6 +761,15 @@ static const char *enable_json_response(cmd_parms *cmd, void *config, int arg) {
     return NULL;
 }
 
+static const char *enable_cors_headers(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->cors_headers_enabled = arg ? true : false;
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     return px_handle_request(r, conf);
@@ -793,6 +812,7 @@ static void *create_config(apr_pool_t *p) {
         conf->uuid_header_name = UUID_HEADER_NAME;
         conf->vid_header_name = VID_HEADER_NAME;
         conf->json_response_enabled = false;
+        conf->cors_headers_enabled = false;
     }
     return conf;
 }
@@ -993,7 +1013,11 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Enable module to return a json response"),
-
+    AP_INIT_FLAG("EnableCORSHeaders",
+            enable_cors_headers,
+            NULL,
+            OR_ALL,
+            "Enable module to return a json response"),
     { NULL }
 };
 
