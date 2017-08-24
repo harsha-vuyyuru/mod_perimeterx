@@ -4,8 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/) 
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [2.6.3] - 8-16-2017
+* fixed missing debug messages
+
 ## [2.6.2] - 8-16-2017
-* New call_reason for mobile sdk connection error 
+* New call_reason for mobile sdk connection error
 
 ## [2.6.1] - 8-09-2017
 * Sending content-type application/json when needed
