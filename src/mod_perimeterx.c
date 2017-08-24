@@ -44,7 +44,7 @@ static const char *CONTENT_TYPE_JSON = "application/json";
 static const char *CONTENT_TYPE_HTML = "text/html";
 
 // constants
-//
+static const char *PERIMETERX_MODULE_VERSION = "Apache Module v2.7.0";
 static const char *SCORE_HEADER_NAME = "X-PX-SCORE";
 static const char *VID_HEADER_NAME = "X-PX-VID";
 static const char *UUID_HEADER_NAME = "X-PX-UUID";
@@ -763,11 +763,11 @@ static void *create_config(apr_pool_t *p) {
         conf->api_timeout_ms = 1000L;
         conf->captcha_timeout = 1000L;
         conf->send_page_activities = true;
-        conf->blocking_score = 70;
+        conf->blocking_score = 101;
         conf->captcha_enabled = true;
-        conf->module_version = "Apache Module v2.6.3";
+        conf->module_version = PERIMETERX_MODULE_VERSION;
         conf->skip_mod_by_envvar = false;
-        conf->curl_pool_size = 40;
+        conf->curl_pool_size = 100;
         conf->base_url = DEFAULT_BASE_URL;
         conf->risk_api_url = apr_pstrcat(p, conf->base_url, RISK_API, NULL);
         conf->captcha_api_url = apr_pstrcat(p, conf->base_url, CAPTCHA_API, NULL);
