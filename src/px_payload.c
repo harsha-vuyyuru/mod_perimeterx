@@ -218,9 +218,12 @@ validation_result_t validate_payload(const risk_payload *payload, request_contex
 
     if (payload->hash == NULL || strlen(payload->hash) == 0) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: validate_payload: no hash", ctx->app_id);
-    if (currenttime > cookie->ts) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
-                "[%s]: validate_cookie: cookie expired", ctx->app_id);
+        return VALIDATION_RESULT_NO_SIGNING;
+    }
+
+    struct timeval te;
+    gettimeofday(&te, NULL);
+    long long currenttime = te.tv_sec * 1000LL + te.tv_usec / 1000;
     if (currenttime > payload->ts) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: validate_payload: payload expired", ctx->app_id);
         return VALIDATION_RESULT_EXPIRED;
