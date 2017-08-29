@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/) 
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [2.7.0] - 8-16-2017
+* Update default values for blocking score 
+
+## [2.6.3] - 8-16-2017
+* fixed missing debug messages
+
+## [2.6.2] - 8-16-2017
+* New call_reason for mobile sdk connection error
+
+## [2.6.1] - 8-09-2017
+* Sending content-type application/json when needed
+
+## [2.6.0] - 8-09-2017
+* Added support for a json response when expecting application/json response 
+* Remove json-c dependency.
+
+## [2.5.0] - 7-31-2017
+* Added UuidHeader on response 
+* Added VidHeader on response 
+
 ## [2.4.2] - 7-24-2017
 
 * Remove special handling for POST requests.

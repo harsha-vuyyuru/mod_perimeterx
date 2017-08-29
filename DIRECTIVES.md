@@ -15,22 +15,23 @@ Directives
 | AppId  | PX custom application id in the format of PX______	  | NULL | String  |
 | CookieKey  | Key used for cookie signing - Can be found \ generated in PX portal - Policy page. | NULL  |   |   |
 | AuthToken | JWT token used for REST API - Can be found \ generated in PX portal - Application page.  | NULL  | String |
-| BlockingScore | When requests with a score equal to or higher value they will be blocked.  | 70  | 0 - 100  |
+| BlockingScore | When requests with a score equal to or higher value they will be blocked.  | 101  | 0 - 100  |
 | Captcha | Enable reCaptcha on the blocking page  | On  | On / Off  | When using a custom block page with captcha abilities implementation, this option must be `On`.
 | ReportPageRequest | Boolean flag to enable or disable sending activities and metrics to PerimeterX on each page request. Enabling this feature will provide data that populates the PerimeterX portal with valuable information	  |  On | On / Off  |
 | APITimeoutMS |  REST API timeout in milliseconds | 1000  | Integer  | In case APITimeoutMS and APITimeout (deprecated but supported for backward compatibility) are both set in the module configuration - the one that is set later in the file will be the one that will be used. Any other value set prior of it will be discarded.
 | CaptchaTimeout |  Captcha timeout in milliseconds | APITimeoutMS  | Integer  |  If not set - CaptchaTimeout is the same as APITimeoutMS
-| IPHeader | List of HTTP header names that contain the real client IP address. Use this feature when your server is behind a CDN. | NULL | List |  [IPHeader Importacne](#ipheader)
-| CurlPoolSize | The number of active curl handles for each server  | 40  | Integer 1-1000  | For optimized performance, it is best to use the number of running worker threads in your Apache server as the CurlPoolSize.
+| IPHeader | List of HTTP header names that contain the real client IP address. Use this feature when your server is behind a CDN. | NULL | List |  [IPHeader Additional Information](#ipheader)
+| CurlPoolSize | The number of active curl handles for each server  | 100  | Integer 1-1000  | For optimized performance, it is best to use the number of running worker threads in your Apache server as the CurlPoolSize.
 | BaseURL |  Determines PerimeterX server base URL. | https://sapi-\<app_id\>.perimeterx.net  | String |
 | ProxyURL |  Proxy URL for outgoing PerimeterX service API | NULL  | String |
 | ScoreHeader |  Enable request score to be placed on the response headers | Off  | On / Off |
-| ScoreHeaderName |  Sets the header key on the request object that holds the risk score  | X-PX-SCORE  | String | Works only when `ScoreHeader` is set to On
+| ScoreHeaderName |  Sets the header key on the response object that holds the risk score  | X-PX-SCORE  | String | Works only when `ScoreHeader` is set to On
 | VidHeader |  Enables VID to be placed on the response headers | Off  | On / Off |
-| VidHeaderName | Sets the key for the VID header on the response | X-PX-VID  | String | Works only when `VidHeader` is set to On
+| VidHeaderName | Sets the key for the VID header on the response | X-PX-VID  | String | Works only when `VidHeader` is set to On |
 | UuidHeader | Enables UUID to be placed on the response headers | Off  | On / Off |
-| UuidHeaderName | Sets the key for the UUID header on the response | X-PX-UUID  | String | Works only when `UuidHeader` is set to On
-#### <a name="ipheader">IPHeader Importacne</a>: 
+| UuidHeaderName | Sets the key for the UUID header on the response | X-PX-UUID  | String | Works only when `UuidHeader` is set to On |
+| EnableJsonResponse | Turn on response json when accept headers are `application/json` | false  | bool | On / Off |
+#### <a name="ipheader">IPHeader Additional Information</a>: 
 
 * The order of headers in the configuration matters. The first header found with a value will be taken as the IP address.
 * If no valid IP address is found in the IP header list, the module will use [`useragent_ip`](https://httpd.apache.org/docs/2.4/developer/new_api_2_4.html) as the request IP.

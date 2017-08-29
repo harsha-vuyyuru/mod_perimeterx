@@ -34,3 +34,5 @@ debian/libapache2-mod-perimeterx.postinst.debhelper
 debian/libapache2-mod-perimeterx.postrm.debhelper
 debian/libapache2-mod-perimeterx.prerm.debhelper
 debian/libapache2-mod-perimeterx.substvars
+.idea
+dev/

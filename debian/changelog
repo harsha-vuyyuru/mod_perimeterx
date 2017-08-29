@@ -1,3 +1,40 @@
+libapache-mod-perimeterx (2.7.0) jessie; urgency=medium
+
+   * Update default values for blocksing score 
+
+ -- bendpx <bendpx@github>  Wed, 24 Aug 2017 18:00:00 +0000
+
+libapache-mod-perimeterx (2.6.3) jessie; urgency=medium
+
+   * fixed missing debug messages
+
+ -- bendpx <bendpx@github>  Wed, 22 Aug 2017 10:00:00 +0000
+
+libapache-mod-perimeterx (2.6.2) jessie; urgency=medium
+
+   * New call reason for mobile sdk 
+
+ -- nitzanpx <nitzanpx@github>  Wed, 16 Aug 2017 10:00:00 +0000
+
+libapache-mod-perimeterx (2.6.1) jessie; urgency=medium
+
+   * Sending content-type application/json when needed
+
+ -- nitzanpx <nitzanpx@github>  Wed, 09 Aug 2017 22:00:00 +0000
+
+libapache-mod-perimeterx (2.6.0) jessie; urgency=medium
+
+    * Adding support for response body when expecting application/json
+    * Remove json-c dependency.
+
+ -- nitzanpx <nitzanpx@github>  Wed, 09 Aug 2017 19:00:00 +0000
+
+libapache-mod-perimeterx (2.5.0) jessie; urgency=medium
+
+    * Added support for passing UUID/VID on reponse headers
+
+ -- nitzanpx <nitzanpx@github>  Tue, 01 Aug 2017 09:22:00 +0000
+
 libapache-mod-perimeterx (2.4.2) jessie; urgency=medium
 
     * Remove special handling for POST requests.
