@@ -76,14 +76,14 @@ char* create_response(px_config *conf, request_context *ctx) {
     if (ctx->token_origin == TOKEN_ORIGIN_HEADER) {
         ctx->response_application_json = true;
     } else if (conf->json_response_enabled) {
-        const char *accept_header = apr_table_get(ctx->r->headers_in, ACCEPT_HEADER_NAME);       
+        const char *accept_header = apr_table_get(ctx->r->headers_in, ACCEPT_HEADER_NAME);
         bool match = accept_header && strstr(accept_header, CONTENT_TYPE_JSON);
         if (match) {
             ctx->response_application_json = true;
             return create_json_response(conf, ctx);
         }
     }
-    
+
     if (conf->vid_header_enabled && ctx->vid) {
         apr_table_set(ctx->r->headers_out, conf->vid_header_name, ctx->vid);
     }
@@ -122,7 +122,7 @@ char* create_response(px_config *conf, request_context *ctx) {
 
 int px_handle_request(request_rec *r, px_config *conf) {
     // fail open mode
-    if (conf->px_errors_count >= conf->px_errors_threshold) {
+    if (apr_atomic_read32(&conf->px_errors_count) >= conf->px_errors_threshold) {
         return OK;
     }
 
@@ -180,10 +180,10 @@ int px_handle_request(request_rec *r, px_config *conf) {
 
             char *response = create_response(conf, ctx);
             if (response) {
-                const char *content_type = CONTENT_TYPE_HTML; 
+                const char *content_type = CONTENT_TYPE_HTML;
                 if (ctx->response_application_json) {
                     content_type = CONTENT_TYPE_JSON;
-                } 
+                }
                 ap_set_content_type(ctx->r, content_type);
                 ctx->r->status = HTTP_FORBIDDEN;
                 ap_rwrite(response, strlen(response), ctx->r);
