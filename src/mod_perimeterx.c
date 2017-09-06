@@ -881,6 +881,7 @@ static void *create_config(apr_pool_t *p) {
         conf->vid_header_name = VID_HEADER_NAME;
         conf->json_response_enabled = false;
         conf->cors_headers_enabled = false;
+        conf->enable_token_via_header = true;
     }
     return conf;
 }
