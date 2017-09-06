@@ -1,3 +1,10 @@
+libapache-mod-perimeterx (2.8.0-rc.1) jessie; urgency=medium
+
+   * Added support for CORS headers 
+   * Better handling for threads 
+
+ -- bendpx <nitzanpx@github>  Wed, 06 Sep 2017 13:00:00 +0000
+
 libapache-mod-perimeterx (2.7.0) jessie; urgency=medium
 
    * Update default values for blocksing score 

@@ -21,6 +21,7 @@
 #include <apr_portable.h>
 #include <apr_signal.h>
 #include <apr_base64.h>
+#include <apr_time.h>
 
 #include "px_utils.h"
 #include "px_types.h"
@@ -40,18 +41,23 @@ static const char *CAPTCHA_API = "/api/v2/risk/captcha";
 static const char *ACTIVITIES_API = "/api/v1/collector/s2s";
 static const char *HEALTH_CHECK_API = "/api/v1/kpi/status";
 
+
 static const char *CONTENT_TYPE_JSON = "application/json";
 static const char *CONTENT_TYPE_HTML = "text/html";
 
 // constants
-static const char *PERIMETERX_MODULE_VERSION = "Apache Module v2.7.0";
+static const char *PERIMETERX_MODULE_VERSION = "Apache Module v2.8.0-rc.1";
 static const char *SCORE_HEADER_NAME = "X-PX-SCORE";
 static const char *VID_HEADER_NAME = "X-PX-VID";
 static const char *UUID_HEADER_NAME = "X-PX-UUID";
 static const char *ACCEPT_HEADER_NAME = "Accept";
+static const char *CORS_HEADER_NAME = "Access-Control-Allow-Origin";
+static const char *ORIGIN_HEADER_NAME = "Origin";
+static const char *ORIGIN_DEFAULT_VALUE = "*";
 
 static const char *CAPTCHA_COOKIE = "_pxCaptcha";
 static const int MAX_CURL_POOL_SIZE = 10000;
+static const int ERR_BUF_SIZE = 128;
 
 static const char *ERROR_CONFIG_MISSING = "mod_perimeterx: config structure not allocated";
 static const char* MAX_CURL_POOL_SIZE_EXCEEDED = "mod_perimeterx: CurlPoolSize can not exceed 10000";
@@ -70,17 +76,24 @@ extern const char *CALL_REASON_STR[];
 #endif // DEBUG
 
 char* create_response(px_config *conf, request_context *ctx) {
+    // support for cors headers
+    if (conf->cors_headers_enabled) {
+        const char *origin_header = apr_table_get(ctx->r->headers_in, ORIGIN_HEADER_NAME);               
+        const char *origin_value = origin_header ? origin_header : ORIGIN_DEFAULT_VALUE; 
+        apr_table_set(ctx->r->headers_out, CORS_HEADER_NAME, origin_value);        
+    }
+
     if (ctx->token_origin == TOKEN_ORIGIN_HEADER) {
         ctx->response_application_json = true;
     } else if (conf->json_response_enabled) {
-        const char *accept_header = apr_table_get(ctx->r->headers_in, ACCEPT_HEADER_NAME);       
+        const char *accept_header = apr_table_get(ctx->r->headers_in, ACCEPT_HEADER_NAME);
         bool match = accept_header && strstr(accept_header, CONTENT_TYPE_JSON);
         if (match) {
             ctx->response_application_json = true;
             return create_json_response(conf, ctx);
         }
     }
-    
+
     if (conf->vid_header_enabled && ctx->vid) {
         apr_table_set(ctx->r->headers_out, conf->vid_header_name, ctx->vid);
     }
@@ -119,7 +132,7 @@ char* create_response(px_config *conf, request_context *ctx) {
 
 int px_handle_request(request_rec *r, px_config *conf) {
     // fail open mode
-    if (conf->px_errors_count >= conf->px_errors_threshold) {
+    if (apr_atomic_read32(&conf->px_errors_count) >= conf->px_errors_threshold) {
         return OK;
     }
 
@@ -176,10 +189,10 @@ int px_handle_request(request_rec *r, px_config *conf) {
 
             char *response = create_response(conf, ctx);
             if (response) {
-                const char *content_type = CONTENT_TYPE_HTML; 
+                const char *content_type = CONTENT_TYPE_HTML;
                 if (ctx->response_application_json) {
                     content_type = CONTENT_TYPE_JSON;
-                } 
+                }
                 ap_set_content_type(ctx->r, content_type);
                 ctx->r->status = HTTP_FORBIDDEN;
                 ap_rwrite(response, strlen(response), ctx->r);
@@ -187,7 +200,8 @@ int px_handle_request(request_rec *r, px_config *conf) {
                 return DONE;
             }
             // failed to create response
-            ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server, "[%s]: Could not create block page with template, passing request", conf->app_id);
+            ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server,
+                    "[%s]: Could not create block page with template, passing request", conf->app_id);
         }
     }
     r->status = HTTP_OK;
@@ -203,19 +217,24 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
     const char *health_check_url = apr_pstrcat(hc->server->process->pool, hc->config->base_url, HEALTH_CHECK_API, NULL);
     CURL *curl = curl_easy_init();
     CURLcode res;
-    while (1) {
+    while (!conf->should_exit_thread) {
         // wait for condition and reset errors count on internal
         apr_thread_mutex_lock(conf->health_check_cond_mutex);
-        while (apr_atomic_read32(&conf->px_errors_count) < conf->px_errors_threshold) {
+        while (!conf->should_exit_thread && apr_atomic_read32(&conf->px_errors_count) < conf->px_errors_threshold) {
             if (apr_thread_cond_timedwait(conf->health_check_cond, conf->health_check_cond_mutex, conf->health_check_interval) == APR_TIMEUP) {
                 apr_atomic_set32(&conf->px_errors_count, 0);
             }
         }
+
         apr_thread_mutex_unlock(conf->health_check_cond_mutex);
+        if (conf->should_exit_thread) {
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, "health_check: marked to exit");
+            break;
+        }
 
         // do health check until success
         CURLcode res = CURLE_AGAIN;
-        while (res != CURLE_OK) {
+        while (!conf->should_exit_thread && res != CURLE_OK) {
             curl_easy_setopt(curl, CURLOPT_URL, health_check_url);
             curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, conf->api_timeout_ms);
             res = curl_easy_perform(curl);
@@ -226,7 +245,7 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
         apr_atomic_set32(&conf->px_errors_count, 0);
     }
 
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, "health_check thread exiting");
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, "health_check: thread exiting");
     curl_easy_cleanup(curl);
     apr_thread_exit(thd, 0);
     return NULL;
@@ -236,112 +255,170 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
     activity_consumer_data *consumer_data = (activity_consumer_data*)data;
     px_config *conf = consumer_data->config;
     CURL *curl = curl_easy_init();
+
     void *v;
     if (!curl) {
-        ap_log_error(APLOG_MARK, LOG_ERR, 0, consumer_data->server, "[%s]: could not create curl handle, thread will not run to consume messages", conf->app_id);
+        ap_log_error(APLOG_MARK, LOG_ERR, 0, consumer_data->server,
+                "[%s]: could not create curl handle, thread will not run to consume messages", conf->app_id);
         return NULL;
     }
+
     while (true) {
         apr_status_t rv = apr_queue_pop(conf->activity_queue, &v);
-        if (rv == APR_EINTR)
+        if (rv == APR_EINTR) {
             continue;
-        if (rv == APR_EOF)
+        }
+        if (rv == APR_EOF) {
             break;
+        }
         if (rv == APR_SUCCESS && v) {
             char *activity = (char *)v;
             post_request_helper(curl, conf->activities_api_url, activity, conf->api_timeout_ms, conf, consumer_data->server, NULL);
             free(activity);
         }
     }
+
     curl_easy_cleanup(curl);
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, consumer_data->server,
+            "[%s]: activity consumer thread exited", conf->app_id);
     apr_thread_exit(thd, 0);
     return NULL;
 }
 
 // --------------------------------------------------------------------------------
 //
-static apr_status_t destroy_thread_pool(void *t) {
-    apr_thread_pool_t *thread_pool = (apr_thread_pool_t*)t;
-    apr_thread_pool_destroy(thread_pool);
-    return APR_SUCCESS;
-}
 
-static apr_status_t destroy_activity_queue(void *q) {
-    apr_queue_t *queue = (apr_queue_t*)q;
-    apr_queue_term(queue);
-    return APR_SUCCESS;
-}
+static apr_status_t create_health_check(apr_pool_t *p, server_rec *s, px_config *cfg) {
+    apr_status_t rv;
 
-static apr_status_t destroy_curl_pool(void *c) {
-    curl_pool *cp = (curl_pool*)c;
-    curl_pool_destroy(cp);
-    return APR_SUCCESS;
-}
-
-static apr_status_t create_service_monitor(server_rec *s, px_config *cfg) {
-    health_check_data *hc_data= (health_check_data*)apr_palloc(s->process->pool, sizeof(health_check_data));
+    health_check_data *hc_data= (health_check_data*)apr_palloc(p, sizeof(health_check_data));
     cfg->px_errors_count = 0;
     hc_data->server = s;
     hc_data->config = cfg;
-    apr_status_t rv;
-    rv = apr_thread_cond_create(&cfg->health_check_cond, s->process->pool);
 
+    rv = apr_thread_cond_create(&cfg->health_check_cond, p);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "error while init health_check thread cond");
-        exit(1);
+        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "error while init health_check thread cond");
+        return rv;
     }
-    rv = apr_thread_create(&cfg->health_check_thread, NULL, health_check, (void*) hc_data, s->process->pool);
+
+    rv = apr_thread_create(&cfg->health_check_thread, NULL, health_check, (void*) hc_data, p);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "error while init health_check thread create");
-        exit(1);
+        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "error while init health_check thread create");
+        return rv;
     }
-    rv = apr_thread_mutex_create(&cfg->health_check_cond_mutex, 0, s->process->pool);
+
+    rv = apr_thread_mutex_create(&cfg->health_check_cond_mutex, 0, p);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "error while creating health_check thread mutex");
-        exit(1);
+        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "error while creating health_check thread mutex");
+        return rv;
     }
+
+    return rv;
 }
 
-static void background_activity_send_init(server_rec *s, px_config *cfg) {
-    apr_status_t rv = apr_queue_create(&cfg->activity_queue, cfg->background_activity_queue_size, s->process->pool);
+static apr_status_t background_activity_send_init(apr_pool_t *pool, server_rec *s, px_config *cfg) {
+    apr_status_t rv;
+
+    rv = apr_queue_create(&cfg->activity_queue, cfg->background_activity_queue_size, pool);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, LOG_ERR, 0, s, "[%s]: failed to initialize background activity queue", cfg->app_id);
-        exit(1);
+        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s,
+                "[%s]: failed to initialize background activity queue", cfg->app_id);
+        return rv;
     }
+
     activity_consumer_data *consumer_data = apr_palloc(s->process->pool, sizeof(activity_consumer_data));
     consumer_data->server = s;
     consumer_data->config = cfg;
-    rv = apr_thread_pool_create(&cfg->activity_thread_pool, 0, cfg->background_activity_workers, s->process->pool);
+
+    rv = apr_thread_pool_create(&cfg->activity_thread_pool, 0, cfg->background_activity_workers, pool);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, LOG_ERR, 0, s, "[%s]: failed to initialize background activity thread pool", cfg->app_id);
-        exit(1);
+        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s,
+                "[%s]: failed to initialize background activity thread pool", cfg->app_id);
+        return rv;
     }
+
     for (unsigned int i = 0; i < cfg->background_activity_workers; ++i) {
         rv = apr_thread_pool_push(cfg->activity_thread_pool, background_activity_consumer, consumer_data, 0, NULL);
         if (rv != APR_SUCCESS) {
-            ap_log_error(APLOG_MARK, LOG_ERR, 0, s, "failed to push background activity consumer");
+            ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "failed to push background activity consumer");
+            return rv;
         }
     }
+
+    return rv;
 }
 
-static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
-    curl_global_init(CURL_GLOBAL_ALL);
+// free all (apache) unmanaged resources
+static apr_status_t px_child_exit(void *data) {
+    server_rec *s = (server_rec*)data;
+    px_config *cfg = ap_get_module_config(s->module_config, &perimeterx_module);
+
+    // signaling health check thread to exit
+    if (cfg->px_health_check) {
+        cfg->should_exit_thread = true;
+        apr_thread_cond_signal(cfg->health_check_cond);
+    }
+    // terminate the queue and wake up all idle threads
+    if (cfg->activity_queue) {
+        apr_status_t rv = apr_queue_term(cfg->activity_queue);
+        if (rv != APR_SUCCESS) {
+            char buf[ERR_BUF_SIZE];
+            char *err = apr_strerror(rv, buf, sizeof(buf));
+            ap_log_error(APLOG_MARK, LOG_ERR, 0, s, "px_child_exit: could not terminate the queue - %s", err);
+        }
+    }
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "px_child_exit: cleanup finished");
+}
+
+static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
+    apr_status_t rv;
+
     // init each virtual host
     for (server_rec *vs = s; vs; vs = vs->next) {
         px_config *cfg = ap_get_module_config(vs->module_config, &perimeterx_module);
-        cfg->curl_pool = curl_pool_create(vs->process->pool, cfg->curl_pool_size);
+
+        rv = apr_pool_create(&cfg->pool, vs->process->pool);
+        if (rv != APR_SUCCESS) {
+            ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "px_hook_child_init: error while trying to init curl_pool");
+            return rv;
+        }
+
+        cfg->curl_pool = curl_pool_create(cfg->pool, cfg->curl_pool_size);
+
         if (cfg->background_activity_send) {
-            background_activity_send_init(vs, cfg);
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s,
+                    "px_hook_child_init: start init for background_activity_send");
+            rv = background_activity_send_init(cfg->pool, vs, cfg);
+            if (rv != APR_SUCCESS) {
+                ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s,
+                        "px_hook_child_init: error while trying to init background_activity_consumer");
+                return rv;
+            }
         }
-        if (cfg->px_service_monitor) {
-            create_service_monitor(vs, cfg);
+
+        if (cfg->px_health_check) {
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s,
+                    "px_hook_child_init: setting up health_check thread");
+            rv = create_health_check(cfg->pool, vs, cfg);
+            if (rv != APR_SUCCESS) {
+                ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s,
+                        "px_hook_child_init: error while trying to init health_check_thread");
+                return rv;
+            }
         }
-        apr_pool_cleanup_register(vs->process->pool, cfg->activity_queue, destroy_activity_queue, apr_pool_cleanup_null);
-        apr_pool_cleanup_register(vs->process->pool, cfg->activity_thread_pool, destroy_thread_pool, apr_pool_cleanup_null);
-        apr_pool_cleanup_register(vs->process->pool, cfg->curl_pool, destroy_curl_pool, apr_pool_cleanup_null);
+        apr_pool_cleanup_register(p, s, px_child_exit, apr_pool_cleanup_null);
     }
+
+    return rv;
 }
 
+static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
+    apr_status_t rv = px_child_setup(p, s);
+    if (rv != APR_SUCCESS) {
+        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "child init failed!");
+    }
+}
 
 static apr_status_t px_cleanup_pre_config(void *data) {
     ERR_free_strings();
@@ -350,6 +427,7 @@ static apr_status_t px_cleanup_pre_config(void *data) {
 }
 
 static int px_hook_pre_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp) {
+    curl_global_init(CURL_GLOBAL_ALL);
     ERR_load_crypto_strings();
     OpenSSL_add_all_algorithms();
     apr_pool_cleanup_register(p, NULL, px_cleanup_pre_config, apr_pool_cleanup_null);
@@ -608,12 +686,12 @@ static const char *set_background_activity_send(cmd_parms *cmd, void *config, in
     return NULL;
 }
 
-static const char *set_px_service_monitor(cmd_parms *cmd, void *config, int arg) {
+static const char *set_px_health_check(cmd_parms *cmd, void *config, int arg) {
     px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    conf->px_service_monitor = arg ? true : false;
+    conf->px_health_check = arg ? true : false;
     return NULL;
 }
 
@@ -751,6 +829,15 @@ static const char *enable_json_response(cmd_parms *cmd, void *config, int arg) {
     return NULL;
 }
 
+static const char *enable_cors_headers(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->cors_headers_enabled = arg ? true : false;
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     return px_handle_request(r, conf);
@@ -785,14 +872,15 @@ static void *create_config(apr_pool_t *p) {
         conf->background_activity_workers = 10;
         conf->background_activity_queue_size = 1000;
         conf->px_errors_threshold = 100;
-        conf->health_check_interval = 60000000; // 1 minute
-        conf->px_service_monitor = false;
+        conf->health_check_interval = apr_time_sec(60); // 1 minute
+        conf->px_health_check = false;
         conf->score_header_name = SCORE_HEADER_NAME;
         conf->vid_header_enabled = false;
         conf->uuid_header_enabled = false;
         conf->uuid_header_name = UUID_HEADER_NAME;
         conf->vid_header_name = VID_HEADER_NAME;
         conf->json_response_enabled = false;
+        conf->cors_headers_enabled = false;
     }
     return conf;
 }
@@ -933,8 +1021,14 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Queue size for background activity send"),
+    /* This should be removed in later version, replaced by PXHealthCheck */
     AP_INIT_FLAG("PXServiceMonitor",
-            set_px_service_monitor,
+            set_px_health_check,
+            NULL,
+            OR_ALL,
+            "Background monitoring on PerimeterX service"),
+    AP_INIT_FLAG("PXHealthCheck",
+            set_px_health_check,
             NULL,
             OR_ALL,
             "Background monitoring on PerimeterX service"),
@@ -993,13 +1087,18 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Enable module to return a json response"),
-
+    AP_INIT_FLAG("EnableCORSHeaders",
+            enable_cors_headers,
+            NULL,
+            OR_ALL,
+            "Enable module to return a json response"),
     { NULL }
 };
 
 static void perimeterx_register_hooks(apr_pool_t *pool) {
     static const char *const asz_pre[] =
     { "mod_setenvif.c", NULL };
+
     ap_hook_post_read_request(px_hook_post_request, asz_pre, NULL, APR_HOOK_MIDDLE);
     ap_hook_child_init(px_hook_child_init, NULL, NULL, APR_HOOK_MIDDLE);
     ap_hook_pre_config(px_hook_pre_config, NULL, NULL, APR_HOOK_MIDDLE);

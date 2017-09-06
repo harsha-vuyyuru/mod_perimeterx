@@ -1,5 +1,16 @@
 #include "curl_pool.h"
 
+static apr_status_t curl_pool_destroy(void *arg) {
+    curl_pool *pool = (curl_pool*)arg;
+    for (int i = 0; i < pool->size; ++i) {
+        if (pool->data[i]) {
+            curl_easy_cleanup(pool->data[i]);
+            pool->data[i] = NULL;
+        }
+    }
+    return APR_SUCCESS;
+}
+
 curl_pool *curl_pool_create(apr_pool_t *p, int size) {
     curl_pool *pool = (curl_pool *)apr_pcalloc(p, sizeof(curl_pool));
     apr_thread_mutex_create(&pool->mutex, APR_THREAD_MUTEX_NESTED, p);
@@ -10,23 +21,8 @@ curl_pool *curl_pool_create(apr_pool_t *p, int size) {
     for (int i = 0; i < pool->size; ++i) {
         pool->data[i] = curl_easy_init();
     }
+    apr_pool_cleanup_register(p, pool, curl_pool_destroy, apr_pool_cleanup_null);
     return pool;
-}
-
-void curl_pool_destroy(curl_pool *pool) {
-    for (int i = 0; i < pool->size; ++i) {
-        if (pool->data[i]) {
-            curl_easy_cleanup(pool->data[i]);
-            pool->data[i] = NULL;
-        }
-    }
-    pool->size = 0;
-    pool->used = 0;
-    pool->data = NULL;
-    apr_thread_mutex_destroy(pool->mutex);
-    pool->mutex = NULL;
-    apr_thread_cond_destroy(pool->cond);
-    pool->cond = NULL;
 }
 
 CURL *curl_pool_get(curl_pool *pool) {

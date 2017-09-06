@@ -10,6 +10,9 @@
 #include "curl_pool.h"
 
 typedef struct px_config_t {
+    // px module server memory pool
+    apr_pool_t *pool;
+
     const char *app_id;
     const char *payload_key;
     const char *auth_token;
@@ -50,13 +53,14 @@ typedef struct px_config_t {
     apr_queue_t *activity_queue;
     apr_thread_pool_t *activity_thread_pool;
 
-    bool px_service_monitor;
+    bool px_health_check;
     apr_thread_mutex_t *health_check_cond_mutex;
     apr_thread_t *health_check_thread;
     apr_thread_cond_t *health_check_cond;
     int px_errors_threshold;
     volatile apr_uint32_t px_errors_count;
     long health_check_interval; // in ms
+    bool should_exit_thread;
 
     bool enable_token_via_header;
 
@@ -65,6 +69,7 @@ typedef struct px_config_t {
     const char *vid_header_name;
     const char *uuid_header_name;
     bool json_response_enabled; 
+    bool cors_headers_enabled;
 } px_config;
 
 typedef struct health_check_data_t {
