@@ -69,6 +69,7 @@ typedef struct px_config_t {
     const char *vid_header_name;
     const char *uuid_header_name;
     bool json_response_enabled; 
+    bool cors_headers_enabled;
 } px_config;
 
 typedef struct health_check_data_t {
