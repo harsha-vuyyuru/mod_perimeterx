@@ -3,8 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/) 
 and this project adheres to [Semantic Versioning](http://semver.org/).
+
 ## [2.8.0-rc.1] 9-06-2017
 * Added support for CORS headers
+* Better handling for threads
 
 ## [2.7.0] - 8-16-2017
 * Update default values for blocking score 
