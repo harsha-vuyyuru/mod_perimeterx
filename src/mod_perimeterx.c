@@ -73,7 +73,7 @@ extern const char *CALL_REASON_STR[];
 #endif // DEBUG
 
 char* create_response(px_config *conf, request_context *ctx) {
-    // suppoort for cors headers
+    // support for cors headers
     if (conf->cors_headers_enabled) {
         const char *origin_header = apr_table_get(ctx->r->headers_in, ORIGIN_HEADER_NAME);               
         const char *origin_value = origin_header ? origin_header : ORIGIN_DEFAULT_VALUE; 
