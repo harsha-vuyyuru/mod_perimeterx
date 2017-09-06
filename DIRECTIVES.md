@@ -33,7 +33,7 @@ Directives
 | EnableJsonResponse | Turn on response json when accept headers are `application/json` | false  | bool | On / Off |
 | EnableCORSHeaders | Turns on CORS headers for response, if no `Origin` header is preset the value of the `Access-Control-Allow-Origin` will be "*" | false  | bool | On / Off |
 | TokenViaHeader | Toggles on/off using mobile sdk| true | bool | On / Off |
-| BackgroundActivitySend | Toggles on/off asyncrounus activity reporting | false | bool | On / Off |
+| BackgroundActivitySend | Toggles on/off asyncrounus activity reporting | true | bool | On / Off |
 | BackgroundActivityWorkers | Number of background workers to send activities | 10 | Number | 1-N |
 | BackgroundActivityQueueSize | Queue size for background activity send | 1000 | Number | 1-N |
 #### <a name="ipheader">IPHeader Additional Information</a>: 
