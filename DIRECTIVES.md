@@ -34,8 +34,8 @@ Directives
 | EnableCORSHeaders | Turns on CORS headers for response, if no `Origin` header is preset the value of the `Access-Control-Allow-Origin` will be "*" | false  | bool | On / Off |
 | TokenViaHeader | Toggles on/off using mobile sdk| true | bool | On / Off |
 | BackgroundActivitySend | Toggles on/off asyncrounus activity reporting | true | bool | On / Off |
-| BackgroundActivityWorkers | Number of background workers to send activities | 10 | Number | 1-N |
-| BackgroundActivityQueueSize | Queue size for background activity send | 1000 | Number | 1-N |
+| BackgroundActivityWorkers | Number of background workers to send activities | 10 | Number | Integer |
+| BackgroundActivityQueueSize | Queue size for background activity send | 1000 | Number | Integer |
 #### <a name="ipheader">IPHeader Additional Information</a>: 
 
 * The order of headers in the configuration matters. The first header found with a value will be taken as the IP address.
