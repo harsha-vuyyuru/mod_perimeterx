@@ -214,8 +214,6 @@ char *create_captcha_payload(const request_context *ctx, const px_config *conf) 
             "module_version", conf->module_version);
 
     json_object_set_new(j_captcha, "additional", j_additional);
-    json_decref(j_additional);
-    json_decref(j_request);
 
     // dump as string
     char *request_str = json_dumps(j_captcha, JSON_COMPACT);
