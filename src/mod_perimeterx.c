@@ -173,7 +173,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
     if (ctx) {
         bool request_valid = px_verify_request(ctx, conf);
 
-        // if request is not valid, and monitor mod is on, toggle request_valid and set pass_reason
+        // if request is not valid, and monitor mode is on, toggle request_valid and set pass_reason
         if (conf->monitor_mode && !request_valid) {
             ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server, "[%s]: request should have been block but monitor mode is on", conf->app_id);
             ctx->pass_reason = PASS_REASON_MONITOR_MODE;
