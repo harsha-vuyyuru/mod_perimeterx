@@ -11,6 +11,8 @@ APLOG_USE_MODULE(perimeterx);
 
 static const char *BLOCKED_ACTIVITY_TYPE = "block";
 static const char *PAGE_REQUESTED_ACTIVITY_TYPE = "page_requested";
+static const char *MONITOR_MODE = "monitor";
+static const char *ACTIVE_BLOCKING_MODE = "active_blocking";
 
 // using cookie as value instead of payload, changing it will effect the collector
 static const char *PASS_REASON_STR[] = {
@@ -22,6 +24,7 @@ static const char *PASS_REASON_STR[] = {
     [PASS_REASON_CAPTCHA] = "captcha",
     [PASS_REASON_CAPTCHA_TIMEOUT] = "captcha_timeout",
     [PASS_REASON_ERROR] = "error",
+    [PASS_REASON_MONITOR_MODE] = "monitor_mode",
 };
 
 // using cookie as value instead of payload, changing it will effect the collector
@@ -147,12 +150,15 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf) {
             "headers", j_headers);
     json_decref(j_headers);
 
+    const char *module_mode = conf->monitor_mode ? MONITOR_MODE : ACTIVE_BLOCKING_MODE;
+
     // additional object
     json_t *j_additional = json_pack("{s:s, s:s, s:s, s:s, s:s}",
             "s2s_call_reason", CALL_REASON_STR[ctx->call_reason],
             "http_method", ctx->http_method,
             "http_version", ctx->http_version,
             "module_version", conf->module_version,
+            "risk_mode", module_mode,
             "cookie_origin", TOKEN_ORIGIN_STR[ctx->token_origin]);
 
     if (ctx->px_payload) {

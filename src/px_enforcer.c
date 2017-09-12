@@ -1,5 +1,4 @@
 #include "px_enforcer.h"
-
 #include <apr_strings.h>
 #include <http_log.h>
 #include <util_cookies.h>
@@ -7,7 +6,7 @@
 #include "px_payload.h"
 #include "px_json.h"
 #include "px_utils.h"
-#include "curl_pool.h"
+#include "px_client.h"
 
 #ifdef APLOG_USE_MODULE
 APLOG_USE_MODULE(perimeterx);
@@ -15,8 +14,6 @@ APLOG_USE_MODULE(perimeterx);
 
 static const char *PX_PAYLOAD_COOKIE_PREFIX = "_px";
 static const char *CAPTCHA_COOKIE = "_pxCaptcha";
-static const char *BLOCKED_ACTIVITY_TYPE = "block";
-static const char *PAGE_REQUESTED_ACTIVITY_TYPE = "page_requested";
 
 static const char *NO_TOKEN = "1";
 static const char *MOBILE_SDK_CONNECTION_ERROR = "2";
@@ -26,22 +23,6 @@ static const char* FILE_EXT_WHITELIST[] = {
     ".eps", ".woff", ".xls", ".jpeg", ".doc", ".ejs", ".otf", ".pptx", ".gif", ".pdf", ".swf", ".svg", ".ps",
     ".ico", ".pls", ".midi", ".svgz", ".class", ".png", ".ppt", ".mid", "webp", ".jar"
 };
-
-static CURLcode post_request(const char *url, const char *payload, long timeout, px_config *conf, const request_context *ctx, char **response_data, double *request_rtt) {
-    CURL *curl = curl_pool_get_wait(conf->curl_pool);
-    if (curl == NULL) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s]: post_req_request: could not obtain curl handle", ctx->app_id);
-        return CURLE_FAILED_INIT;
-    }
-    CURLcode status = post_request_helper(curl, url, payload, timeout, conf, ctx->r->server, response_data);
-    if (request_rtt) {
-        if (CURLE_OK != curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME, request_rtt)) {
-            *request_rtt = 0;
-        }
-    }
-    curl_pool_put(conf->curl_pool, curl);
-    return status;
-}
 
 void set_call_reason(request_context *ctx, validation_result_t vr) {
     switch (vr) {
@@ -89,7 +70,7 @@ static bool is_sensitive_route_prefix(request_rec *r, px_config *conf) {
 }
 
 static bool enable_block_for_hostname(request_rec *r, apr_array_header_t *domains_list) {
-    // domains list not configured, module will be enabled globally and not per domainf
+    // domains list not configured, module will be enabled globally and not per domain
     if (domains_list->nelts == 0) return true;
     const char *req_hostname = r->hostname;
     if (req_hostname == NULL) return true;
@@ -142,24 +123,6 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     ctx->pass_reason = (status == CURLE_OPERATION_TIMEDOUT) ? PASS_REASON_CAPTCHA_TIMEOUT : PASS_REASON_ERROR;
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: verify_captcha: failed to perform captcha validation request. url: (%s)", ctx->app_id, ctx->full_url);
     return false;
-}
-
-static void post_verification(request_context *ctx, px_config *conf, bool request_valid) {
-    const char *activity_type = request_valid ? PAGE_REQUESTED_ACTIVITY_TYPE : BLOCKED_ACTIVITY_TYPE;
-    if (strcmp(activity_type, BLOCKED_ACTIVITY_TYPE) == 0 || conf->send_page_activities) {
-        char *activity = create_activity(activity_type, conf, ctx);
-        if (!activity) {
-            ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server,
-                    "[%s]: post_verification: (%s) create activity failed", ctx->app_id, activity_type);
-            return;
-        }
-        if (conf->background_activity_send) {
-            apr_queue_push(conf->activity_queue, activity);
-        } else {
-            post_request(conf->activities_api_url, activity, conf->api_timeout_ms, conf, ctx, NULL, NULL);
-            free(activity);
-        }
-    }
 }
 
 bool px_should_verify_request(request_rec *r, px_config *conf) {
@@ -310,11 +273,9 @@ bool px_verify_request(request_context *ctx, px_config *conf) {
             if (res != APR_SUCCESS) {
                 ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s] could not remove _px from request", ctx->app_id);
             }
-            post_verification(ctx, conf, true);
             return request_valid;
         } else {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
-                    "[%s] verify_captcha: validation status false, creating risk_api for this request", ctx->app_id);
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s] verify_captcha: validation status false, creating risk_api for this request", ctx->app_id);
             ctx->call_reason = CALL_REASON_CAPTCHA_FAILED;
             risk_response = risk_api_get(ctx, conf);
             goto handle_response;
@@ -377,12 +338,10 @@ handle_response:
             }
             break;
         default:
-            ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server,
-                    "[%s] px_verify_request: cookie decode failed returning valid result (%d)", ctx->app_id, vr);
+            ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s] px_verify_request: cookie decode failed returning valid result (%d)", ctx->app_id, vr);
             return true;
     }
 
-    post_verification(ctx, conf, request_valid);
     return request_valid;
 }
 

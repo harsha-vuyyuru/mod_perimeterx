@@ -70,6 +70,7 @@ typedef struct px_config_t {
     const char *uuid_header_name;
     bool json_response_enabled; 
     bool cors_headers_enabled;
+    bool monitor_mode;
 } px_config;
 
 typedef struct health_check_data_t {
@@ -112,6 +113,7 @@ typedef enum {
     PASS_REASON_CAPTCHA,
     PASS_REASON_CAPTCHA_TIMEOUT,
     PASS_REASON_ERROR,
+    PASS_REASON_MONITOR_MODE,
 } pass_reason_t;
 
 typedef enum {

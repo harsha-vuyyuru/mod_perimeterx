@@ -28,6 +28,7 @@
 #include "px_template.h"
 #include "px_enforcer.h"
 #include "px_json.h"
+#include "px_client.h"
 
 module AP_MODULE_DECLARE_DATA perimeterx_module;
 
@@ -63,6 +64,9 @@ static const char *ERROR_CONFIG_MISSING = "mod_perimeterx: config structure not 
 static const char* MAX_CURL_POOL_SIZE_EXCEEDED = "mod_perimeterx: CurlPoolSize can not exceed 10000";
 static const char *INVALID_WORKER_NUMBER_QUEUE_SIZE = "mod_perimeterx: invalid number of background activity workers, must be greater than zero";
 static const char *INVALID_ACTIVITY_QUEUE_SIZE = "mod_perimeterx: invalid background activity queue size , must be greater than zero";
+
+static const char *BLOCKED_ACTIVITY_TYPE = "block";
+static const char *PAGE_REQUESTED_ACTIVITY_TYPE = "page_requested";
 
 static const char *block_tpl = "<!DOCTYPE html> <html lang=\"en\"> <head> <meta charset=\"utf-8\"> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> <title>Access to this page has been denied.</title> <link href=\"https://fonts.googleapis.com/css?family=Open+Sans:300\" rel=\"stylesheet\"> <style> html,body{ margin: 0; padding: 0; font-family: 'Open Sans', sans-serif; color: #000; } a{ color: #c5c5c5; text-decoration: none; } .container{ align-items: center; display: flex; flex: 1; justify-content: space-between; flex-direction: column; height: 100%; } .container > div { width: 100%; display: flex; justify-content:center; } .container > div > div { display: flex; width: 80%; } .customer-logo-wrapper{ padding-top: 2rem; flex-grow: 0; background-color: #fff; visibility: {{logoVisibility}}; } .customer-logo{ border-bottom: 1px solid #000; } .customer-logo > img{ padding-bottom: 1rem; max-height: 50px; max-width: auto; } .page-title-wrapper{ flex-grow: 2; } .page-title { flex-direction: column-reverse; } .content-wrapper{ flex-grow: 5; } .content{ flex-direction: column; } .page-footer-wrapper{ align-items: center; flex-grow: 0.2; background-color: #000; color: #c5c5c5; font-size: 70%; } @media (min-width:768px){ html,body{ height: 100%; } } </style> <!-- Custom CSS --> {{# cssRef }} <link rel=\"stylesheet\" type=\"text/css\" href=\"{{cssRef}}\" /> {{/ cssRef }} </head> <body> <section class=\"container\"> <div class=\"customer-logo-wrapper\"> <div class=\"customer-logo\"> <img src=\"{{customLogo}}\" alt=\"Logo\"/> </div> </div> <div class=\"page-title-wrapper\"> <div class=\"page-title\"> <h1>Access to this page has been denied.</h1> </div> </div> <div class=\"content-wrapper\"> <div class=\"content\"> <p> You have been blocked because we believe you are using automation tools to browse the website. </p> <p> Please note that Javascript and Cookies must be enabled on your browser to access the website. </p> <p> If you think you have been blocked by mistake, please contact the website administrator with the reference ID below. </p> <p> Reference ID: #{{refId}} </p> </div> </div> <div class=\"page-footer-wrapper\"> <div class=\"page-footer\"> <p> Powered by <a href=\"https://www.perimeterx.com\">PerimeterX</a> , Inc. </p> </div> </div> </section> <!-- Px --> <script> ( function (){ window._pxAppId = '{{appId}}'; var p = document.getElementsByTagName(\"script\")[0], s = document.createElement(\"script\"); s.async = 1; s.src = '//client.perimeterx.net/{{appId}}/main.min.js'; p.parentNode.insertBefore(s, p); } () ); </script> <!-- Custom Script --> {{# jsRef }} <script src=\"{{jsRef}}\"></script> {{/ jsRef }} </body> </html> ";
 
@@ -130,6 +134,23 @@ char* create_response(px_config *conf, request_context *ctx) {
     return html;
 }
 
+void post_verification(request_context *ctx, px_config *conf, bool request_valid) {
+    const char *activity_type = request_valid ? PAGE_REQUESTED_ACTIVITY_TYPE : BLOCKED_ACTIVITY_TYPE;
+    if (strcmp(activity_type, BLOCKED_ACTIVITY_TYPE) == 0 || conf->send_page_activities) {
+        char *activity = create_activity(activity_type, conf, ctx);
+        if (!activity) {
+            ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s]: post_verification: (%s) create activity failed", ctx->app_id, activity_type);
+            return;
+        }
+        if (conf->background_activity_send) {
+            apr_queue_push(conf->activity_queue, activity);
+        } else {
+            post_request(conf->activities_api_url, activity, conf->api_timeout_ms, conf, ctx, NULL, NULL);
+            free(activity);
+        }
+    }
+}
+
 int px_handle_request(request_rec *r, px_config *conf) {
     // fail open mode
     if (apr_atomic_read32(&conf->px_errors_count) >= conf->px_errors_threshold) {
@@ -152,6 +173,14 @@ int px_handle_request(request_rec *r, px_config *conf) {
     if (ctx) {
         bool request_valid = px_verify_request(ctx, conf);
 
+        // if request is not valid, and monitor mode is on, toggle request_valid and set pass_reason
+        if (conf->monitor_mode && !request_valid) {
+            ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server, "[%s]: request should have been block but monitor mode is on", conf->app_id);
+            ctx->pass_reason = PASS_REASON_MONITOR_MODE;
+            request_valid = true;
+        }
+
+        post_verification(ctx, conf, request_valid);
 #if DEBUG
         char *aut_test_header = apr_pstrdup(r->pool, (char *) apr_table_get(r->headers_in, PX_AUT_HEADER_KEY));
         if (aut_test_header && strcmp(aut_test_header, PX_AUT_HEADER_VALUE) == 0) {
@@ -167,6 +196,8 @@ int px_handle_request(request_rec *r, px_config *conf) {
             const char *score_str = apr_itoa(r->pool, ctx->score);
             apr_table_set(r->headers_in, conf->score_header_name, score_str);
         }
+
+        ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server, "[%s]: request_valid %d , block_enabled %d ", conf->app_id, request_valid, ctx->block_enabled);
 
         if (!request_valid && ctx->block_enabled) {
             // redirecting requests to custom block page if exists
@@ -200,12 +231,11 @@ int px_handle_request(request_rec *r, px_config *conf) {
                 return DONE;
             }
             // failed to create response
-            ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server,
-                    "[%s]: Could not create block page with template, passing request", conf->app_id);
+            ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server, "[%s]: Could not create block page with template, passing request", conf->app_id);
         }
     }
     r->status = HTTP_OK;
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: px_handle_request: request passed", ctx->app_id);
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: px_handle_request: request passed, score %d, monitor mode %d", ctx->app_id, ctx->score, conf->monitor_mode);
     return OK;
 }
 
@@ -258,8 +288,7 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
 
     void *v;
     if (!curl) {
-        ap_log_error(APLOG_MARK, LOG_ERR, 0, consumer_data->server,
-                "[%s]: could not create curl handle, thread will not run to consume messages", conf->app_id);
+        ap_log_error(APLOG_MARK, LOG_ERR, 0, consumer_data->server, "[%s]: could not create curl handle, thread will not run to consume messages", conf->app_id);
         return NULL;
     }
 
@@ -282,6 +311,7 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, consumer_data->server,
             "[%s]: activity consumer thread exited", conf->app_id);
     apr_thread_exit(thd, 0);
+    ap_log_error(APLOG_MARK, LOG_ERR, 0, consumer_data->server, "[%s]: Sending activity completed", conf->app_id);
     return NULL;
 }
 
@@ -346,6 +376,7 @@ static apr_status_t background_activity_send_init(apr_pool_t *pool, server_rec *
         }
     }
 
+    ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "finished init background activitys");
     return rv;
 }
 
@@ -838,6 +869,15 @@ static const char *enable_cors_headers(cmd_parms *cmd, void *config, int arg) {
     return NULL;
 }
 
+static const char *set_monitor_mode(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->monitor_mode = arg ? true : false;
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     return px_handle_request(r, conf);
@@ -850,7 +890,7 @@ static void *create_config(apr_pool_t *p) {
         conf->api_timeout_ms = 1000L;
         conf->captcha_timeout = 1000L;
         conf->send_page_activities = true;
-        conf->blocking_score = 101;
+        conf->blocking_score = 100;
         conf->captcha_enabled = true;
         conf->module_version = PERIMETERX_MODULE_VERSION;
         conf->skip_mod_by_envvar = false;
@@ -881,7 +921,9 @@ static void *create_config(apr_pool_t *p) {
         conf->vid_header_name = VID_HEADER_NAME;
         conf->json_response_enabled = false;
         conf->cors_headers_enabled = false;
+        conf->monitor_mode = true;
         conf->enable_token_via_header = true;
+
     }
     return conf;
 }
@@ -1093,6 +1135,11 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Enable module to return a json response"),
+    AP_INIT_FLAG("MonitorMode",
+            set_monitor_mode,
+            NULL,
+            OR_ALL,
+            "Toggle monitor mode, requests will be inspected but not be blocked"),
     { NULL }
 };
 
