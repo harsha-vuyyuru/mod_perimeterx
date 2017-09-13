@@ -60,7 +60,6 @@ static const char *CAPTCHA_COOKIE = "_pxCaptcha";
 static const int MAX_CURL_POOL_SIZE = 10000;
 static const int ERR_BUF_SIZE = 128;
 
-static const char *INVALID_CONFIG_VALUE = "mod_perimeterx: invalid value";
 static const char *ERROR_CONFIG_MISSING = "mod_perimeterx: config structure not allocated";
 static const char* MAX_CURL_POOL_SIZE_EXCEEDED = "mod_perimeterx: CurlPoolSize can not exceed 10000";
 static const char *INVALID_WORKER_NUMBER_QUEUE_SIZE = "mod_perimeterx: invalid number of background activity workers, must be greater than zero";
@@ -847,12 +846,10 @@ static const char* set_captcha_type(cmd_parms *cmd, void *config, const char *ca
         return ERROR_CONFIG_MISSING;
     }
 
-    if (!strcmp(captcha_type, "reCaptcha")) {
-        conf->captcha_type = CAPTCHA_TYPE_RECAPTCHA;
-    } else if (!strcmp(captcha_type,"funCaptcha")) {
+    if (!strcmp(captcha_type,"funCaptcha")) {
         conf->captcha_type = CAPTCHA_TYPE_FUNCAPTCHA;
     } else { 
-        return INVALID_CONFIG_VALUE;
+        conf->captcha_type = CAPTCHA_TYPE_RECAPTCHA;
     }
 
     return NULL;
