@@ -91,27 +91,23 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     // preventing reuse of captcha cookie by deleting it
     apr_status_t res = ap_cookie_remove(ctx->r, CAPTCHA_COOKIE, NULL, ctx->r->headers_out, ctx->r->err_headers_out, NULL);
     if (res != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
-                "[%s]: could not remove _pxCaptcha from request", ctx->app_id);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: could not remove _pxCaptcha from request", ctx->app_id);
     }
 
     char *payload = create_captcha_payload(ctx, conf);
     if (!payload) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
-                "[%s]: verify_captcha: failed to format captcha payload. url: (%s)", ctx->app_id, ctx->full_url);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: verify_captcha: failed to format captcha payload. url: (%s)", ctx->app_id, ctx->full_url);
         ctx->pass_reason = PASS_REASON_ERROR;
         return true;
     }
 
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
-            "[%s]: verify_captcha: request - (%s)", ctx->app_id, payload);
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: verify_captcha: request - (%s)", ctx->app_id, payload);
 
     char *response_str = NULL;
     CURLcode status = post_request(conf->captcha_api_url, payload, conf->captcha_timeout, conf, ctx, &response_str, &ctx->api_rtt);
     free(payload);
     if (status == CURLE_OK) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
-                "[%s]: verify_captcha: server response (%s)", ctx->app_id, response_str);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,"[%s]: verify_captcha: server response (%s)", ctx->app_id, response_str);
         captcha_response *c = parse_captcha_response(response_str, ctx);
         free(response_str);
         bool passed = (c && c->status == 0);
@@ -207,7 +203,6 @@ request_context* create_context(request_rec *r, const px_config *conf) {
 
     ctx->r = r;
     ctx->app_id = conf->app_id;
-    ctx->captcha_type = CAPTCHA_TYPE_RECAPTCHA;
     ctx->response_application_json = false;
 
     const char *px_payload = NULL;

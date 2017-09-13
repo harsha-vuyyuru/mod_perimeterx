@@ -1,4 +1,6 @@
 *.so
+*.swp
+*.iml
 *.lo
 *.la
 *.slo
