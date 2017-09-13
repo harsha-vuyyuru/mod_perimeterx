@@ -28,6 +28,7 @@
 #include "px_template.h"
 #include "px_enforcer.h"
 #include "px_json.h"
+#include "px_client.h"
 
 module AP_MODULE_DECLARE_DATA perimeterx_module;
 
@@ -144,6 +145,13 @@ int px_handle_request(request_rec *r, px_config *conf) {
     if (ctx) {
         bool request_valid = px_verify_request(ctx, conf);
 
+        // if request is not valid, and monitor mode is on, toggle request_valid and set pass_reason
+        if (conf->monitor_mode && !request_valid) {
+            ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server, "[%s]: request should have been block but monitor mode is on", conf->app_id);
+            ctx->pass_reason = PASS_REASON_MONITOR_MODE;
+            request_valid = true;
+        }
+
 #if DEBUG
         char *aut_test_header = apr_pstrdup(r->pool, (char *) apr_table_get(r->headers_in, PX_AUT_HEADER_KEY));
         if (aut_test_header && strcmp(aut_test_header, PX_AUT_HEADER_VALUE) == 0) {
@@ -159,6 +167,8 @@ int px_handle_request(request_rec *r, px_config *conf) {
             const char *score_str = apr_itoa(r->pool, ctx->score);
             apr_table_set(r->headers_in, conf->score_header_name, score_str);
         }
+
+        ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server, "[%s]: request_valid %d , block_enabled %d ", conf->app_id, request_valid, ctx->block_enabled);
 
         if (!request_valid && ctx->block_enabled) {
             // redirecting requests to custom block page if exists
@@ -192,12 +202,11 @@ int px_handle_request(request_rec *r, px_config *conf) {
                 return DONE;
             }
             // failed to create response
-            ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server,
-                    "[%s]: Could not create block page with template, passing request", conf->app_id);
+            ap_log_error(APLOG_MARK, LOG_ERR, 0, r->server, "[%s]: Could not create block page with template, passing request", conf->app_id);
         }
     }
     r->status = HTTP_OK;
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: px_handle_request: request passed", ctx->app_id);
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: px_handle_request: request passed, score %d, monitor mode %d", ctx->app_id, ctx->score, conf->monitor_mode);
     return OK;
 }
 
@@ -250,8 +259,7 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
 
     void *v;
     if (!curl) {
-        ap_log_error(APLOG_MARK, LOG_ERR, 0, consumer_data->server,
-                "[%s]: could not create curl handle, thread will not run to consume messages", conf->app_id);
+        ap_log_error(APLOG_MARK, LOG_ERR, 0, consumer_data->server, "[%s]: could not create curl handle, thread will not run to consume messages", conf->app_id);
         return NULL;
     }
 
@@ -274,6 +282,7 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, consumer_data->server,
             "[%s]: activity consumer thread exited", conf->app_id);
     apr_thread_exit(thd, 0);
+    ap_log_error(APLOG_MARK, LOG_ERR, 0, consumer_data->server, "[%s]: Sending activity completed", conf->app_id);
     return NULL;
 }
 
@@ -338,6 +347,7 @@ static apr_status_t background_activity_send_init(apr_pool_t *pool, server_rec *
         }
     }
 
+    ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "finished init background activitys");
     return rv;
 }
 
@@ -848,6 +858,15 @@ static const char* set_captcha_type(cmd_parms *cmd, void *config, const char *ca
     return NULL;
 }
 
+static const char *set_monitor_mode(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->monitor_mode = arg ? true : false;
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     return px_handle_request(r, conf);
@@ -860,7 +879,7 @@ static void *create_config(apr_pool_t *p) {
         conf->api_timeout_ms = 1000L;
         conf->captcha_timeout = 1000L;
         conf->send_page_activities = true;
-        conf->blocking_score = 101;
+        conf->blocking_score = 100;
         conf->captcha_enabled = true;
         conf->module_version = PERIMETERX_MODULE_VERSION;
         conf->skip_mod_by_envvar = false;
@@ -878,7 +897,7 @@ static void *create_config(apr_pool_t *p) {
         conf->sensitive_routes = apr_array_make(p, 0, sizeof(char*));
         conf->enabled_hostnames = apr_array_make(p, 0, sizeof(char*));
         conf->sensitive_routes_prefix = apr_array_make(p, 0, sizeof(char*));
-        conf->background_activity_send = false;
+        conf->background_activity_send = true;
         conf->background_activity_workers = 10;
         conf->background_activity_queue_size = 1000;
         conf->px_errors_threshold = 100;
@@ -892,6 +911,8 @@ static void *create_config(apr_pool_t *p) {
         conf->json_response_enabled = false;
         conf->cors_headers_enabled = false;
         conf->captcha_type = CAPTCHA_TYPE_RECAPTCHA;
+        conf->monitor_mode = true;
+        conf->enable_token_via_header = true;
     }
     return conf;
 }
@@ -1108,6 +1129,11 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Sets the captcha provider"),
+    AP_INIT_FLAG("MonitorMode",
+            set_monitor_mode,
+            NULL,
+            OR_ALL,
+            "Toggle monitor mode, requests will be inspected but not be blocked"),
     { NULL }
 };
 
