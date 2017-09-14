@@ -1,4 +1,4 @@
-libapache-mod-perimeterx (2.8.0-rc.1) jessie; urgency=medium
+libapache-mod-perimeterx (2.8.0-rc.3) jessie; urgency=medium
 
   * Added support for cookie v3 
   * Rendering block page by action value
