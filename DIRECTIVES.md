@@ -32,6 +32,11 @@ Directives
 | UuidHeaderName | Sets the key for the UUID header on the response | X-PX-UUID  | String | Works only when `UuidHeader` is set to On |
 | EnableJsonResponse | Turn on response json when accept headers are `application/json` | false  | bool | On / Off |
 | EnableCORSHeaders | Turns on CORS headers for response, if no `Origin` header is preset the value of the `Access-Control-Allow-Origin` will be "*" | false  | bool | On / Off |
+| CaptchaType | Sets the type of which captcha provider to use | reCaptcha  | String | reCaptcha/funCaptcha |
+| TokenViaHeader | Toggles on/off using mobile sdk| true | bool | On / Off |
+| BackgroundActivitySend | Toggles on/off asyncrounus activity reporting | true | bool | On / Off |
+| BackgroundActivityWorkers | Number of background workers to send activities | 10 | Number | Integer |
+| BackgroundActivityQueueSize | Queue size for background activity send | 1000 | Number | Integer |
 #### <a name="ipheader">IPHeader Additional Information</a>: 
 
 * The order of headers in the configuration matters. The first header found with a value will be taken as the IP address.

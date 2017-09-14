@@ -8,11 +8,14 @@
 #include <apr_queue.h>
 
 #include "curl_pool.h"
+typedef enum {
+    CAPTCHA_TYPE_RECAPTCHA,
+    CAPTCHA_TYPE_FUNCAPTCHA
+} captcha_type_t;
 
 typedef struct px_config_t {
     // px module server memory pool
     apr_pool_t *pool;
-
     const char *app_id;
     const char *payload_key;
     const char *auth_token;
@@ -46,13 +49,11 @@ typedef struct px_config_t {
     apr_array_header_t *sensitive_routes;
     apr_array_header_t *sensitive_routes_prefix;
     apr_array_header_t *enabled_hostnames;
-
     bool background_activity_send;
     int background_activity_workers;
     int background_activity_queue_size;
     apr_queue_t *activity_queue;
     apr_thread_pool_t *activity_thread_pool;
-
     bool px_health_check;
     apr_thread_mutex_t *health_check_cond_mutex;
     apr_thread_t *health_check_thread;
@@ -61,15 +62,15 @@ typedef struct px_config_t {
     volatile apr_uint32_t px_errors_count;
     long health_check_interval; // in ms
     bool should_exit_thread;
-
     bool enable_token_via_header;
-
-    bool uuid_header_enabled; 
-    bool vid_header_enabled; 
+    bool uuid_header_enabled;
+    bool vid_header_enabled;
     const char *vid_header_name;
     const char *uuid_header_name;
-    bool json_response_enabled; 
+    bool json_response_enabled;
     bool cors_headers_enabled;
+    captcha_type_t captcha_type;
+    bool monitor_mode;
 } px_config;
 
 typedef struct health_check_data_t {
@@ -112,6 +113,7 @@ typedef enum {
     PASS_REASON_CAPTCHA,
     PASS_REASON_CAPTCHA_TIMEOUT,
     PASS_REASON_ERROR,
+    PASS_REASON_MONITOR_MODE,
 } pass_reason_t;
 
 typedef enum {
@@ -130,10 +132,6 @@ typedef enum {
     ACTION_BLOCK,
 } action_t;
 
-typedef enum {
-    CAPTCHA_TYPE_RECAPTCHA
-} captcha_type_t;
-
 typedef struct risk_payload_t {
     const char *timestamp;
     long long ts;
@@ -144,6 +142,8 @@ typedef struct risk_payload_t {
     const char *b;
     int a_val;
     int b_val;
+    const char *action;
+    int score;
 } risk_payload;
 
 typedef struct risk_response_t {
@@ -163,7 +163,11 @@ typedef struct captcha_response_t {
 typedef struct request_context_t {
     const char *app_id;
     const char *px_payload;
+    const char *px_payload1;
+    const char *px_payload3;
+    int px_payload_version;
     const char *px_payload_decrypted;
+    const char *px_payload_hmac;
     const char *px_captcha;
     const char *ip;
     const char *vid;
@@ -186,8 +190,23 @@ typedef struct request_context_t {
     double api_rtt;
     token_origin_t token_origin;
     action_t action;
-    captcha_type_t captcha_type;
     bool response_application_json;
 } request_context;
+
+typedef enum {
+    PT_FLAG_WEB = 1 << 0,
+    PT_FLAG_MOBILE = 1 << 1,
+    PT_FLAG_RECAPTCHA = 1 << 2,
+    PT_FLAG_FUNCAPTCHA = 1 << 3,
+} page_template_bit_t;
+
+typedef enum {
+    PAGE_TEMPLATE_BLOCK_WEB = (PT_FLAG_WEB),
+    PAGE_TEMPLATE_RECAPTCHA_WEB = (PT_FLAG_WEB | PT_FLAG_RECAPTCHA),
+    PAGE_TEMPLATE_FUNCAPTCHA_WEB = (PT_FLAG_WEB | PT_FLAG_FUNCAPTCHA),
+    PAGE_TEMPLATE_BLOCK_MOBILE =  (PT_FLAG_MOBILE),
+    PAGE_TEMPLATE_RECAPTCHA_MOBILE =  (PT_FLAG_MOBILE | PT_FLAG_RECAPTCHA),
+    PAGE_TEMPLATE_FUNCAPTCHA_MOBILE =  (PT_FLAG_MOBILE | PT_FLAG_FUNCAPTCHA),
+} page_template_t;
 
 #endif

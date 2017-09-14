@@ -11,6 +11,8 @@ APLOG_USE_MODULE(perimeterx);
 
 static const char *BLOCKED_ACTIVITY_TYPE = "block";
 static const char *PAGE_REQUESTED_ACTIVITY_TYPE = "page_requested";
+static const char *MONITOR_MODE = "monitor";
+static const char *ACTIVE_BLOCKING_MODE = "active_blocking";
 
 // using cookie as value instead of payload, changing it will effect the collector
 static const char *PASS_REASON_STR[] = {
@@ -22,6 +24,7 @@ static const char *PASS_REASON_STR[] = {
     [PASS_REASON_CAPTCHA] = "captcha",
     [PASS_REASON_CAPTCHA_TIMEOUT] = "captcha_timeout",
     [PASS_REASON_ERROR] = "error",
+    [PASS_REASON_MONITOR_MODE] = "monitor_mode",
 };
 
 // using cookie as value instead of payload, changing it will effect the collector
@@ -55,6 +58,7 @@ static const char *ACTION_STR[] = {
 
 static const char *CAPTCHA_TYPE_STR[] = {
     [CAPTCHA_TYPE_RECAPTCHA] = "reCaptcha",
+    [CAPTCHA_TYPE_FUNCAPTCHA] = "funCaptcha",
 };
 
 // format json requests
@@ -147,12 +151,15 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf) {
             "headers", j_headers);
     json_decref(j_headers);
 
+    const char *module_mode = conf->monitor_mode ? MONITOR_MODE : ACTIVE_BLOCKING_MODE;
+
     // additional object
-    json_t *j_additional = json_pack("{s:s, s:s, s:s, s:s, s:s}",
+    json_t *j_additional = json_pack("{s:s,s:s,s:s,s:s,s:s,s:s}",
             "s2s_call_reason", CALL_REASON_STR[ctx->call_reason],
             "http_method", ctx->http_method,
             "http_version", ctx->http_version,
             "module_version", conf->module_version,
+            "risk_mode", module_mode,
             "cookie_origin", TOKEN_ORIGIN_STR[ctx->token_origin]);
 
     if (ctx->px_payload) {
@@ -160,6 +167,9 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf) {
     }
     if (ctx->px_payload_orig) {
         json_object_set_new(j_additional, "px_cookie_orig", json_string(ctx->px_payload_orig));
+    }
+    if (ctx->px_payload_hmac) {
+        json_object_set_new(j_additional, "px_cookie_hmac", json_string(ctx->px_payload_hmac));
     }
 
     // risk api object
@@ -191,19 +201,14 @@ char *create_captcha_payload(const request_context *ctx, const px_config *conf) 
             "ip", ctx->ip,
             "uri", ctx->uri,
             "url", ctx->full_url,
-            "captchaType", CAPTCHA_TYPE_STR[ctx->captcha_type],
+            "captchaType", CAPTCHA_TYPE_STR[conf->captcha_type],
             "headers", j_headers);
     json_decref(j_headers);
 
     // captcha object
     json_t *j_captcha = json_object();
     json_object_set_new(j_captcha, "request", j_request);
-    if (ctx->vid) {
-        json_object_set_new(j_captcha, "vid", json_string(ctx->vid));
-    }
-    if (ctx->uuid) {
-        json_object_set_new(j_captcha, "uuid", json_string(ctx->uuid));
-    }
+
     if (ctx->px_captcha) {
         json_object_set_new(j_captcha, "pxCaptcha", json_string(ctx->px_captcha));
     }
@@ -213,6 +218,11 @@ char *create_captcha_payload(const request_context *ctx, const px_config *conf) 
     if (ctx->api_rtt) {
         json_object_set_new(j_captcha, "risk_rtt", json_integer(ctx->api_rtt));
     }
+
+    json_t *j_additional = json_pack("{s:s}",
+            "module_version", conf->module_version);
+
+    json_object_set_new(j_captcha, "additional", j_additional);
 
     // dump as string
     char *request_str = json_dumps(j_captcha, JSON_COMPACT);
