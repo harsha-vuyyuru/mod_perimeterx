@@ -47,7 +47,7 @@ static const char *CONTENT_TYPE_JSON = "application/json";
 static const char *CONTENT_TYPE_HTML = "text/html";
 
 // constants
-static const char *PERIMETERX_MODULE_VERSION = "Apache Module v2.8.0-rc.2";
+static const char *PERIMETERX_MODULE_VERSION = "Apache Module v2.8.0-rc.3";
 static const char *SCORE_HEADER_NAME = "X-PX-SCORE";
 static const char *VID_HEADER_NAME = "X-PX-VID";
 static const char *UUID_HEADER_NAME = "X-PX-UUID";
@@ -64,6 +64,9 @@ static const char *ERROR_CONFIG_MISSING = "mod_perimeterx: config structure not 
 static const char* MAX_CURL_POOL_SIZE_EXCEEDED = "mod_perimeterx: CurlPoolSize can not exceed 10000";
 static const char *INVALID_WORKER_NUMBER_QUEUE_SIZE = "mod_perimeterx: invalid number of background activity workers, must be greater than zero";
 static const char *INVALID_ACTIVITY_QUEUE_SIZE = "mod_perimeterx: invalid background activity queue size , must be greater than zero";
+
+static const char *BLOCKED_ACTIVITY_TYPE = "block";
+static const char *PAGE_REQUESTED_ACTIVITY_TYPE = "page_requested";
 
 #ifdef DEBUG
 extern const char *BLOCK_REASON_STR[];
@@ -122,6 +125,24 @@ char* create_response(px_config *conf, request_context *ctx) {
     return html;
 }
 
+
+void post_verification(request_context *ctx, px_config *conf, bool request_valid) {
+    const char *activity_type = request_valid ? PAGE_REQUESTED_ACTIVITY_TYPE : BLOCKED_ACTIVITY_TYPE;
+    if (strcmp(activity_type, BLOCKED_ACTIVITY_TYPE) == 0 || conf->send_page_activities) {
+        char *activity = create_activity(activity_type, conf, ctx);
+        if (!activity) {
+            ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s]: post_verification: (%s) create activity failed", ctx->app_id, activity_type);
+            return;
+        }
+        if (conf->background_activity_send) {
+            apr_queue_push(conf->activity_queue, activity);
+        } else {
+            post_request(conf->activities_api_url, activity, conf->api_timeout_ms, conf, ctx, NULL, NULL);
+            free(activity);
+        }
+    }
+}
+
 int px_handle_request(request_rec *r, px_config *conf) {
     // fail open mode
     if (apr_atomic_read32(&conf->px_errors_count) >= conf->px_errors_threshold) {
@@ -150,7 +171,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
             ctx->pass_reason = PASS_REASON_MONITOR_MODE;
             request_valid = true;
         }
-
+        post_verification(ctx, conf, request_valid);
 #if DEBUG
         char *aut_test_header = apr_pstrdup(r->pool, (char *) apr_table_get(r->headers_in, PX_AUT_HEADER_KEY));
         if (aut_test_header && strcmp(aut_test_header, PX_AUT_HEADER_VALUE) == 0) {
