@@ -1,5 +1,16 @@
 libapache-mod-perimeterx (2.8.0-rc.1) jessie; urgency=medium
 
+  * Added support for cookie v3 
+  * Rendering block page by action value
+  * Added monitor mode
+  * Added new captcah capabilities
+  * New configuratio key, CaptchaType
+  * Update default values for directives, mobile sdk, async activites, by defualt set to true
+
+ -- nitzanpx <nitzanpx@github>  Thu, 16 Sep 2017 17:00:00 +0000
+
+libapache-mod-perimeterx (2.8.0-rc.1) jessie; urgency=medium
+
    * Added support for CORS headers 
    * Better handling for threads 
 

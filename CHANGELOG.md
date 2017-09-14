@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/) 
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [2.8.0-rc.2] 9-14-2017
+* Added support for cookie v3 
+* Rendering block page by action value
+* Added monitor mode
+* Added new captcah capabilities
+* New configuratio key, CaptchaType
+* Update default values for directives, mobile sdk, async activites, by defualt set to true
+
 ## [2.8.0-rc.1] 9-06-2017
 * Added support for CORS headers
 * Better handling for threads
