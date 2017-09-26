@@ -149,6 +149,12 @@ int px_handle_request(request_rec *r, px_config *conf) {
         return OK;
     }
 
+    // Decline internal redirects and subrequests 
+    if (r->prev) {
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: px_handle_request: request declined - interal redirect or subrequest", conf->app_id);
+	    return DECLINED;
+    }
+
     if (!px_should_verify_request(r, conf)) {
         return OK;
     }
