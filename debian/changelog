@@ -1,3 +1,10 @@
+libapache-mod-perimeterx (2.8.0-rc.5) jessie; urgency=medium
+
+  * Change the default values for the module conifguration ModuleMode and
+    BlockingScore 
+
+ -- nitzanpx <nitzanpx@github>  Wed, 28 Sep 2017 10:27:00 +0000
+
 libapache-mod-perimeterx (2.8.0-rc.4) jessie; urgency=medium
 
   * Fixed internal request would not be inspected

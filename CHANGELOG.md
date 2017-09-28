@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/) 
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [2.8.0-rc.5] 9-28-2017
+* Change the default configuration values, MonitorMode set to false and BlockingScore set to 101
+
+## [2.8.0-rc.4] 9-27-2017
+* Fixed internal request would not be inspected
+* Added missing directives in docs
+
 ## [2.8.0-rc.3] 9-14-2017
 * Added support for cookie v3 
 * Rendering block page by action value
