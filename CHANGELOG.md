@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/) 
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [2.8.0-rc.6] 10-03-2017
+* Fixed crash when module gets empty header
+* Fixed cookie v1 score
+* Fixed BaseUrl set before AppId
+
 ## [2.8.0-rc.5] 9-28-2017
 * Change the default configuration values, MonitorMode set to false and BlockingScore set to 101
 
