@@ -21,6 +21,7 @@ typedef struct px_config_t {
     const char *auth_token;
     const char *block_page_url;
     const char *base_url;
+    bool base_url_is_set;
     const char *risk_api_url;
     const char *captcha_api_url;
     const char *activities_api_url;

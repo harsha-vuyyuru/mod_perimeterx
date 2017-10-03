@@ -64,6 +64,7 @@ static const char *ERROR_CONFIG_MISSING = "mod_perimeterx: config structure not 
 static const char* MAX_CURL_POOL_SIZE_EXCEEDED = "mod_perimeterx: CurlPoolSize can not exceed 10000";
 static const char *INVALID_WORKER_NUMBER_QUEUE_SIZE = "mod_perimeterx: invalid number of background activity workers, must be greater than zero";
 static const char *INVALID_ACTIVITY_QUEUE_SIZE = "mod_perimeterx: invalid background activity queue size , must be greater than zero";
+static const char *ERROR_BASE_URL_BEFORE_APP_ID = "mod_perimeterx: BaseUrl was set before AppId";
 
 static const char *BLOCKED_ACTIVITY_TYPE = "block";
 static const char *PAGE_REQUESTED_ACTIVITY_TYPE = "page_requested";
@@ -483,6 +484,9 @@ static const char *set_app_id(cmd_parms *cmd, void *config, const char *app_id) 
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
+    if (conf->base_url_is_set){
+        return ERROR_BASE_URL_BEFORE_APP_ID;
+    }
     conf->app_id = app_id;
     conf->base_url = apr_psprintf(cmd->pool, DEFAULT_BASE_URL, app_id, NULL);
     conf->risk_api_url = apr_pstrcat(cmd->pool, conf->base_url, RISK_API, NULL);
@@ -591,6 +595,7 @@ static const char *set_base_url(cmd_parms *cmd, void *config, const char *base_u
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
+    conf->base_url_is_set = true;
     conf->base_url = base_url;
     conf->risk_api_url = apr_pstrcat(cmd->pool, conf->base_url, RISK_API, NULL);
     conf->captcha_api_url = apr_pstrcat(cmd->pool, conf->base_url, CAPTCHA_API, NULL);
