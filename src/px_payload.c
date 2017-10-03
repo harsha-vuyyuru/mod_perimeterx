@@ -124,6 +124,7 @@ static risk_payload *parse_risk_payload1(const char *raw_payload, request_contex
     payload->vid = apr_pstrdup(ctx->r->pool, vid);
     payload->a_val = a_val;
     payload->b_val = b_val;
+    payload->score = b_val;
     payload->a = apr_psprintf(ctx->r->pool, "%d", a_val);
     payload->b = apr_psprintf(ctx->r->pool, "%d", b_val);
     payload->action = ACTION_CAPTCHA;
