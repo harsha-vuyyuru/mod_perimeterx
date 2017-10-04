@@ -143,6 +143,7 @@ int extract_payload_from_header(apr_pool_t *pool, apr_table_t *headers, const ch
         char *header_cpy = apr_pstrdup(pool, header_value);
         const char *prefix = apr_strtok(header_cpy, ":", &rest);
         if (prefix == NULL) {
+            *payload3 = "";
             return 0;
         }
         const char *postfix = apr_strtok(NULL, "", &rest);
