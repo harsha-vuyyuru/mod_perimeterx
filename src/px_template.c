@@ -138,6 +138,10 @@ int render_template(const char *tpl, char **html, const request_context *ctx, co
 }
 
 const char* select_template(const px_config *conf, const request_context *ctx) {
+    if (ctx->action == ACTION_CHALLENGE) {
+       return ctx->action_data_body; 
+    } 
+    
     int pt_flag = 0;
     
     pt_flag |= ctx->token_origin == TOKEN_ORIGIN_COOKIE ? PT_FLAG_WEB : PT_FLAG_MOBILE;
