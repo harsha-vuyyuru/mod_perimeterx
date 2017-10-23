@@ -22,6 +22,7 @@
 #include <apr_signal.h>
 #include <apr_base64.h>
 #include <apr_time.h>
+#include <apr_uri.h>
 
 #include "px_utils.h"
 #include "px_types.h"
@@ -52,9 +53,9 @@ static const char *SCORE_HEADER_NAME = "X-PX-SCORE";
 static const char *VID_HEADER_NAME = "X-PX-VID";
 static const char *UUID_HEADER_NAME = "X-PX-UUID";
 static const char *ACCEPT_HEADER_NAME = "Accept";
-static const char *CORS_HEADER_NAME = "Access-Control-Allow-Origin";
+static const char *ACCESS_CONTROL_ALLOW_ORIGIN_HEADER_NAME = "Access-Control-Allow-Origin";
 static const char *ORIGIN_HEADER_NAME = "Origin";
-static const char *ORIGIN_DEFAULT_VALUE = "*";
+static const char *ORIGIN_WILDCARD_VALUE = "*";
 
 static const char *CAPTCHA_COOKIE = "_pxCaptcha";
 static const int MAX_CURL_POOL_SIZE = 10000;
@@ -62,8 +63,8 @@ static const int ERR_BUF_SIZE = 128;
 
 static const char *ERROR_CONFIG_MISSING = "mod_perimeterx: config structure not allocated";
 static const char* MAX_CURL_POOL_SIZE_EXCEEDED = "mod_perimeterx: CurlPoolSize can not exceed 10000";
-static const char *INVALID_WORKER_NUMBER_QUEUE_SIZE = "mod_perimeterx: invalid number of background activity workers, must be greater than zero";
-static const char *INVALID_ACTIVITY_QUEUE_SIZE = "mod_perimeterx: invalid background activity queue size , must be greater than zero";
+static const char *INVALID_WORKER_NUMBER_QUEUE_SIZE = "mod_perimeterx: invalid number of background activity workers - must be greater than zero";
+static const char *INVALID_ACTIVITY_QUEUE_SIZE = "mod_perimeterx: invalid background activity queue size - must be greater than zero";
 static const char *ERROR_BASE_URL_BEFORE_APP_ID = "mod_perimeterx: BaseUrl was set before AppId";
 
 static const char *BLOCKED_ACTIVITY_TYPE = "block";
@@ -74,12 +75,36 @@ extern const char *BLOCK_REASON_STR[];
 extern const char *CALL_REASON_STR[];
 #endif // DEBUG
 
-char* create_response(px_config *conf, request_context *ctx) {
-    // support for cors headers
-    if (conf->cors_headers_enabled) {
-        const char *origin_header = apr_table_get(ctx->r->headers_in, ORIGIN_HEADER_NAME);               
-        const char *origin_value = origin_header ? origin_header : ORIGIN_DEFAULT_VALUE; 
-        apr_table_set(ctx->r->headers_out, CORS_HEADER_NAME, origin_value);        
+char *create_response(px_config *conf, request_context *ctx) {
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_response: response creation started", conf->app_id);
+
+    // support for Access-Control-Allow-Origin headers
+    if (conf->origin_wildcard_enabled) {
+        apr_table_set(ctx->r->headers_out, ACCESS_CONTROL_ALLOW_ORIGIN_HEADER_NAME,ORIGIN_WILDCARD_VALUE);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_response: header Access-Control-Allow-Origin: * set on response", conf->app_id);
+    } else if (conf->origin_envvar_name) {
+        const char *origin_envvar_value = apr_table_get(ctx->r->subprocess_env, conf->origin_envvar_name);
+        if (origin_envvar_value != NULL) {
+            apr_uri_t origin_envvar_uri;
+            apr_status_t origin_envvar_parse_result = apr_uri_parse(ctx->r->pool, origin_envvar_value, &origin_envvar_uri);
+            if (origin_envvar_parse_result != 0) {
+                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_response: Origin header was not a valid URI", conf->app_id);
+            } else {
+                // Unparse to ensure there is a real URI
+                const char *unparsed_uri = apr_uri_unparse(ctx->r->pool, &origin_envvar_uri, APR_URI_UNP_OMITPATHINFO);
+                if (unparsed_uri != NULL) {
+                    if (strlen(unparsed_uri) > 0) {
+                        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_response: unparsed uri  %s" , conf->app_id,unparsed_uri);
+                        apr_table_set(ctx->r->headers_out, ACCESS_CONTROL_ALLOW_ORIGIN_HEADER_NAME, unparsed_uri);
+                        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_response: header Access-Control-Allow-Origin: %s set on response", conf->app_id, origin_envvar_value);
+                    } else {
+                        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_response: invalid URI set in envvar" , conf->app_id);
+                    }
+                }
+            }
+        } else {
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_response: envvar NULL skipped setting Access-Control-Allow-Origin header", conf->app_id);
+        }
     }
 
     if (ctx->token_origin == TOKEN_ORIGIN_HEADER) {
@@ -374,7 +399,7 @@ static apr_status_t background_activity_send_init(apr_pool_t *pool, server_rec *
         }
     }
 
-    ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "finished init background activitys");
+    ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "finished init background activities");
     return rv;
 }
 
@@ -863,14 +888,25 @@ static const char *enable_json_response(cmd_parms *cmd, void *config, int arg) {
     return NULL;
 }
 
-static const char *enable_cors_headers(cmd_parms *cmd, void *config, int arg) {
+static const char* set_origin_envvar(cmd_parms *cmd, void *config, const char *origin_envvar_name) {
     px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    conf->cors_headers_enabled = arg ? true : false;
+    conf->origin_envvar_name = origin_envvar_name;
     return NULL;
 }
+
+
+static const char *enable_origin_wildcard(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->origin_wildcard_enabled = arg ? true : false;
+    return NULL;
+}
+
 
 static const char* set_captcha_type(cmd_parms *cmd, void *config, const char *captcha_type) {
     px_config *conf = get_config(cmd, config);
@@ -938,7 +974,8 @@ static void *create_config(apr_pool_t *p) {
         conf->uuid_header_name = UUID_HEADER_NAME;
         conf->vid_header_name = VID_HEADER_NAME;
         conf->json_response_enabled = false;
-        conf->cors_headers_enabled = false;
+        conf->origin_envvar_name  = NULL;
+        conf->origin_wildcard_enabled = false;
         conf->captcha_type = CAPTCHA_TYPE_RECAPTCHA;
         conf->monitor_mode = false;
         conf->enable_token_via_header = true;
@@ -1148,11 +1185,16 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Enable module to return a json response"),
-    AP_INIT_FLAG("EnableCORSHeaders",
-            enable_cors_headers,
+    AP_INIT_TAKE1("PXApplyAccessControlAllowOriginByEnvVar",
+            set_origin_envvar,
             NULL,
             OR_ALL,
-            "Enable module to return a json response"),
+            "Enable Access-Control-Allow-Origin: <origin> from defined environmental variable on blocked responses"),
+    AP_INIT_FLAG("EnableAccessControlAllowOriginWildcard",
+            enable_origin_wildcard,
+            NULL,
+            OR_ALL,
+            "Enable Access-Control-Allow-Origin: * header on blocked responses"),
     AP_INIT_TAKE1("CaptchaType",
             set_captcha_type,
             NULL,
