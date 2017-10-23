@@ -56,7 +56,6 @@ static const char *ACCEPT_HEADER_NAME = "Accept";
 static const char *ACCESS_CONTROL_ALLOW_ORIGIN_HEADER_NAME = "Access-Control-Allow-Origin";
 static const char *ORIGIN_HEADER_NAME = "Origin";
 static const char *ORIGIN_WILDCARD_VALUE = "*";
-static const char *VARY_HEADER_NAME = "Vary";
 
 static const char *CAPTCHA_COOKIE = "_pxCaptcha";
 static const int MAX_CURL_POOL_SIZE = 10000;
@@ -97,7 +96,6 @@ char *create_response(px_config *conf, request_context *ctx) {
                     if (strlen(unparsed_uri) > 0) {
                         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_response: unparsed uri  %s" , conf->app_id,unparsed_uri);
                         apr_table_set(ctx->r->headers_out, ACCESS_CONTROL_ALLOW_ORIGIN_HEADER_NAME, unparsed_uri);
-                        apr_table_set(ctx->r->headers_out,VARY_HEADER_NAME, ORIGIN_HEADER_NAME); // Must set the Vary header when not returning *
                         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_response: header Access-Control-Allow-Origin: %s set on response", conf->app_id, origin_envvar_value);
                     } else {
                         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_response: invalid URI set in envvar" , conf->app_id);
