@@ -373,6 +373,14 @@ static apr_status_t create_health_check(apr_pool_t *p, server_rec *s, px_config 
 static apr_status_t background_activity_send_init(apr_pool_t *pool, server_rec *s, px_config *cfg) {
     apr_status_t rv;
 
+    ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "called background_activity_send_init");
+
+    if (s->is_virtual) {
+        ap_log_error(APLOG_MARK, APLOG_ERR, rv, s, "background_activity_send_init Is virtual: %d",s->is_virtual);
+    }
+    ap_log_error(APLOG_MARK, APLOG_ERR, rv, s, "background_activity_send_init server_hostname: %s",s->server_hostname);
+    
+
     rv = apr_queue_create(&cfg->activity_queue, cfg->background_activity_queue_size, pool);
     if (rv != APR_SUCCESS) {
         ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s,
@@ -427,38 +435,58 @@ static apr_status_t px_child_exit(void *data) {
 
 static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
     apr_status_t rv;
+    
 
+    int i = 1;
     // init each virtual host
     for (server_rec *vs = s; vs; vs = vs->next) {
+        ap_log_error(APLOG_MARK, APLOG_ERR, rv, s, "px_child_setup Setting up virtual host: %d", i);
+        if (vs->is_virtual) {
+            ap_log_error(APLOG_MARK, APLOG_ERR, rv, s, "px_child_setup Is virtual: %d",vs->is_virtual);
+        }
+        ap_log_error(APLOG_MARK, APLOG_ERR, rv, s, "px_child_setup server_hostname: %s",vs->server_hostname);
+
+        i++;
+
         px_config *cfg = ap_get_module_config(vs->module_config, &perimeterx_module);
 
+        ap_log_error(APLOG_MARK, APLOG_ERR, rv, s, "px_child_setup cfg->module_enabled : %d", cfg->module_enabled);
+
+ 
+        ap_log_error(APLOG_MARK, APLOG_ERR, rv, s, "px_child_setup cfg->background_activity_send: %d", cfg->background_activity_send);
+        ap_log_error(APLOG_MARK, APLOG_ERR, rv, s, "px_child_setup cfg->json_response_enabled: %d", cfg->json_response_enabled);
+        
+
         rv = apr_pool_create(&cfg->pool, vs->process->pool);
+        
         if (rv != APR_SUCCESS) {
             ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "px_hook_child_init: error while trying to init curl_pool");
             return rv;
         }
 
-        cfg->curl_pool = curl_pool_create(cfg->pool, cfg->curl_pool_size);
+        if (cfg->module_enabled == 1) {        
+            cfg->curl_pool = curl_pool_create(cfg->pool, cfg->curl_pool_size);
 
-        if (cfg->background_activity_send) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s,
-                    "px_hook_child_init: start init for background_activity_send");
-            rv = background_activity_send_init(cfg->pool, vs, cfg);
-            if (rv != APR_SUCCESS) {
-                ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s,
-                        "px_hook_child_init: error while trying to init background_activity_consumer");
-                return rv;
+            if (cfg->background_activity_send) {
+                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s,
+                        "px_hook_child_init: start init for background_activity_send");
+                rv = background_activity_send_init(cfg->pool, vs, cfg);
+                if (rv != APR_SUCCESS) {
+                    ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s,
+                            "px_hook_child_init: error while trying to init background_activity_consumer");
+                    return rv;
+                }
             }
-        }
 
-        if (cfg->px_health_check) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s,
-                    "px_hook_child_init: setting up health_check thread");
-            rv = create_health_check(cfg->pool, vs, cfg);
-            if (rv != APR_SUCCESS) {
-                ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s,
-                        "px_hook_child_init: error while trying to init health_check_thread");
-                return rv;
+            if (cfg->px_health_check) {
+                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s,
+                        "px_hook_child_init: setting up health_check thread");
+                rv = create_health_check(cfg->pool, vs, cfg);
+                if (rv != APR_SUCCESS) {
+                    ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s,
+                            "px_hook_child_init: error while trying to init health_check_thread");
+                    return rv;
+                }
             }
         }
         apr_pool_cleanup_register(p, s, px_child_exit, apr_pool_cleanup_null);
