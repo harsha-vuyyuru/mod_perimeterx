@@ -23,6 +23,6 @@ CURLcode post_request(const char *url, const char *payload, long timeout, px_con
     }
     curl_pool_put(conf->curl_pool, curl);
 
-    ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s]: post_req_request: post request payload  %s", ctx->app_id, payload);
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: post_req_request: post request payload  %s", ctx->app_id, payload);
     return status;
 }
