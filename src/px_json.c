@@ -234,7 +234,7 @@ captcha_response *parse_captcha_response(const char* captcha_response_str, const
     json_error_t j_error;
     json_t *j_response = json_loads(captcha_response_str, 0, &j_error);
     if (!j_response) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server,
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
                 "[%s]: parse_captcha_response: failed to parse. error (%s), response (%s)", ctx->app_id, j_error.text, captcha_response_str);
         return NULL;
     }
@@ -248,7 +248,7 @@ captcha_response *parse_captcha_response(const char* captcha_response_str, const
                 "uuid", &uuid,
                 "cid", &cid,
                 "vid", &vid)) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server,
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
                 "[%s]: parse_captcha_response: failed to unpack. response (%s)", ctx->app_id, captcha_response_str);
         json_decref(j_response);
         return NULL;
@@ -269,7 +269,7 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
     json_error_t j_error;
     json_t *j_response = json_loads(risk_response_str, 0, &j_error);
     if (!j_response) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server,
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
                 "[%s]: parse_risk_response: failed to parse risk response (%s)", ctx->app_id, risk_response_str);
         return NULL;
     }
@@ -284,7 +284,7 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
                 "score", &score,
                 "action", &action
                 )) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server,
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
                 "[%s]: parse_risk_response: failed to unpack risk response (%s)", ctx->app_id, risk_response_str);
         json_decref(j_response);
         return NULL;
@@ -370,7 +370,7 @@ const char* context_to_json_string(request_context *ctx) {
     json_decref(headers);
 
     if (!ctx_json) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server,
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
                 "[%s]: context_to_json_string error: %s", ctx->app_id, error.text);
         return NULL;
     }
