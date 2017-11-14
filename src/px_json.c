@@ -295,7 +295,7 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
         parsed_response->uuid = apr_pstrdup(ctx->r->pool, uuid);
         parsed_response->status = status;
         parsed_response->score = score;
-        parsed_response->action = action;
+        parsed_response->action = apr_pstrdup(ctx->r->pool, action);
     }
     json_decref(j_response);
     return parsed_response;
