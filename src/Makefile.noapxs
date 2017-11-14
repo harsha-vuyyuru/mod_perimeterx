@@ -1,0 +1,20 @@
+BUILDDIR=/usr/build
+MODSDIR=/usr/modules
+
+SOURCES=mod_perimeterx.c curl_pool.c mustach.c px_payload.c px_enforcer.c px_json.c px_template.c px_utils.c px_client.c
+
+all: build
+
+build: mod_perimeterx.la
+
+%.lo: %.c
+	$(BUILDDIR)/libtool --silent --mode=compile gcc -std=gnu99 -prefer-pic -m32  -DLINUX -D_REENTRANT -D_GNU_SOURCE -D_LARGEFILE64_SOURCE -pthread -I/usr/include -c -o $@ $< && touch $(addsuffix .slo,$(basename $< .c))
+
+mod_perimeterx.la: $(SOURCES:.c=.lo)
+	$(BUILDDIR)/libtool --silent --mode=link gcc -std=gnu99 -m32 -o mod_perimeterx.la -rpath $(MODSDIR) -module -avoid-version $(SOURCES:.c=.lo) -lcrypto -lcurl -ljansson
+
+install: build
+	$(BUILDDIR)/libtool --mode=install install mod_perimeterx.la $(MODSDIR)/
+
+clean:
+	rm -f $(SOURCES:.c=.o) $(SOURCES:.c=.lo) $(SOURCES:.c=.slo) mod_perimeterx.la

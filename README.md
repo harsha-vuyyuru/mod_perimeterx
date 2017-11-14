@@ -1,45 +1,52 @@
-![image](http://media.marketwire.com/attachments/201604/34215_PerimeterX_logo.jpg)
+[![Build Status](https://travis-ci.org/PerimeterX/mod_perimeterx.svg?branch=travisBuild)](https://travis-ci.org/PerimeterX/mod_perimeterx)
+
+![image](https://s.perimeterx.net/logo.png)
 
 [PerimeterX](http://www.perimeterx.com) Apache Module
 ===========================================
 
-Table of Contentsa
+> Latest stable version: [v2.7.0](https://github.com/PerimeterX/mod_perimeterx/releases/tag/v2.7.0)
+
+
+Table of Contents
 -----------------
 
--   [Usage](#usage)
-  *   [Dependencies](#dependencies)
-  *   [Installation](#installation)
-  *   [Basic Usage Example](#basic-usage)
--   [Directives](#directives)
--   [Contributing](#contributing)
-  *   [Tests](#tests)
+- [Usage](#usage)
+	- [Dependencies](#dependencies)
+	- [Installation](#installation)
+	- [Basic Usage Example](#basic-usage)
+- [Directives](DIRECTIVES.md)
+- [Custom Block page](BLOCKPAGE.md)
+- [Logging and Troubleshooting](#troubleshoot)
+- [Contributing](#contributing)
+	- [Tests](#tests)
 
 
 <a name="Usage"></a>
 
 <a name="dependencies"></a> Dependencies
 ----------------------------------------
-- [openssl 1.0.1] (https://www.openssl.org/source/) 
-- [libcurl >= 7.19.0] (https://curl.haxx.se/docs/install.html) 
+- [openssl 1.0.1](https://www.openssl.org/source/) 
+- [libcurl >= 7.19.0](https://curl.haxx.se/docs/install.html) 
 - [jansson 2.6](http://www.digip.org/jansson/)
 - [Apache Portable Runtime (APR) >=1.4.6](https://apr.apache.org/)
+- [pkg-config](https://en.wikipedia.org/wiki/Pkg-config)
+- [json-c](https://github.com/json-c/json-c/wiki)
 
 You can install dependencies using the Linux package manager (```yum``` / ```debian``` packages) or install them manually.
 
 #### Ubuntu users:
 ```shell
-$ sudo apt-get install libjansson-dev
-$ sudo apt-get install libcurl4-openssl-dev
-$ sudo apt-get install apache2-dev 
+$ sudo apt-get install libjansson-dev libjson0 libjson0-dev libssl-dev libcurl4-openssl-dev apache2-dev pkg-config
 ```
 
 <a name="installation"></a>Installation
 ----------------------------------------
 ```shell
 $ git clone https://github.com/PerimeterX/mod_perimeterx.git
-$ cd mod_perimeterx
-$ sudo make
-$ apache2ctl restart
+$ cd mod_perimeterx/src
+$ make
+$ sudo make install
 ```
 
 Make sure that the following line is added to your configuration file: 
@@ -59,344 +66,13 @@ Loaded Modules:
  perimeterx_module (shared)
 ```
 
-<a name="directives"></a>
-## Directives ##
-
-The directives should be under the server configuration.
-
-### <a name="enabled"></a> `PXEnabled` ###
-**description** : Enables the PerimeterX module
-
-**required** : yes
-
-**default** : Off
-
-**values** : On|Off
-
-When set to ```On``` the module will be applied on webpage requests.
-
-### <a name="appid"></a> `AppId` ###
-
-**description** : Unique application ID
-
-**required** : yes
-
-**default** : NULL
-
-**values** : string
-
-### <a name="cookiekey"></a> `CookieKey` ###
-**description** : Cookie signing key
-
-**required** : yes
-
-**default** : NULL
-
-**values** : string
-
-### <a name="authtoken"></a> `AuthToken` ###
-**description** : API authentication token
-
-**required** : yes
-
-**default** : NULL
-
-**values** : string
-
-### <a name="blockingscore"></a>`BlockingScore` ###
-**description** : Blocking score. When requests with a score equal to or higher value they will be blocked.
-
-**required** : No
-
-**default** : 70
-
-**values** : Integer between 0 and 100
-
-### <a name="captcha"></a> `Captcha` ###
-
-**description** : Enable reCaptcha on the blocking page. 
-
-***Note***: When using a custom block page with captcha abilities implementation, this option must be `On`.
-
-**required** : No
-
-**default** : Off
-
-**values** : On | Off
-
-### <a name="reportpagerequested"></a> `ReportPageRequest` ###
-
-**description** : Enables the ablity to report page requests and blocking activities to PerimeterX.
-
-**required** : No
-
-**default** : Off
-
-**values** : On | Off
-
-### <a name="apitimeout"></a> `APITimeout` ###
-**description** : Timeout, in seconds, for API calls.
-
-**required** : No
-
-**default** : 0 (no timeout)
-
-**values** : Integer between 0 and 3
-
-### <a name="ipheader"></a> `IPHeader` ###
-
-**description** : List of HTTP header names that contain the real client IP address. Use this feature when your server is behind a CDN.
-
-**required** : No
-
-**default** : NULL
-
-**values** : List of strings
-
-***Note***: 
-
-* The order of headers in the configuration matters. The first header found with a value will be taken as the IP address.
-* If no valid IP address is found in the IP header list, the module will use [`useragent_ip`](https://httpd.apache.org/docs/2.4/developer/new_api_2_4.html) as the request IP.
-
-
-### <a name="blockpageurl"></a> `BlockPageURL`
-
-The Apache module allows you to customize your blocking page.
-
-Under this configuration, you need to specify the URL to a blocking page HTML file (relative to servers `DocumentRoot`).
-
-This module will send a redirect response with the `Location` header in the following format: 
-
-```
-$host/$blockpageURL?url=${original_request_url}&uuid=${uuid}&vid=${vid}
-```
-
-The Visitor ID (vid) must be extracted from this URL for captcha JS snippet use (see below for explanation and example).
-
-**required**: No. If not specified, the default block page will be used.
-
-**default**: NULL
-
-**value**: String
-
-***Note***: When using a custom block page with captcha abilities implemented, the `Captcha` configuration option must be `On`.
-
-#### Blocked user example: 
-
-If I'm blocked when browsing to `http://www.mysite.com/coolpage`, and the server configuration is: 
-
-```xml
-BlockPageURL /block.html
-```
-
-Redirect URL will be: 
-
-```
-http://www.mysite.com/block.html&url=coolpage&uuid=uuid=e8e6efb0-8a59-11e6-815c-3bdad80c1d39&vid=08320300-6516-11e6-9308-b9c827550d47
-```
-
-
-When captcha is enabled, the block page **must** include the following:
-
-###### Custom blockpage requirements:
-
-* Inside `<head>` section:
-
-```html
-<script src="https://www.google.com/recaptcha/api.js"></script>
-<script>
-function handleCaptcha(response) {
-    var vid = getQueryString("vid"); // getQueryString is implemented below
-    var uuid = getQueryString("uuid");
-    var name = '_pxCaptcha';
-    var expiryUtc = new Date(Date.now() + 1000 * 10).toUTCString();
-    var cookieParts = [name, '=', response + ':' + vid + ':' + uuid, '; expires=', expiryUtc, '; path=/'];
-    document.cookie = cookieParts.join('');
-    var originalURL = getQueryString("url");
-    var originalHost = window.location.host;
-    window.location.href = window.location.protocol + "//" +  originalHost + originalURL;
-}
-
-// http://stackoverflow.com/questions/901115/how-can-i-get-query-string-values-in-javascript
-function getQueryString(name, url) {
-    if (!url) url = window.location.href;
-    name = name.replace(/[\[\]]/g, "\\$&");
-    var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
-            results = regex.exec(url);
-    if (!results) return null;
-    if (!results[2]) return '';
-    return decodeURIComponent(results[2].replace(/\+/g, " "));
-}
-</script>
-```
-* Inside `<body>` section:
-
-```
-<div class="g-recaptcha" data-sitekey="6Lcj-R8TAAAAABs3FrRPuQhLMbp5QrHsHufzLf7b" data-callback="handleCaptcha" data-theme="dark"></div>
-```
-
-* [PerimeterX Javascript snippet](https://console.perimeterx.com/#/app/applicationsmgmt).
-
-#### configuration example:
- 
-```xml
-<IfModule mod_perimeterx.c>
-	...
-	BlockPageURL /blockpage.html
-	...
-</IfModule>
-```
-
-#### Block page implementation full example: 
-
-```html
-<html>
-    <head>
-        <script src="https://www.google.com/recaptcha/api.js"></script>
-        <script>
-        function handleCaptcha(response) {
-            var vid = getQueryString("vid");
-            var uuid = getQueryString("uuid");
-            var name = '_pxCaptcha';
-            var expiryUtc = new Date(Date.now() + 1000 * 10).toUTCString();
-            var cookieParts = [name, '=', response + ':' + vid + ':' + uuid, '; expires=', expiryUtc, '; path=/'];
-            document.cookie = cookieParts.join('');
-            // after getting resopnse we want to reaload the original page requested
-            var originalURL = getQueryString("url");
-            var originalHost = window.location.host;
-            window.location.href = window.location.protocol + "//" +  originalHost + originalURL;
-        }
-       
-       // http://stackoverflow.com/questions/901115/how-can-i-get-query-string-values-in-javascript	
-	function getQueryString(name, url) {
-		if (!url) url = window.location.href;
-		name = name.replace(/[\[\]]/g, "\\$&");
-		var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
-			results = regex.exec(url);
-		if (!results) return null;
-		if (!results[2]) return '';
-		return decodeURIComponent(results[2].replace(/\+/g, " "));
-	}
-        </script>
-    </head>
-    <body>
-        <h1>You are Blocked</h1>
-        <p>Try and solve the captcha</p> 
-        <div class="g-recaptcha" data-sitekey="6Lcj-R8TAAAAABs3FrRPuQhLMbp5QrHsHufzLf7b" data-callback="handleCaptcha" data-theme="dark"></div>
-    </body>
-<html>
-```
-
-### <a name="curlpoolsize"></a> `CurlPoolSize` ###
-**description** : The number of active curl handles for each server
-
-**required** : No
-
-**default** : 40
-
-**max**: 10000
-
-**values** : Integer
-
-> Note: For optimized performance, it is best to use the number of running worker threads in your Apache server as the CurlPoolSize.
-
-
-
-### <a name="baseurl"></a> `BaseURL` ###
-**description** : PerimeterX API server URL
-
-**required** : No
-
-**default** : https://collector.perimeterx.net
-
-**values** : string
-
-Determines PerimeterX server base URL.
-
-### <a name="sensitiveroutes"></a> `SensitiveRoutes`
-
-**descripotion** : List of routes the Perimeterx module will always do a server-to-server call for, even if the cookie score is low and valid. 
-
-**required** : No
-
-**default** : Empty list
-
-**values** : A whitespace seperated list of strings.
-
-**example** : `/api/checkout /users/login`
-
-###`SensitiveRoutesPrefix`
-
-**descripotion** : List of routes prefix. The Perimeterx module will always match request uri by this prefix list and if match was found will create a server-to-server call for, even if the cookie score is low and valid. 
-
-**required** : No
-
-**default** : Empty list
-
-**values** : A whitespace seperated list of strings.
-
-**example** : `/api /users`
-
-
-###<a name="whitelistroutes"></a> `PXWhitelistRoutes`
-
-**descripotion** : A whitespace seperated list of paths that will not be examined by PX module. 
-
-**required** : No
-
-**default** : Empty list
-
-**values** : A whitespace seperated list of strings.
-
-**example** : `/server-status /staging`
-
-### <a name="whitelistuseragent"></a> `PXWhitelistUserAgents`
-
-**description** : A whitespace seperated list of User-Agents that will not be examined by PX module.
-
-**required**: No
-
-**default** : Empty list
-
-**values** : A backspace delimited list of strings.
-
-### <a name="extensionwhitelist"></a> `ExtensionWhitelist`
-
-**description** : A whitespace seperated list of file extensions that will not be examined by PX module.
-
-**required**: No
-
-**default** : .css, .bmp, .tif, .ttf, .docx, .woff2, .js, .pict, .tiff, .eot, .xlsx, .jpg, .csv,
-    .eps, .woff, .xls, .jpeg, .doc, .ejs, .otf, .pptx, .gif, .pdf, .swf, .svg, .ps,
-    .ico, .pls, .midi, .svgz, .class, .png, .ppt, .mid, webp, .jar.
-    
-**Note**: When using this option, the default values are cleared and the supplied list will be used instead.
-
-**values** : A whitespace delimited list of strings.
-
-**example**: `.txt .css .jpeg`
-
-=======
-### `EnableBlockingByHostname`
-
-**description** : A whitespace seperated list of hostnames that PX module will enable block for.
-
-**required**: No
-
-**default** : Empty list
-    
-> **Note**: If this option is persent - only hostnames appear in this list will pass through mod_perimeterx.
-
-**values** : A whitespace delimited list of strings.
-
-**example**: `www.mysite.com www.mynewsite.com `
-
-### <a name="example"></a> Example ###
+### <a name="basic-usage"></a> Basic usage example ###
 
 * Configuration for apache server
 
 ```xml
 <IfModule mod_perimeterx.c>
+    # basic directives
     PXEnabled On
     CookieKey my_key
     AppID my_app_id
@@ -404,13 +80,26 @@ Determines PerimeterX server base URL.
     BlockingScore 90
     ReportPageRequest On
     IPHeader X-True-IP
-    CurlPoolSize 40
+    CurlPoolSize 100
+    Captcha On
+    CaptchaTimeout 1000
+    ScoreHeader On
+    ScoreHeaderName X-PX-SCORE
+    
+
+    # service monitor directives
+    PXServiceMonitor On
+    MaxPXErrorsThreshold 100
+    PXErrorsCountInterval 30000
+    
+    # filter
+    SensitiveRoutes /login
     PXWhitelistRoutes /server-status /staging
     PXWhitelistUserAgents "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/534.34 (KHTML,  like Gecko) PhantomJS/1.9.0 (development) Safari/534.34"
 </IfModule>
 ```
 
-* Configuration for specific VirtuaHost
+* Configuration for specific VirtualHost
 
 ```xml
 <VirtualHost *:80>
@@ -421,29 +110,51 @@ Determines PerimeterX server base URL.
                 CookieKey my_key
                 AppID my_app_id
                 AuthToken my_auth_token
-                BlockingScore 30
+                BlockingScore 90
                 ReportPageRequest On
                 Captcha On
         </IfModule>
 </VirtualHost>
 ```
 
+<a name="troubleshoot"></a>Logging and Troubleshooting
+----------------------------------------
+### Debug Logs
+mod_perimeterx is writing to apace error log. 
+In order to log debug messages to apache error log you should set the `LogLevel` [directive](https://httpd.apache.org/docs/2.4/mod/core.html#loglevel): 
+
+```
+# apache configuration
+LogLevel debug
+```
+
+According to your apache configurations you should find in the error log mod_perimeters log, for example: 
+
+```
+[Mon May 22 06:05:48.090556 2017] [:debug] [pid 10923:tid 140374710441728] px_enforcer.c(308): [PXg3P9d2ZQ]: create_context: create_context: useragent: (curl/7.51.0), px_cookie: ((null)), full_url: (localhost/), hostname: (localhost) , http_method: (GET), http_version: (1.1), uri: (/), ip: (172.17.0.1), block_enabled: (1)
+[Mon May 22 06:05:48.090634 2017] [:debug] [pid 10923:tid 140374710441728] px_enforcer.c(208): [PXg3P9d2ZQ]: risk payload: {"additional":{"s2s_call_reason":"none","http_method":"GET","http_version":"1.1","module_version":"Apache Module v2.2.0-RC"},"request":{"url":"localhost/","ip":"172.17.0.1","uri":"/","headers":[{"name":"Host","value":"localhost:9095"},{"name":"User-Agent","value":"curl/7.51.0"},{"name":"Accept","value":"*/*"}]}}
+[Mon May 22 06:05:48.349949 2017] [:debug] [pid 10923:tid 140374710441728] px_enforcer.c(213): [PXg3P9d2ZQ]: risk response: {"status":0,"uuid":"b3921460-3eb4-11e7-92dc-f7aec45df953","score":100,"action":"c"}
+[Mon May 22 06:05:48.350126 2017] [perimeterx:debug] [pid 10923:tid 140374710441728] mod_perimeterx.c(121): [PXg3P9d2ZQ]: px_handle_request: request blocked. (1)
+```
+
+
+
 <a name="contributing"></a> Contributing
 ----------------------------------------
 
 The following steps are welcome when contributing to our project.
-###Fork/Clone
+### Fork/Clone
 First and foremost, [Create a fork](https://guides.github.com/activities/forking/) of the repository, and clone it locally.
 Create a branch on your fork, preferably using a self descriptive branch name.
 
-###Code/Run
+### Code/Run
 Code your way out of your mess, and help improve our project by implementing missing features, adding capabilites or fixing bugs.
 
 To run the code, simply follow the steps in the [installation guide](#installation). Grab the keys from the PerimeterX Portal, and try refreshing your page several times continously. If no default behaviours have been overriden, you should see the PerimeterX block page. Solve the CAPTCHA to clean yourself and start fresh again.
 
-###Pull Request
+### Pull Request
 After you have completed the process, create a pull request to the Upstream repository. Please provide a complete and thorough description explaining the changes. Remember this code has to be read by our maintainers, so keep it simple, smart and accurate.
 
-###Thanks
+### Thanks
 After all, you are helping us by contributing to this project, and we want to thank you for it.
 We highly appreciate your time invested in contributing to our project, and are glad to have people like you - kind helpers.
