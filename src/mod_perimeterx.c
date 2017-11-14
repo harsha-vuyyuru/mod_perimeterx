@@ -8,6 +8,8 @@
 #include <curl/curl.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
+#include <openssl/opensslconf.h>
+#include <openssl/opensslv.h>
 #include <httpd.h>
 #include <http_config.h>
 #include <http_protocol.h>
@@ -74,6 +76,37 @@ static const char *PAGE_REQUESTED_ACTIVITY_TYPE = "page_requested";
 extern const char *BLOCK_REASON_STR[];
 extern const char *CALL_REASON_STR[];
 #endif // DEBUG
+
+/*
+ * SSL initialization magic copied from mod_auth_cas
+ */
+#if defined(OPENSSL_THREADS) && APR_HAS_THREADS
+
+static apr_thread_mutex_t **ssl_locks;
+static int ssl_num_locks;
+
+static void px_ssl_locking_callback(int mode, int type, const char *file, int line) {
+    if (type < ssl_num_locks) {
+        if (mode & CRYPTO_LOCK) {
+            apr_thread_mutex_lock(ssl_locks[type]);
+        } else {
+            apr_thread_mutex_unlock(ssl_locks[type]);
+        }
+    }
+}
+
+#ifdef OPENSSL_NO_THREADID
+static unsigned long px_ssl_id_callback(void) {
+    return (unsigned long) apr_os_thread_current();
+}
+#else
+static void px_ssl_id_callback(CRYPTO_THREADID *id) {
+    CRYPTO_THREADID_set_numeric(id, (unsigned long) apr_os_thread_current());
+}
+#endif /* OPENSSL_NO_THREADID */
+
+#endif /* defined(OPENSSL_THREADS) && APR_HAS_THREADS */
+
 
 char *create_response(px_config *conf, request_context *ctx) {
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_response: response creation started", conf->app_id);
@@ -175,7 +208,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
         return DECLINED;
     }
 
-    // Decline internal redirects and subrequests 
+    // Decline internal redirects and subrequests
     if (r->prev) {
             ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: px_handle_request: request declined - interal redirect or subrequest", conf->app_id);
 	    return DECLINED;
@@ -427,50 +460,50 @@ static apr_status_t px_child_exit(void *data) {
 
 static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
     apr_status_t rv;
-    
+
     // init each virtual host
     for (server_rec *vs = s; vs; vs = vs->next) {
-        
+
         if (vs->is_virtual) {
             ap_log_error(APLOG_MARK, APLOG_DEBUG, rv, s, "px_child_setup: Is virtual: %d",vs->is_virtual);
         }
         if (vs->server_hostname) {
             ap_log_error(APLOG_MARK, APLOG_DEBUG, rv, s, "px_child_setup: server_hostname: %s",vs->server_hostname);
         }
-        
+
         px_config *cfg = ap_get_module_config(vs->module_config, &perimeterx_module);
 
         ap_log_error(APLOG_MARK, APLOG_DEBUG, rv, s, "px_child_setup cfg->module_enabled : %d", cfg->module_enabled);
 
         rv = apr_pool_create(&cfg->pool, vs->process->pool);
-        
+
         if (rv != APR_SUCCESS) {
-            ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "px_hook_child_init: error while trying to initialize apr_pool for configuration");
+            ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "px_child_setup: error while trying to initialize apr_pool for configuration");
             return rv;
         }
 
         // Only initialize the PerimeterX needed pools and background workers if the PerimeterX module is enabled.
-        if (cfg->module_enabled == 1) {        
+        if (cfg->module_enabled == 1) {
             cfg->curl_pool = curl_pool_create(cfg->pool, cfg->curl_pool_size);
 
             if (cfg->background_activity_send) {
                 ap_log_error(APLOG_MARK, APLOG_CRIT | APLOG_NOERRNO, 0, s,
-                        "px_hook_child_init: start init for background_activity_send");
+                        "px_child_setup: start init for background_activity_send");
                 rv = background_activity_send_init(cfg->pool, vs, cfg);
                 if (rv != APR_SUCCESS) {
                     ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s,
-                            "px_hook_child_init: error while trying to init background_activity_consumer");
+                            "px_child_setup: error while trying to init background_activity_consumer");
                     return rv;
                 }
             }
 
             if (cfg->px_health_check) {
                 ap_log_error(APLOG_MARK, APLOG_CRIT | APLOG_NOERRNO, 0, s,
-                        "px_hook_child_init: setting up health_check thread");
+                        "px_child_setup: setting up health_check thread");
                 rv = create_health_check(cfg->pool, vs, cfg);
                 if (rv != APR_SUCCESS) {
                     ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s,
-                            "px_hook_child_init: error while trying to init health_check_thread");
+                            "px_child_setup: error while trying to init health_check_thread");
                     return rv;
                 }
             }
@@ -489,15 +522,53 @@ static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
 }
 
 static apr_status_t px_cleanup_pre_config(void *data) {
+
+#if (defined (OPENSSL_THREADS) && APR_HAS_THREADS)
+    if (CRYPTO_get_locking_callback() == px_ssl_locking_callback) {
+        CRYPTO_set_locking_callback(NULL);
+    }
+#ifdef OPENSSL_NO_THREADID
+    if (CRYPTO_get_id_callback() == px_ssl_id_callback) {
+        CRYPTO_set_id_callback(NULL);
+    }
+#else
+    if (CRYPTO_THREADID_get_callback() == px_ssl_id_callback) {
+        CRYPTO_THREADID_set_callback(NULL);
+    }
+#endif /* OPENSSL_NO_THREADID */
+
+#endif /* defined(OPENSSL_THREADS) && APR_HAS_THREADS */
     ERR_free_strings();
     EVP_cleanup();
+    curl_global_cleanup();
+
     return APR_SUCCESS;
 }
 
 static int px_hook_pre_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp) {
     curl_global_init(CURL_GLOBAL_ALL);
+    OpenSSL_add_all_digests();
+#if (defined(OPENSSL_THREADS) && APR_HAS_THREADS)
+    ssl_num_locks = CRYPTO_num_locks();
+    ssl_locks = apr_pcalloc(p, ssl_num_locks * sizeof(*ssl_locks));
+
+    for (int i = 0; i < ssl_num_locks; i++) {
+        apr_thread_mutex_create(&(ssl_locks[i]), APR_THREAD_MUTEX_DEFAULT, p);
+    }
+#ifdef OPENSSL_NO_THREADID
+    if (CRYPTO_get_locking_callback() == NULL && CRYPTO_get_id_callback() == NULL) {
+        CRYPTO_set_locking_callback(px_ssl_locking_callback);
+        CRYPTO_set_id_callback(px_ssl_id_callback);
+    }
+#else
+    if (CRYPTO_get_locking_callback() == NULL && CRYPTO_THREADID_get_callback() == NULL) {
+        CRYPTO_set_locking_callback(px_ssl_locking_callback);
+        CRYPTO_THREADID_set_callback(px_ssl_id_callback);
+    }
+#endif /* OPENSSL_NO_THREADID */
+#endif /* defined(OPENSSL_THREADS) && APR_HAS_THREADS */
+
     ERR_load_crypto_strings();
-    OpenSSL_add_all_algorithms();
     apr_pool_cleanup_register(p, NULL, px_cleanup_pre_config, apr_pool_cleanup_null);
     return OK;
 }
@@ -930,7 +1001,7 @@ static const char* set_captcha_type(cmd_parms *cmd, void *config, const char *ca
 
     if (!strcmp(captcha_type,"funCaptcha")) {
         conf->captcha_type = CAPTCHA_TYPE_FUNCAPTCHA;
-    } else { 
+    } else {
         conf->captcha_type = CAPTCHA_TYPE_RECAPTCHA;
     }
 
@@ -1226,7 +1297,7 @@ static void perimeterx_register_hooks(apr_pool_t *pool) {
     static const char *const asz_pre[] =
     { "mod_setenvif.c", NULL };
 
-    ap_hook_post_read_request(px_hook_post_request, asz_pre, NULL, APR_HOOK_MIDDLE);
+    ap_hook_post_read_request(px_hook_post_request, asz_pre, NULL, APR_HOOK_LAST);
     ap_hook_child_init(px_hook_child_init, NULL, NULL, APR_HOOK_MIDDLE);
     ap_hook_pre_config(px_hook_pre_config, NULL, NULL, APR_HOOK_MIDDLE);
 }
