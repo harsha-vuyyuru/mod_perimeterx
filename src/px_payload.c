@@ -11,6 +11,7 @@
 
 #include <apr_tables.h>
 #include <apr_strings.h>
+#include <apr_base64.h>
 #include <http_log.h>
 
 #ifdef APLOG_USE_MODULE
@@ -25,22 +26,6 @@ static const int HASH_LEN = 65;
 
 static const char *signing_nofields[] = { NULL };
 
-int decode_base64(const char *s, unsigned char **o, int *len, apr_pool_t *p) {
-    if (!s) {
-        return -1;
-    }
-    int l = strlen(s);
-    *o = (unsigned char*)apr_palloc(p, (l * 3 + 1));
-    BIO *bio = BIO_new_mem_buf((void*)s, -1);
-    BIO *b64 = BIO_new(BIO_f_base64());
-    bio = BIO_push(b64, bio);
-
-    BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
-    *len = BIO_read(bio, *o, l);
-    BIO_free_all(b64);
-    return 0;
-}
-
 static risk_payload *parse_risk_payload3(const char *raw_payload, request_context *ctx) {
     json_error_t error;
     json_t *j_payload = json_loads(raw_payload, 0, &error);
@@ -49,9 +34,11 @@ static risk_payload *parse_risk_payload3(const char *raw_payload, request_contex
         return NULL;
     }
 
+    const char *vid;
+    const char *uuid;
     int score;
-    char *uuid, *vid, *action;
     json_int_t ts;
+    const char *action;
     if (json_unpack(j_payload, "{s:s,s:s,s:i,s:I,s:s}",
                 "v", &vid,
                 "u", &uuid,
@@ -226,7 +213,7 @@ risk_payload *decode_payload(const char *px_payload, const char *payload_key, re
     const char* delimieter = ":";
     // extract hmac from payload for v3
     if (r_ctx->px_payload_version == 3) {
-        const char *payload_hmac = strtok_r(px_payload_cpy, delimieter, &saveptr);
+        char *payload_hmac = apr_strtok(px_payload_cpy, delimieter, &saveptr);
         if (payload_hmac == NULL) {
             ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: stoping payload decryption: no valid hmac for v3", r_ctx->app_id);
             return NULL;
@@ -258,14 +245,22 @@ risk_payload *decode_payload(const char *px_payload, const char *payload_key, re
     }
 
     // decode payload
-    unsigned char *payload;
-    int payload_len;
-    decode_base64(encoded_payload, &payload, &payload_len, r_ctx->r->pool);
+    int payload_len = apr_base64_decode_len(encoded_payload);
+    unsigned char *payload = apr_palloc(r_ctx->r->pool, payload_len + 1);
+    if (apr_base64_decode(payload, encoded_payload) != payload_len) {
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: failed to base64 decode payload", r_ctx->app_id);
+        return NULL;
+    }
+    payload[payload_len] = '\0';
 
     // decode salt
-    unsigned char *salt;
-    int salt_len;
-    decode_base64(encoded_salt, &salt, &salt_len, r_ctx->r->pool);
+    int salt_len = apr_base64_decode_len(encoded_salt);
+    unsigned char *salt = apr_palloc(r_ctx->r->pool, salt_len + 1);
+    if (apr_base64_decode(salt, encoded_salt) != salt_len) {
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: decode salt b64 failed", r_ctx->app_id);
+        return NULL;
+    }
+    salt[salt_len] = '\0';
 
     // pbkdf2
     unsigned char *pbdk2_out = (unsigned char*)apr_palloc(r_ctx->r->pool, IV_LEN + KEY_LEN);
@@ -273,11 +268,11 @@ risk_payload *decode_payload(const char *px_payload, const char *payload_key, re
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: PKCS5_PBKDF2_HMAC_SHA256 failed", r_ctx->app_id);
         return NULL;
     }
-    const unsigned char key[KEY_LEN];
-    memcpy((void*)key, pbdk2_out, sizeof(key));
+    unsigned char key[KEY_LEN];
+    memcpy(&key, pbdk2_out, sizeof(key));
 
-    const unsigned char iv[IV_LEN];
-    memcpy((void*)iv, pbdk2_out+sizeof(key), sizeof(iv));
+    unsigned char iv[IV_LEN];
+    memcpy(&iv, pbdk2_out+sizeof(key), sizeof(iv));
 
     // decrypt aes-256-cbc
     EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
