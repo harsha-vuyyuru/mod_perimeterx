@@ -545,7 +545,6 @@ static apr_status_t px_cleanup_pre_config(void *data) {
 }
 
 static int px_hook_pre_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp) {
-
 #if OPENSSL_VERSION_NUMBER < 0x1010000fL
     (void)CRYPTO_malloc_init();
 #else
