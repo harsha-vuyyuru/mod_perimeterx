@@ -1,6 +1,5 @@
 #include "px_payload.h"
 
-#include <openssl/conf.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/bio.h>
@@ -24,7 +23,8 @@ static const int IV_LEN = 16;
 static const int KEY_LEN = 32;
 static const int HASH_LEN = 65;
 
-static const char *signing_nofields[] = { NULL };
+static const char *SIGNING_NOFIELDS[] = { NULL };
+static const char *COOKIE_DELIMITER = ":";
 
 static risk_payload *parse_risk_payload3(const char *raw_payload, request_context *ctx) {
     json_error_t error;
@@ -210,10 +210,9 @@ risk_payload *decode_payload(const char *px_payload, const char *payload_key, re
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: payload is %s", r_ctx->app_id, px_payload);
     char *px_payload_cpy = apr_pstrdup(r_ctx->r->pool, px_payload);
     char* saveptr;
-    const char* delimieter = ":";
     // extract hmac from payload for v3
     if (r_ctx->px_payload_version == 3) {
-        char *payload_hmac = apr_strtok(px_payload_cpy, delimieter, &saveptr);
+        char *payload_hmac = apr_strtok(px_payload_cpy, COOKIE_DELIMITER, &saveptr);
         if (payload_hmac == NULL) {
             ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: stoping payload decryption: no valid hmac for v3", r_ctx->app_id);
             return NULL;
@@ -222,30 +221,30 @@ risk_payload *decode_payload(const char *px_payload, const char *payload_key, re
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: hmac for v3 is %s", r_ctx->app_id, r_ctx->px_payload_hmac);
         px_payload_cpy = NULL;
     }
-    const char* encoded_salt = strtok_r(px_payload_cpy, delimieter, &saveptr);
+    const char* encoded_salt = apr_strtok(px_payload_cpy, COOKIE_DELIMITER, &saveptr);
     if (encoded_salt == NULL) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: stoping payload decryption: no valid salt in payload", r_ctx->app_id);
         return NULL;
     }
-    const char* iterations_str = strtok_r(NULL, delimieter, &saveptr);
+    const char* iterations_str = apr_strtok(NULL, COOKIE_DELIMITER, &saveptr);
     if (iterations_str == NULL) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: no valid iterations in payload", r_ctx->app_id);
         return NULL;
     }
-    apr_int64_t iterations = apr_atoi64(iterations_str);
+    int iterations = atoi(iterations_str);
     // make sure iteratins is valid and not too big
     if (iterations < ITERATIONS_LOWER_BOUND || iterations > ITERATIONS_UPPER_BOUND) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: number of iterations is illegal - %"APR_INT64_T_FMT, r_ctx->app_id, iterations);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: number of iterations is illegal - %d", r_ctx->app_id, iterations);
         return NULL;
     }
-    const char* encoded_payload = strtok_r(NULL, delimieter, &saveptr);
+    const char* encoded_payload = apr_strtok(NULL, COOKIE_DELIMITER, &saveptr);
     if (encoded_payload == NULL) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: stoping payload decryption: no valid encoded_payload in payload", r_ctx->app_id);
         return NULL;
     }
     // decode payload
     int payload_len = apr_base64_decode_len(encoded_payload);
-    
+
     unsigned char *payload = apr_palloc(r_ctx->r->pool, payload_len + 1);
     int decoded_payload_len = apr_base64_decode(payload, encoded_payload);
     if (decoded_payload_len > payload_len) {
@@ -289,9 +288,8 @@ risk_payload *decode_payload(const char *px_payload, const char *payload_key, re
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
     }
-    int dpayload_len = len;
-    
 
+    int dpayload_len = len;
     if (EVP_DecryptFinal_ex(ctx, dpayload + len, &len) != 1) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: decryption failed in: Final", r_ctx->app_id);
         EVP_CIPHER_CTX_free(ctx);
@@ -329,7 +327,7 @@ validation_result_t validate_payload(const risk_payload *payload, request_contex
 
     char signature[HASH_LEN];
     const char *signing_fields_ua[] = { ctx->useragent, NULL };
-    const char **signing_fields = (ctx->token_origin == TOKEN_ORIGIN_COOKIE) ? signing_fields_ua : signing_nofields;
+    const char **signing_fields = (ctx->token_origin == TOKEN_ORIGIN_COOKIE) ? signing_fields_ua : SIGNING_NOFIELDS;
     digest_payload(payload, ctx, payload_key, signing_fields, signature, HASH_LEN);
 
     if (memcmp(signature, ctx->px_payload_hmac, 64) != 0) {
