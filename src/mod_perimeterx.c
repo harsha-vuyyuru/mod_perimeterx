@@ -463,12 +463,6 @@ static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
     apr_status_t rv = APR_SUCCESS;
     // init each virtual host
     for (server_rec *vs = s; vs; vs = vs->next) {
-        if (vs->is_virtual) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG, rv, s, "px_child_setup: is_virtual: %d", vs->is_virtual);
-        }
-        if (vs->server_hostname) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG, rv, s, "px_child_setup: server_hostname: %s", vs->server_hostname);
-        }
 
         px_config *cfg = ap_get_module_config(vs->module_config, &perimeterx_module);
         if (!cfg || !cfg->module_enabled) {
@@ -476,7 +470,6 @@ static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
         }
         // initialize the PerimeterX needed pools and background workers if the PerimeterX module is enabled
 
-        ap_log_error(APLOG_MARK, APLOG_DEBUG, rv, s, "px_child_setup cfg->module_enabled : %d", cfg->module_enabled);
         rv = apr_pool_create(&cfg->pool, vs->process->pool);
         if (rv != APR_SUCCESS) {
             ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "px_child_setup: error while trying to initialize apr_pool for configuration");
@@ -519,8 +512,6 @@ static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
 }
 
 static apr_status_t px_cleanup_pre_config(void *data) {
-    fprintf(stderr, "[DEBUG] px_cleanup_pre_config called\n");
-
 #if (defined (OPENSSL_THREADS) && APR_HAS_THREADS)
     if (CRYPTO_get_locking_callback() == px_ssl_locking_callback) {
         CRYPTO_set_locking_callback(NULL);
@@ -554,7 +545,6 @@ static apr_status_t px_cleanup_pre_config(void *data) {
 }
 
 static int px_hook_pre_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp) {
-    fprintf(stderr, "[DEBUG] px_hook_pre_config called\n");
 
 #if OPENSSL_VERSION_NUMBER < 0x1010000fL
     (void)CRYPTO_malloc_init();

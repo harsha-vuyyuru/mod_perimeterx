@@ -243,20 +243,21 @@ risk_payload *decode_payload(const char *px_payload, const char *payload_key, re
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: stoping payload decryption: no valid encoded_payload in payload", r_ctx->app_id);
         return NULL;
     }
-
     // decode payload
     int payload_len = apr_base64_decode_len(encoded_payload);
+    
     unsigned char *payload = apr_palloc(r_ctx->r->pool, payload_len + 1);
-    if (apr_base64_decode(payload, encoded_payload) != payload_len) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: failed to base64 decode payload", r_ctx->app_id);
+    int decoded_payload_len = apr_base64_decode(payload, encoded_payload);
+    if (decoded_payload_len > payload_len) {
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: failed to base64 decode payload, decodded_payload_len [%d] <= payload_len [%d]", r_ctx->app_id, decoded_payload_len, payload_len);
         return NULL;
     }
-    payload[payload_len] = '\0';
+    payload[decoded_payload_len] = '\0';
 
     // decode salt
     int salt_len = apr_base64_decode_len(encoded_salt);
     unsigned char *salt = apr_palloc(r_ctx->r->pool, salt_len + 1);
-    if (apr_base64_decode(salt, encoded_salt) != salt_len) {
+    if (apr_base64_decode(salt, encoded_salt) > salt_len) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: decode salt b64 failed", r_ctx->app_id);
         return NULL;
     }
@@ -281,15 +282,16 @@ risk_payload *decode_payload(const char *px_payload, const char *payload_key, re
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
     }
-    unsigned char *dpayload = apr_palloc(r_ctx->r->pool, payload_len);
+    unsigned char *dpayload = apr_pcalloc(r_ctx->r->pool, decoded_payload_len + 1);
     int len;
-    int dpayload_len;
-    if (EVP_DecryptUpdate(ctx, dpayload, &len, payload, payload_len) != 1) {
+    if (EVP_DecryptUpdate(ctx, dpayload, &len, payload, decoded_payload_len) != 1) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: decryption failed in: Update", r_ctx->app_id);
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
     }
-    dpayload_len = len;
+    int dpayload_len = len;
+    
+
     if (EVP_DecryptFinal_ex(ctx, dpayload + len, &len) != 1) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: decryption failed in: Final", r_ctx->app_id);
         EVP_CIPHER_CTX_free(ctx);
