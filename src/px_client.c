@@ -15,7 +15,7 @@ CURLcode post_request(const char *url, const char *payload, long timeout, px_con
         ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s]: post_req_request: could not obtain curl handle", ctx->app_id);
         return CURLE_FAILED_INIT;
     }
-    CURLcode status = post_request_helper(curl, url, payload, timeout, conf, ctx->r->server, response_data, request_rtt);
+    CURLcode status = post_request_helper(curl, url, payload, timeout, conf, ctx->r->server, response_data);
     if (request_rtt && (CURLE_OK != curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME, request_rtt))) {
         *request_rtt = 0;
     }
