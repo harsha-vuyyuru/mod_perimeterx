@@ -14,7 +14,7 @@ static const char *JSON_CONTENT_TYPE = "Content-Type: application/json";
 static const char *EXPECT = "Expect:";
 static const char *MOBILE_SDK_HEADER = "X-PX-AUTHORIZATION";
 
-void update_and_notify_health_check(px_config *conf, server_rec *server) {
+static void update_and_notify_health_check(px_config *conf) {
     if (!conf->px_health_check) {
         return;
     }
@@ -67,7 +67,7 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, l
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server, "[%s]: post_request: status: %lu, url: %s", conf->app_id, status_code, url);
         status = CURLE_HTTP_RETURNED_ERROR;
     } else {
-        update_and_notify_health_check(conf, server);
+        update_and_notify_health_check(conf);
         size_t len = strlen(errbuf);
         if (len) {
             ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server, "[%s]: post_request failed: %s", conf->app_id, errbuf);
@@ -82,7 +82,7 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, l
     return status;
 }
 
-size_t write_response_cb(void* contents, size_t size, size_t nmemb, void *stream) {
+static size_t write_response_cb(void* contents, size_t size, size_t nmemb, void *stream) {
     struct response_t *res = (struct response_t*)stream;
     size_t realsize = size * nmemb;
     res->data = realloc(res->data, res->size + realsize + 1);
@@ -96,7 +96,7 @@ size_t write_response_cb(void* contents, size_t size, size_t nmemb, void *stream
     return realsize;
 }
 
-const char* extract_first_ip(apr_pool_t *p, const char *ip) {
+static const char* extract_first_ip(apr_pool_t *p, const char *ip) {
     const char *first_ip = ip;
     while (*first_ip == ' ') {
         first_ip++;
