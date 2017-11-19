@@ -26,6 +26,22 @@ static const int HASH_LEN = 65;
 static const char *SIGNING_NOFIELDS[] = { NULL };
 static const char *COOKIE_DELIMITER = ":";
 
+static unsigned char *decode_base64(const char *s, int *len, apr_pool_t *p) {
+    if (!s) {
+        return NULL;
+    }
+    int l = strlen(s);
+    unsigned char *o = (unsigned char*)apr_palloc(p, l*3 + 1);
+    BIO *bio = BIO_new_mem_buf((void*)s, -1);
+    BIO *b64 = BIO_new(BIO_f_base64());
+    bio = BIO_push(b64, bio);
+    BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
+    *len = BIO_read(bio, o, l);
+    BIO_free_all(b64);
+    o[*len + 1] = '\0';
+    return o;
+}
+
 static risk_payload *parse_risk_payload3(const char *raw_payload, request_context *ctx) {
     json_error_t error;
     json_t *j_payload = json_loads(raw_payload, 0, &error);
@@ -243,24 +259,20 @@ risk_payload *decode_payload(const char *px_payload, const char *payload_key, re
         return NULL;
     }
     // decode payload
-    int payload_len = apr_base64_decode_len(encoded_payload);
-
-    unsigned char *payload = apr_palloc(r_ctx->r->pool, payload_len + 1);
-    int decoded_payload_len = apr_base64_decode(payload, encoded_payload);
-    if (decoded_payload_len > payload_len) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: failed to base64 decode payload, decodded_payload_len [%d] <= payload_len [%d]", r_ctx->app_id, decoded_payload_len, payload_len);
+    int payload_len = 0;
+    unsigned char *payload = decode_base64(encoded_payload, &payload_len, r_ctx->r->pool);
+    if (!payload) {
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: failed to base64 decode payload", r_ctx->app_id);
         return NULL;
     }
-    payload[decoded_payload_len] = '\0';
 
     // decode salt
-    int salt_len = apr_base64_decode_len(encoded_salt);
-    unsigned char *salt = apr_palloc(r_ctx->r->pool, salt_len + 1);
-    if (apr_base64_decode(salt, encoded_salt) > salt_len) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: decode salt b64 failed", r_ctx->app_id);
+    int salt_len = 0;
+    unsigned char *salt = decode_base64(encoded_salt, &salt_len, r_ctx->r->pool);
+    if (!salt) {
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: failed to base64 decode salt", r_ctx->app_id);
         return NULL;
     }
-    salt[salt_len] = '\0';
 
     // pbkdf2
     unsigned char *pbdk2_out = (unsigned char*)apr_palloc(r_ctx->r->pool, IV_LEN + KEY_LEN);
@@ -281,9 +293,9 @@ risk_payload *decode_payload(const char *px_payload, const char *payload_key, re
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
     }
-    unsigned char *dpayload = apr_pcalloc(r_ctx->r->pool, decoded_payload_len + 1);
+    unsigned char *dpayload = apr_pcalloc(r_ctx->r->pool, payload_len + 1);
     int len;
-    if (EVP_DecryptUpdate(ctx, dpayload, &len, payload, decoded_payload_len) != 1) {
+    if (EVP_DecryptUpdate(ctx, dpayload, &len, payload, payload_len) != 1) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: decryption failed in: Update", r_ctx->app_id);
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
@@ -291,6 +303,7 @@ risk_payload *decode_payload(const char *px_payload, const char *payload_key, re
 
     int dpayload_len = len;
     if (EVP_DecryptFinal_ex(ctx, dpayload + len, &len) != 1) {
+        ERR_print_errors_fp(stderr);
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r_ctx->r->server, "[%s]: decode_payload: decryption failed in: Final", r_ctx->app_id);
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
@@ -338,3 +351,4 @@ validation_result_t validate_payload(const risk_payload *payload, request_contex
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: validate_payload: valid", ctx->app_id);
     return VALIDATION_RESULT_VALID;
 }
+
