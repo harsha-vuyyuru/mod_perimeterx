@@ -10,7 +10,6 @@
 
 #include <apr_tables.h>
 #include <apr_strings.h>
-#include <apr_base64.h>
 #include <http_log.h>
 
 #ifdef APLOG_USE_MODULE
