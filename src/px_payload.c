@@ -7,7 +7,7 @@
 #include <openssl/hmac.h>
 
 #include <jansson.h>
-
+#include <apr_base64.h>
 #include <apr_tables.h>
 #include <apr_strings.h>
 #include <http_log.h>
