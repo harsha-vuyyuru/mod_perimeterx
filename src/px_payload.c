@@ -131,7 +131,7 @@ static risk_payload *parse_risk_payload1(const char *raw_payload, request_contex
     payload->score = b_val;
     payload->a = apr_psprintf(ctx->r->pool, "%d", a_val);
     payload->b = apr_psprintf(ctx->r->pool, "%d", b_val);
-    payload->action = ACTION_CAPTCHA;
+    payload->action = "c";
 
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: payload data (v1): timestamp %s, vid %s, uuid %s hash %s scores: a %s b %s", ctx->app_id, payload->timestamp, payload->vid, payload->uuid, payload->hash, payload->a, payload->b);
     json_decref(j_payload);
