@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [2.8.0-rc.9] 11-20-2017
 * Init and clean OpenSSL with threading support 
-* Switched background activitieis to off by default\
+* Switched background activities to off by default\
 * Added debug symbols to debian installation
 * Fixed reCaptcha support for mobile sdk
 * Memory leak optimizations

@@ -1,7 +1,7 @@
 libapache-mod-perimeterx (2.8.0-rc.9) jessie; urgency=medium
 
     * Init and clean OpenSSL with threading support 
-    * Switched background activitieis to off by default
+    * Switched background activities to off by default
     * Added debug symbols to debian installation
     * Fixed reCaptcha support for mobile sdk
     * Memory leak optimizations
