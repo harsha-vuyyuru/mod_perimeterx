@@ -359,7 +359,7 @@ const char* context_to_json_string(request_context *ctx) {
         }
     }
 
-    ctx_json = json_pack_ex(&error, JSON_DECODE_ANY, "{ss, ss, ss, ss, ss, ss, ss, ss, ss, si, ss, sb, sb, sO}",
+    ctx_json = json_pack_ex(&error, JSON_DECODE_ANY, "{ss, ss, ss, ss, ss, ss, ss, ss, ss, si, ss, sb, sb, sO, ss, ss, ss}",
             "ip", ctx->ip,
             "hostname", ctx->hostname,
             "full_url", ctx->full_url,
@@ -373,7 +373,10 @@ const char* context_to_json_string(request_context *ctx) {
             "uri", ctx->uri,
             "is_made_s2s_api_call", ctx->made_api_call,
             "sensitive_route", ctx->call_reason == CALL_REASON_SENSITIVE_ROUTE,
-            "headers", headers);
+            "headers", headers,
+            "cookie_origin", TOKEN_ORIGIN_STR[ctx->token_origin],
+            "px_cookie_hmac", ctx->px_payload_hmac,
+            "block_action", ACTION_STR[ctx->action]);
     json_decref(headers);
 
     if (!ctx_json) {
