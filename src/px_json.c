@@ -359,7 +359,7 @@ const char* context_to_json_string(request_context *ctx) {
         }
     }
 
-    ctx_json = json_pack_ex(&error, JSON_DECODE_ANY, "{ss, ss, ss, ss, ss, ss, ss, ss, ss, si, ss, sb, sb, sO, ss, ss, ss}",
+    ctx_json = json_pack_ex(&error, JSON_DECODE_ANY, "{ss, ss, ss, ss, ss, ss, ss, ss, ss, si, ss, sb, sb, sO, ss}",
             "ip", ctx->ip,
             "hostname", ctx->hostname,
             "full_url", ctx->full_url,
@@ -374,9 +374,7 @@ const char* context_to_json_string(request_context *ctx) {
             "is_made_s2s_api_call", ctx->made_api_call,
             "sensitive_route", ctx->call_reason == CALL_REASON_SENSITIVE_ROUTE,
             "headers", headers,
-            "cookie_origin", TOKEN_ORIGIN_STR[ctx->token_origin],
-            "px_cookie_hmac", ctx->px_payload_hmac,
-            "block_action", ACTION_STR[ctx->action]);
+            "cookie_origin", TOKEN_ORIGIN_STR[ctx->token_origin]);
     json_decref(headers);
 
     if (!ctx_json) {
@@ -386,6 +384,12 @@ const char* context_to_json_string(request_context *ctx) {
     }
 
     // nullable fields
+    if (ctx->px_payload_hmac) {
+        json_object_set_new(ctx_json, "px_cookie_hmac", json_string(ctx->px_payload_hmac));
+    }
+    if (ctx->action) {
+        json_object_set_new(ctx_json, "block_action", json_string(ACTION_STR[ctx->action]));
+    }
     if (ctx->vid) {
         json_object_set_new(ctx_json, "vid", json_string(ctx->vid));
     }
