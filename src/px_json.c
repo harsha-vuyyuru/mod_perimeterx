@@ -37,6 +37,7 @@ static const char *CALL_REASON_STR[] = {
     [CALL_REASON_SENSITIVE_ROUTE] = "sensitive_route",
     [CALL_REASON_CAPTCHA_FAILED] = "captcha_failed",
     [CALL_REASON_MOBILE_SDK_CONNECTION_ERROR] = "mobile_sdk_connection_error",
+    [CALL_REASON_MOBILE_SDK_PINNING_ERROR] = "mobile_sdk_pinning_error"
 };
 
 // using cookie as value instead of payload, changing it will effect the collector
@@ -196,6 +197,10 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf) {
     char *request_str = json_dumps(j_risk, JSON_COMPACT);
     json_decref(j_risk);
     return request_str;
+}
+
+const char *get_call_reason_string(call_reason_t call_reason) {
+    return CALL_REASON_STR[call_reason];
 }
 
 char *create_captcha_payload(const request_context *ctx, const px_config *conf) {

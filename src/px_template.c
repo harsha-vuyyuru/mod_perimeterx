@@ -160,23 +160,29 @@ const char* select_template(const px_config *conf, const request_context *ctx) {
         pt_flag = conf->captcha_type == CAPTCHA_TYPE_FUNCAPTCHA ? (pt_flag | PT_FLAG_FUNCAPTCHA) : pt_flag;
     }
 
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: select_template: value of template %d", ctx->app_id, pt_flag);
+    //ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: select_template: value of template %d", ctx->app_id, pt_flag);
 
     switch (pt_flag) {
         case PAGE_TEMPLATE_BLOCK_WEB:
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Enforcing action: block page is served");
             return page_template_block_web;
         case PAGE_TEMPLATE_RECAPTCHA_WEB:
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Enforcing action: captcha page is served");
             return page_template_recaptcha_web;
         case PAGE_TEMPLATE_FUNCAPTCHA_WEB:
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Enforcing action: captcha page is served");
             return page_template_funcaptcha_web;
         case PAGE_TEMPLATE_BLOCK_MOBILE:
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Enforcing action: block page is served");
             return page_template_block_mobile;
         case PAGE_TEMPLATE_RECAPTCHA_MOBILE:
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Enforcing action: captcha page is served");
             return page_template_recaptcha_mobile;
         case PAGE_TEMPLATE_FUNCAPTCHA_MOBILE:
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Enforcing action: captcha page is served");
             return page_template_funcaptcha_mobile;
         default:
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: select_template: wrong value for template [%d], rendering default web block", ctx->app_id, pt_flag);
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "select_template: wrong value for template ", apr_itoa(ctx->r->pool, pt_flag), ", rendering default web block", NULL));
             return page_template_block_web;
     }
 }

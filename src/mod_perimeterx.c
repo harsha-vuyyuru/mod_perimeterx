@@ -74,6 +74,10 @@ static const char *ERROR_BASE_URL_BEFORE_APP_ID = "mod_perimeterx: BaseUrl was s
 static const char *BLOCKED_ACTIVITY_TYPE = "block";
 static const char *PAGE_REQUESTED_ACTIVITY_TYPE = "page_requested";
 
+static const char *LOGGER_DEBUG_FORMAT = "[PerimeterX - DEBUG][%s] - %s";
+static const char *LOGGER_ERROR_FORMAT = "[PerimeterX - ERROR][%s] - %s";
+
+
 #ifdef DEBUG
 extern const char *BLOCK_REASON_STR[];
 extern const char *CALL_REASON_STR[];
@@ -111,34 +115,35 @@ static void px_ssl_id_callback(CRYPTO_THREADID *id) {
 
 
 char *create_response(px_config *conf, request_context *ctx) {
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_response: response creation started", conf->app_id);
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "create_response: response creation started");
 
     // support for Access-Control-Allow-Origin headers
     if (conf->origin_wildcard_enabled) {
         apr_table_set(ctx->r->headers_out, ACCESS_CONTROL_ALLOW_ORIGIN_HEADER_NAME,ORIGIN_WILDCARD_VALUE);
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_response: header Access-Control-Allow-Origin: * set on response", conf->app_id);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "create_response: header Access-Control-Allow-Origin: * set on response");
     } else if (conf->origin_envvar_name) {
         const char *origin_envvar_value = apr_table_get(ctx->r->subprocess_env, conf->origin_envvar_name);
         if (origin_envvar_value != NULL) {
             apr_uri_t origin_envvar_uri;
             apr_status_t origin_envvar_parse_result = apr_uri_parse(ctx->r->pool, origin_envvar_value, &origin_envvar_uri);
             if (origin_envvar_parse_result != 0) {
-                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_response: Origin header was not a valid URI", conf->app_id);
+                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "create_response: Origin header was not a valid URI");
             } else {
                 // Unparse to ensure there is a real URI
                 const char *unparsed_uri = apr_uri_unparse(ctx->r->pool, &origin_envvar_uri, APR_URI_UNP_OMITPATHINFO);
                 if (unparsed_uri != NULL) {
                     if (strlen(unparsed_uri) > 0) {
-                        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_response: unparsed uri  %s" , conf->app_id,unparsed_uri);
+                        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id, apr_pstrcat(ctx->r->pool, "create_response: unparsed uri ", unparsed_uri, NULL));
                         apr_table_set(ctx->r->headers_out, ACCESS_CONTROL_ALLOW_ORIGIN_HEADER_NAME, unparsed_uri);
-                        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_response: header Access-Control-Allow-Origin: %s set on response", conf->app_id, origin_envvar_value);
+                        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id, apr_pstrcat(ctx->r->pool, "create_response: header Access-Control-Allow-Origin: ", origin_envvar_value, " set on response", NULL));
+
                     } else {
-                        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_response: invalid URI set in envvar" , conf->app_id);
+                        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "create_response: invalid URI set in envvar");
                     }
                 }
             }
         } else {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s]: create_response: envvar NULL skipped setting Access-Control-Allow-Origin header", conf->app_id);
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "create_response: envvar NULL skipped setting Access-Control-Allow-Origin header");
         }
     }
 
@@ -191,7 +196,7 @@ void post_verification(request_context *ctx, px_config *conf, bool request_valid
         const char *activity_type = request_valid ? PAGE_REQUESTED_ACTIVITY_TYPE : BLOCKED_ACTIVITY_TYPE;
         char *activity = create_activity(activity_type, conf, ctx);
         if (!activity) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, ctx->r->server, "[%s]: post_verification: (%s) create activity failed", ctx->app_id, activity_type);
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "post_verification: ", activity_type, " create activity failed", NULL));
             return;
         }
         if (conf->background_activity_send) {
@@ -211,7 +216,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
 
     // Decline internal redirects and subrequests
     if (r->prev) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: px_handle_request: request declined - interal redirect or subrequest", conf->app_id);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Request declined - interal redirect or subrequest");
 	    return DECLINED;
     }
 
@@ -222,18 +227,21 @@ int px_handle_request(request_rec *r, px_config *conf) {
     if (conf->skip_mod_by_envvar) {
         const char *skip_px = apr_table_get(r->subprocess_env, "PX_SKIP_MODULE");
         if  (skip_px != NULL) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: px_handle_request: PX_SKIP_MODULE was set on the request", conf->app_id);
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Request will not be verified, module is disabled by EnvIf");
             return DECLINED;
         }
     }
 
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Starting request verification");
+
     request_context *ctx = create_context(r, conf);
     if (ctx) {
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Request context created successfully");
         bool request_valid = px_verify_request(ctx, conf);
 
         // if request is not valid, and monitor mode is on, toggle request_valid and set pass_reason
         if (conf->monitor_mode && !request_valid) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: request marked for simulated block", conf->app_id);
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Request marked for simulated block");
             ctx->pass_reason = PASS_REASON_MONITOR_MODE;
             request_valid = true;
         }
@@ -253,8 +261,6 @@ int px_handle_request(request_rec *r, px_config *conf) {
             const char *score_str = apr_itoa(r->pool, ctx->score);
             apr_table_set(r->headers_in, conf->score_header_name, score_str);
         }
-
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: request_valid %d , block_enabled %d ", conf->app_id, request_valid, ctx->block_enabled);
 
         if (!request_valid && ctx->block_enabled) {
             // redirecting requests to custom block page if exists
@@ -288,11 +294,10 @@ int px_handle_request(request_rec *r, px_config *conf) {
                 return DONE;
             }
             // failed to create response
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: Could not create block page with template, passing request", conf->app_id);
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Could not create block page with template, passing request");
         }
     }
     r->status = HTTP_OK;
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: px_handle_request: request passed, score %d, monitor mode %d", ctx->app_id, ctx->score, conf->monitor_mode);
     return OK;
 }
 
@@ -315,7 +320,7 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
 
         apr_thread_mutex_unlock(conf->health_check_cond_mutex);
         if (conf->should_exit_thread) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, "health_check: marked to exit");
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, LOGGER_DEBUG_FORMAT, conf->app_id, "health_check: marked to exit");
             break;
         }
 
@@ -332,7 +337,8 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
         apr_atomic_set32(&conf->px_errors_count, 0);
     }
 
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, "health_check: thread exiting");
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, LOGGER_DEBUG_FORMAT, conf->app_id, "health_check: thread exiting");
+
     curl_easy_cleanup(curl);
     apr_thread_exit(thd, 0);
     return NULL;
@@ -345,7 +351,7 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
 
     void *v;
     if (!curl) {
-        ap_log_error(APLOG_MARK, LOG_ERR, 0, consumer_data->server, "[%s]: could not create curl handle, thread will not run to consume messages", conf->app_id);
+        ap_log_error(APLOG_MARK, APLOG_ERR, 0, consumer_data->server, LOGGER_DEBUG_FORMAT, conf->app_id, "could not create curl handle, thread will not run to consume messages");
         return NULL;
     }
 
@@ -365,10 +371,9 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
     }
 
     curl_easy_cleanup(curl);
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, consumer_data->server,
-            "[%s]: activity consumer thread exited", conf->app_id);
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, consumer_data->server, LOGGER_DEBUG_FORMAT, conf->app_id, "activity consumer thread exited");
     apr_thread_exit(thd, 0);
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, consumer_data->server, "[%s]: Sending activity completed", conf->app_id);
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, consumer_data->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Sending activity completed");
     return NULL;
 }
 
@@ -385,19 +390,19 @@ static apr_status_t create_health_check(apr_pool_t *p, server_rec *s, px_config 
 
     rv = apr_thread_cond_create(&cfg->health_check_cond, p);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "error while init health_check thread cond");
+        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "error while init health_check thread cond");
         return rv;
     }
 
     rv = apr_thread_create(&cfg->health_check_thread, NULL, health_check, (void*) hc_data, p);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "error while init health_check thread create");
+        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "error while init health_check thread create");
         return rv;
     }
 
     rv = apr_thread_mutex_create(&cfg->health_check_cond_mutex, 0, p);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "error while creating health_check thread mutex");
+        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "error while creating health_check thread mutex");
         return rv;
     }
 
@@ -409,8 +414,7 @@ static apr_status_t background_activity_send_init(apr_pool_t *pool, server_rec *
 
     rv = apr_queue_create(&cfg->activity_queue, cfg->background_activity_queue_size, pool);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s,
-                "[%s]: failed to initialize background activity queue", cfg->app_id);
+        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "failed to initialize background activity queue");
         return rv;
     }
 
@@ -420,20 +424,19 @@ static apr_status_t background_activity_send_init(apr_pool_t *pool, server_rec *
 
     rv = apr_thread_pool_create(&cfg->activity_thread_pool, 0, cfg->background_activity_workers, pool);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s,
-                "[%s]: failed to initialize background activity thread pool", cfg->app_id);
+        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "failed to initialize background activity thread pool");
         return rv;
     }
 
     for (unsigned int i = 0; i < cfg->background_activity_workers; ++i) {
         rv = apr_thread_pool_push(cfg->activity_thread_pool, background_activity_consumer, consumer_data, 0, NULL);
         if (rv != APR_SUCCESS) {
-            ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "failed to push background activity consumer");
+            ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "failed to push background activity consumer");
             return rv;
         }
     }
 
-    ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "finished init background activities");
+    ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "finished init background activities");
     return rv;
 }
 
@@ -466,36 +469,35 @@ static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
 
         px_config *cfg = ap_get_module_config(vs->module_config, &perimeterx_module);
         if (!cfg || !cfg->module_enabled) {
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg->app_id, "Request will not be verified, module is disabled");
             continue;
         }
         // initialize the PerimeterX needed pools and background workers if the PerimeterX module is enabled
 
         rv = apr_pool_create(&cfg->pool, vs->process->pool);
         if (rv != APR_SUCCESS) {
-            ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, "px_child_setup: error while trying to initialize apr_pool for configuration");
+            ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "px_child_setup: error while trying to initialize apr_pool for configuration");
             return rv;
         }
 
         cfg->curl_pool = curl_pool_create(cfg->pool, cfg->curl_pool_size);
 
         if (cfg->background_activity_send) {
-            ap_log_error(APLOG_MARK, APLOG_CRIT | APLOG_NOERRNO, 0, s,
-                    "px_child_setup: start init for background_activity_send");
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg->app_id, "px_child_setup: start init for background_activity_send");
+
             rv = background_activity_send_init(cfg->pool, vs, cfg);
             if (rv != APR_SUCCESS) {
-                ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s,
-                        "px_child_setup: error while trying to init background_activity_consumer");
+                ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "px_child_setup: error while trying to init background_activity_consumer");
                 return rv;
             }
         }
 
         if (cfg->px_health_check) {
-            ap_log_error(APLOG_MARK, APLOG_CRIT | APLOG_NOERRNO, 0, s,
-                    "px_child_setup: setting up health_check thread");
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg->app_id, "px_child_setup: setting up health_check thread");
+
             rv = create_health_check(cfg->pool, vs, cfg);
             if (rv != APR_SUCCESS) {
-                ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s,
-                        "px_child_setup: error while trying to init health_check_thread");
+                ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "px_child_setup: error while trying to init health_check_thread");
                 return rv;
             }
         }
