@@ -135,6 +135,7 @@ typedef enum {
 typedef enum {
     ACTION_CAPTCHA,
     ACTION_BLOCK,
+    ACTION_CHALLENGE,
 } action_t;
 
 typedef struct risk_payload_t {
@@ -156,6 +157,7 @@ typedef struct risk_response_t {
     int status;
     int score;
     const char *action;
+    const char *action_data_body;
 } risk_response;
 
 typedef struct captcha_response_t {
@@ -196,6 +198,7 @@ typedef struct request_context_t {
     token_origin_t token_origin;
     action_t action;
     bool response_application_json;
+    const char *action_data_body;
 } request_context;
 
 typedef enum {
