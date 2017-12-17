@@ -20,8 +20,6 @@ static const char *hidden = "hidden";
 static const char *collector_url = "https://collector-%s.perimeterx.net";
 static const char *LOGGER_DEBUG_FORMAT = "[PerimeterX - DEBUG][%s] - %s"; 
 
-static const char *LOGGER_DEBUG_FORMAT = "[PerimeterX - DEBUG][%s] - %s";
-
 typedef struct px_props_t {
     int depth;
     const char *appId;
