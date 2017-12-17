@@ -68,6 +68,8 @@ typedef struct px_config_t {
     bool vid_header_enabled;
     const char *vid_header_name;
     const char *uuid_header_name;
+    bool origin_wildcard_enabled;
+    const char *origin_envvar_name;
     bool json_response_enabled;
     bool cors_headers_enabled;
     captcha_type_t captcha_type;
