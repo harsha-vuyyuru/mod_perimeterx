@@ -262,8 +262,6 @@ int px_handle_request(request_rec *r, px_config *conf) {
             apr_table_set(r->headers_in, conf->score_header_name, score_str);
         }
 
-        //ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: request_valid %d , block_enabled %d ", conf->app_id, request_valid, ctx->block_enabled);
-
         if (!request_valid && ctx->block_enabled) {
             // redirecting requests to custom block page if exists
             if (conf->block_page_url) {
@@ -300,7 +298,6 @@ int px_handle_request(request_rec *r, px_config *conf) {
         }
     }
     r->status = HTTP_OK;
-    //ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: px_handle_request: request passed, score %d, monitor mode %d", ctx->app_id, ctx->score, conf->monitor_mode);
     return OK;
 }
 
