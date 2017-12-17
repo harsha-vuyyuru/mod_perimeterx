@@ -285,6 +285,7 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
     int score = 0;
     const char *uuid = NULL;
     const char *action = NULL;
+    const char *action_data_body = NULL; 
     if (json_unpack(j_response, "{s:i,s:s,s:i,s:s}",
                 "status", &status,
                 "uuid", &uuid,
@@ -297,12 +298,24 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
         return NULL;
     }
 
+    if (!strcmp(action, "j")) {
+        json_t *action_data = json_object_get(j_response, "action_data");
+        if (json_unpack(action_data, "{s:s}",
+                    "body", &action_data_body)) { 
+           ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s]: parse_risk_response: failed to unpack risk api action_data", ctx->app_id);
+           json_decref(j_response);
+           return NULL;
+        }
+        ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, ctx->r->server, "[%s]: parse_risk_response: succsefully got aciton_data_body (%s)", ctx->app_id, action_data_body);
+    }
+
     risk_response *parsed_response = (risk_response*)apr_palloc(ctx->r->pool, sizeof(risk_response));
     if (parsed_response) {
         parsed_response->uuid = apr_pstrdup(ctx->r->pool, uuid);
         parsed_response->status = status;
         parsed_response->score = score;
         parsed_response->action = apr_pstrdup(ctx->r->pool, action);
+        parsed_response->action_data_body = apr_pstrdup(ctx->r->pool, action_data_body);
     }
     json_decref(j_response);
     return parsed_response;

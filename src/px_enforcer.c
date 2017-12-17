@@ -26,6 +26,9 @@ static const char* FILE_EXT_WHITELIST[] = {
 };
 
 static action_t parseBlockAction(const char* act) {
+    if (act && act[0] == 'j') {
+        return ACTION_CHALLENGE;
+    }
     return (act && act[0] == 'b') ? ACTION_BLOCK : ACTION_CAPTCHA;
 }
 
@@ -335,11 +338,17 @@ bool px_verify_request(request_context *ctx, px_config *conf) {
 handle_response:
             if (risk_response) {
                 ctx->score = risk_response->score;
+                
+                if (risk_response->action_data_body){
+                    ctx->action_data_body = risk_response->action_data_body;
+                }
+
                 if (!ctx->uuid && risk_response->uuid) {
                     ctx->uuid = risk_response->uuid;
                 }
 
                 if (risk_response->action) {
+                    ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s] px_verify_request: parsing action (%s)", ctx->app_id, risk_response->action);
                     ctx->action = parseBlockAction(risk_response->action);
                 }
 
