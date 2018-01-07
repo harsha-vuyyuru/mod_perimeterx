@@ -29,7 +29,7 @@ Table of Contents
 - [openssl 1.0.1](https://www.openssl.org/source/) 
 - [libcurl >= 7.19.0](https://curl.haxx.se/docs/install.html) 
 - [jansson 2.6](http://www.digip.org/jansson/)
-- [Apache Portable Runtime (APR) >=1.4.6](https://apr.apache.org/)
+- [Apache Portable Runtime (APR) >= 1.6.3](https://apr.apache.org/)
 - [pkg-config](https://en.wikipedia.org/wiki/Pkg-config)
 - [json-c](https://github.com/json-c/json-c/wiki)
 
