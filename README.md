@@ -56,10 +56,11 @@ $ yum -y install curl-devel glibc-devel jansson-devel libcurl-devel json-c-devel
 <a name="installation"></a>Installation
 ----------------------------------------
 ```shell
-$ git clone https://github.com/PerimeterX/mod_perimeterx.git
-$ cd mod_perimeterx/src
-$ make
-$ sudo make install
+1. $ git clone https://github.com/PerimeterX/mod_perimeterx.git
+2. $ cd mod_perimeterx/src
+3. Identify the location of the axps binary - usually in /data/apache/bin
+4. Either modify the PerimeterX Makefile and set the var CC = axps to CC = <path found above>  or update the path variable to     include the correct path so when running make it can find the binary it needs
+5. $ sudo make && make install
 ```
 
 Make sure that the following line is added to your configuration file: 
