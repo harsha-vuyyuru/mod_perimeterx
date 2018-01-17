@@ -461,7 +461,7 @@ static apr_status_t px_child_exit(void *data) {
         }
     }
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "px_child_exit: cleanup finished");
-    return apr_status_t;
+    return rv;
 }
 
 static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
