@@ -182,7 +182,7 @@ char *create_response(px_config *conf, request_context *ctx) {
     if (ctx->token_origin == TOKEN_ORIGIN_HEADER) {
         int expected_encoded_len = apr_base64_encode_len(html_size);
         char *encoded_html = apr_palloc(ctx->r->pool, expected_encoded_len + 1);
-        int encoded_len = apr_base64_encode(encoded_html, html, html_size);
+        apr_base64_encode(encoded_html, html, html_size);
         free(html);
         if (encoded_html == 0) {
             return NULL;
@@ -327,7 +327,7 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
         }
 
         // do health check until success
-        CURLcode res = CURLE_AGAIN;
+        res = CURLE_AGAIN;
         while (!conf->should_exit_thread && res != CURLE_OK) {
             curl_easy_setopt(curl, CURLOPT_URL, health_check_url);
             curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, conf->api_timeout_ms);
@@ -462,6 +462,7 @@ static apr_status_t px_child_exit(void *data) {
         }
     }
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "px_child_exit: cleanup finished");
+    return apr_status_t;
 }
 
 static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
@@ -748,7 +749,6 @@ static const char *set_block_page_url(cmd_parms *cmd, void *config, const char *
 }
 
 static const char *add_route_to_whitelist(cmd_parms *cmd, void *config, const char *route) {
-    const char *sep = ";";
     px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;

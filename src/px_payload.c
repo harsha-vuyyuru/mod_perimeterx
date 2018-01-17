@@ -13,7 +13,6 @@
 #include <http_log.h>
 
 static const char *LOGGER_DEBUG_FORMAT = "[PerimeterX - DEBUG][%s] - %s";
-static const char *LOGGER_ERROR_FORMAT = "[PerimeterX - ERROR][%s] - %s";
 
 #ifdef APLOG_USE_MODULE
 APLOG_USE_MODULE(perimeterx);

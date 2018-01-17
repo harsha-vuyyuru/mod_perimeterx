@@ -123,7 +123,6 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, l
     }
     CURLcode status = curl_easy_perform(curl);
     curl_slist_free_all(headers);
-    size_t len;
     if (status == CURLE_OK) {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
         if (status_code == HTTP_OK) {
