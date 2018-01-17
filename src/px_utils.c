@@ -10,9 +10,28 @@
 APLOG_USE_MODULE(perimeterx);
 #endif
 
+#define T_ESCAPE_URLENCODED    (16)
+#define TEST_CHAR(c, f)        (test_char_table[(unsigned)(c)] & (f))
+
 static const char *JSON_CONTENT_TYPE = "Content-Type: application/json";
 static const char *EXPECT = "Expect:";
 static const char *MOBILE_SDK_HEADER = "X-PX-AUTHORIZATION";
+
+static const unsigned char test_char_table[256] = {
+    32,30,30,30,30,30,30,30,30,30,31,30,30,30,30,30,30,30,30,30,
+    30,30,30,30,30,30,30,30,30,30,30,30,6,16,63,22,17,22,49,17,
+    17,17,1,16,16,0,0,18,0,0,0,0,0,0,0,0,0,0,16,23,
+    55,16,55,23,16,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,23,31,23,23,0,23,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,23,23,23,17,30,30,30,30,30,30,30,30,30,30,30,30,30,
+    30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,
+    30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,
+    30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,
+    30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,
+    30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,
+    30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30 
+};
 
 static void update_and_notify_health_check(px_config *conf) {
     if (!conf->px_health_check) {
@@ -165,4 +184,67 @@ int extract_payload_from_header(apr_pool_t *pool, apr_table_t *headers, const ch
         return version;
     }
     return -1;
+}
+
+static const char c2x_table[] = "0123456789abcdef";
+
+static unsigned char *c2x(unsigned what, unsigned char prefix, unsigned char *where) {
+    *where++ = prefix;
+    *where++ = c2x_table[what >> 4];
+    *where++ = c2x_table[what & 0xf];
+    return where;
+}
+
+int escape_urlencoded(char *escaped, const char *str, apr_ssize_t slen, apr_size_t *len) {
+    apr_size_t size = 1;
+    int found = 0;
+    const unsigned char *s = (const unsigned char *) str;
+    unsigned char *d = (unsigned char *) escaped;
+    unsigned c;
+
+    if (s) {
+        if (d) {
+            while ((c = *s) && slen) {
+                if (TEST_CHAR(c, T_ESCAPE_URLENCODED)) {
+                    d = c2x(c, '%', d);
+                    size += 2;
+                    found = 1;
+                }
+                else if (c == ' ') {
+                    *d++ = '+';
+                    found = 1;
+                }
+                else {
+                    *d++ = c;
+                }
+                ++s;
+                size++;
+                slen--;
+            }
+            *d = '\0';
+        }
+        else {
+            while ((c = *s) && slen) {
+                if (TEST_CHAR(c, T_ESCAPE_URLENCODED)) {
+                    size += 2;
+                    found = 1;
+                }
+                else if (c == ' ') {
+                    found = 1;
+                }
+                ++s;
+                size++;
+                slen--;
+            }
+        }
+    }
+
+    if (len) {
+        *len = size;
+    }
+    if (!found) {
+        return 1;
+    }
+
+    return 0;
 }

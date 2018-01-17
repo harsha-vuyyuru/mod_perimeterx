@@ -20,7 +20,6 @@
 #include <http_request.h>
 #include <http_log.h>
 #include <apr_strings.h>
-#include <apr_escape.h>
 #include <apr_atomic.h>
 #include <apr_portable.h>
 #include <apr_signal.h>
@@ -40,6 +39,8 @@ module AP_MODULE_DECLARE_DATA perimeterx_module;
 #ifdef APLOG_USE_MODULE
 APLOG_USE_MODULE(perimeterx);
 #endif
+
+#define ESCAPE_STRING      (-1)
 
 static const char *DEFAULT_BASE_URL = "https://sapi-%s.perimeterx.net";
 static const char *RISK_API = "/api/v2/risk";
@@ -270,9 +271,10 @@ int px_handle_request(request_rec *r, px_config *conf) {
                     ? apr_pstrcat(r->pool, r->uri, "?", r->args, NULL)
                     : apr_pstrcat(r->pool, r->uri, NULL);
                 apr_size_t encoded_url_len = 0;
-                if (apr_escape_urlencoded(NULL, url_arg, APR_ESCAPE_STRING, &encoded_url_len) == APR_SUCCESS)   {
+                
+                if (escape_urlencoded(NULL, url_arg, ESCAPE_STRING, &encoded_url_len) == 0)   {
                     char *encoded_url = apr_pcalloc(r->pool,encoded_url_len + 1);
-                    apr_escape_urlencoded(encoded_url, url_arg, APR_ESCAPE_STRING, NULL);
+                    escape_urlencoded(encoded_url, url_arg, ESCAPE_STRING, NULL);
                     redirect_url = apr_pstrcat(r->pool, conf->block_page_url, "?url=", encoded_url, "&uuid=", ctx->uuid, "&vid=", ctx->vid,  NULL);
                 } else {
                     redirect_url = apr_pstrcat(r->pool, conf->block_page_url, "?url=", r->uri, "&uuid=", ctx->uuid, "&vid=", ctx->vid,  NULL);
