@@ -451,7 +451,7 @@ static apr_status_t px_child_exit(void *data) {
         apr_thread_cond_signal(cfg->health_check_cond);
     }
     // terminate the queue and wake up all idle threads
-    apr_status_t rv = NULL;
+    apr_status_t rv = 0;
     if (cfg->activity_queue) {
         rv = apr_queue_term(cfg->activity_queue);
         if (rv != APR_SUCCESS) {
