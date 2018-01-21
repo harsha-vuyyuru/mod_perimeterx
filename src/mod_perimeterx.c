@@ -262,14 +262,9 @@ int px_handle_request(request_rec *r, px_config *conf) {
         if (!request_valid && ctx->block_enabled) {
             // redirecting requests to custom block page if exists
             if (conf->block_page_url) {
-                const char *redirect_url;
-                const char *url_arg = r->args ? apr_pstrcat(r->pool, r->uri, "?", r->args, NULL) : apr_pstrcat(r->pool, r->uri, NULL);
-                const char *encoded_url = pescape_urlencoded(r->pool, url_arg);
-                if (encoded_url)   {
-                    redirect_url = apr_pstrcat(r->pool, conf->block_page_url, "?url=", encoded_url, "&uuid=", ctx->uuid, "&vid=", ctx->vid,  NULL);
-                } else {
-                    redirect_url = apr_pstrcat(r->pool, conf->block_page_url, "?url=", r->uri, "&uuid=", ctx->uuid, "&vid=", ctx->vid,  NULL);
-                }
+                const char *url_arg = r->args ? apr_pstrcat(r->pool, r->uri, "?", r->args, NULL) : r->uri;
+                const char *url = pescape_urlencoded(r->pool, url_arg, r);
+                const char *redirect_url = apr_pstrcat(r->pool, conf->block_page_url, "?url=", url, "&uuid=", ctx->uuid, "&vid=", ctx->vid,  NULL);
                 apr_table_set(r->headers_out, "Location", redirect_url);
                 return HTTP_TEMPORARY_REDIRECT;
             }
