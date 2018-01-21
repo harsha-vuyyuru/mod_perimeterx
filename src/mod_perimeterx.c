@@ -40,8 +40,6 @@ module AP_MODULE_DECLARE_DATA perimeterx_module;
 APLOG_USE_MODULE(perimeterx);
 #endif
 
-#define ESCAPE_STRING      (-1)
-
 static const char *DEFAULT_BASE_URL = "https://sapi-%s.perimeterx.net";
 static const char *RISK_API = "/api/v2/risk";
 static const char *CAPTCHA_API = "/api/v2/risk/captcha";
@@ -270,9 +268,9 @@ int px_handle_request(request_rec *r, px_config *conf) {
                     : apr_pstrcat(r->pool, r->uri, NULL);
                 apr_size_t encoded_url_len = 0;
                 
-                if (escape_urlencoded(NULL, url_arg, ESCAPE_STRING, &encoded_url_len) == 0)   {
+                if (escape_urlencoded(NULL, url_arg, -1, &encoded_url_len) == 0)   {
                     char *encoded_url = apr_pcalloc(r->pool,encoded_url_len + 1);
-                    escape_urlencoded(encoded_url, url_arg, ESCAPE_STRING, NULL);
+                    escape_urlencoded(encoded_url, url_arg, -1, NULL);
                     redirect_url = apr_pstrcat(r->pool, conf->block_page_url, "?url=", encoded_url, "&uuid=", ctx->uuid, "&vid=", ctx->vid,  NULL);
                 } else {
                     redirect_url = apr_pstrcat(r->pool, conf->block_page_url, "?url=", r->uri, "&uuid=", ctx->uuid, "&vid=", ctx->vid,  NULL);
@@ -451,7 +449,7 @@ static apr_status_t px_child_exit(void *data) {
         apr_thread_cond_signal(cfg->health_check_cond);
     }
     // terminate the queue and wake up all idle threads
-    apr_status_t rv = 0;
+    apr_status_t rv = APR_SUCCESS;
     if (cfg->activity_queue) {
         rv = apr_queue_term(cfg->activity_queue);
         if (rv != APR_SUCCESS) {

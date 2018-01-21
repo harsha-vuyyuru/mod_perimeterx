@@ -314,7 +314,7 @@ risk_payload *decode_payload(const char *px_payload, const char *payload_key, re
     r_ctx->px_payload_decrypted = (char *)dpayload;
 
     // parse payload string to risk struct
-    risk_payload *c = parse_risk_payload((const char*)dpayload, r_ctx);
+    risk_payload *c = parse_risk_payload(r_ctx->px_payload_decrypted, r_ctx);
     return c;
 }
 
