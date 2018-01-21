@@ -246,15 +246,12 @@ int escape_urlencoded(char *escaped, const char *str, apr_size_t *len) {
     return 0;
 }
 
-const char *pescape_urlencoded(apr_pool_t *p, const char *str, request_rec *r) {
+const char *pescape_urlencoded(apr_pool_t *p, const char *str) {
     apr_size_t len;
     if (escape_urlencoded(NULL, str, &len) == 0) {
             char *encoded = apr_palloc(p, len);
             escape_urlencoded(encoded, str, NULL);
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "pescape_urlencoded| got 0 url_encoded [%s]", encoded);                     
             return encoded;
     }
-
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "pescape_urlencoded| got -1");                     
     return str;      
 }

@@ -263,7 +263,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
             // redirecting requests to custom block page if exists
             if (conf->block_page_url) {
                 const char *url_arg = r->args ? apr_pstrcat(r->pool, r->uri, "?", r->args, NULL) : r->uri;
-                const char *url = pescape_urlencoded(r->pool, url_arg, r);
+                const char *url = pescape_urlencoded(r->pool, url_arg);
                 const char *redirect_url = apr_pstrcat(r->pool, conf->block_page_url, "?url=", url, "&uuid=", ctx->uuid, "&vid=", ctx->vid,  NULL);
                 apr_table_set(r->headers_out, "Location", redirect_url);
                 return HTTP_TEMPORARY_REDIRECT;
