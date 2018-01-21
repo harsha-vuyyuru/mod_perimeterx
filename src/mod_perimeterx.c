@@ -180,7 +180,7 @@ char *create_response(px_config *conf, request_context *ctx) {
         char *encoded_html = apr_palloc(ctx->r->pool, expected_encoded_len + 1);
         apr_base64_encode(encoded_html, html, html_size);
         free(html);
-        if (encoded_html == 0) {
+        if (!encoded_html) {
             return NULL;
         }
         return create_mobile_response(conf, ctx, encoded_html);
@@ -263,14 +263,9 @@ int px_handle_request(request_rec *r, px_config *conf) {
             // redirecting requests to custom block page if exists
             if (conf->block_page_url) {
                 const char *redirect_url;
-                const char *url_arg = r->args
-                    ? apr_pstrcat(r->pool, r->uri, "?", r->args, NULL)
-                    : apr_pstrcat(r->pool, r->uri, NULL);
-                apr_size_t encoded_url_len = 0;
-                
-                if (escape_urlencoded(NULL, url_arg, -1, &encoded_url_len) == 0)   {
-                    char *encoded_url = apr_pcalloc(r->pool,encoded_url_len + 1);
-                    escape_urlencoded(encoded_url, url_arg, -1, NULL);
+                const char *url_arg = r->args ? apr_pstrcat(r->pool, r->uri, "?", r->args, NULL) : apr_pstrcat(r->pool, r->uri, NULL);
+                const char *encoded_url = pescape_urlencoded(r->pool, url_arg);
+                if (encoded_url)   {
                     redirect_url = apr_pstrcat(r->pool, conf->block_page_url, "?url=", encoded_url, "&uuid=", ctx->uuid, "&vid=", ctx->vid,  NULL);
                 } else {
                     redirect_url = apr_pstrcat(r->pool, conf->block_page_url, "?url=", r->uri, "&uuid=", ctx->uuid, "&vid=", ctx->vid,  NULL);

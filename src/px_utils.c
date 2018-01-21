@@ -194,7 +194,7 @@ static unsigned char *c2x(unsigned what, unsigned char prefix, unsigned char *wh
     return where;
 }
 
-int escape_urlencoded(char *escaped, const char *str, apr_ssize_t slen, apr_size_t *len) {
+int escape_urlencoded(char *escaped, const char *str, apr_size_t *len) {
     apr_size_t size = 1;
     int found = 0;
     const unsigned char *s = (const unsigned char *) str;
@@ -203,7 +203,7 @@ int escape_urlencoded(char *escaped, const char *str, apr_ssize_t slen, apr_size
 
     if (s) {
         if (d) {
-            while ((c = *s) && slen) {
+            while ((c = *s)) {
                 if (TEST_CHAR(c, T_ESCAPE_URLENCODED)) {
                     d = c2x(c, '%', d);
                     size += 2;
@@ -218,12 +218,11 @@ int escape_urlencoded(char *escaped, const char *str, apr_ssize_t slen, apr_size
                 }
                 ++s;
                 size++;
-                slen--;
             }
             *d = '\0';
         }
         else {
-            while ((c = *s) && slen) {
+            while ((c = *s)) {
                 if (TEST_CHAR(c, T_ESCAPE_URLENCODED)) {
                     size += 2;
                     found = 1;
@@ -233,7 +232,6 @@ int escape_urlencoded(char *escaped, const char *str, apr_ssize_t slen, apr_size
                 }
                 ++s;
                 size++;
-                slen--;
             }
         }
     }
@@ -246,4 +244,20 @@ int escape_urlencoded(char *escaped, const char *str, apr_ssize_t slen, apr_size
     }
 
     return 0;
+}
+
+const char *pescape_urlencoded(apr_pool_t *p, const char *str) {
+    apr_size_t len;
+    switch (escape_urlencoded(NULL, str, &len)) {
+        case 0: {
+            char *encoded = apr_palloc(p, len);
+            escape_urlencoded(encoded, str, NULL);
+            return encoded;
+        }
+
+        case -1: {
+            break;
+        }
+    }
+    return str;      
 }
