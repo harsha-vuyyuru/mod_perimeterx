@@ -29,7 +29,7 @@ Table of Contents
 - [openssl 1.0.1](https://www.openssl.org/source/) 
 - [libcurl >= 7.19.0](https://curl.haxx.se/docs/install.html) 
 - [jansson 2.6](http://www.digip.org/jansson/)
-- [Apache Portable Runtime (APR) >= 1.6.3](https://apr.apache.org/)
+- [Apache Portable Runtime (APR) >= 1.4.6](https://apr.apache.org/)
 - [pkg-config](https://en.wikipedia.org/wiki/Pkg-config)
 - [json-c](https://github.com/json-c/json-c/wiki)
 
@@ -55,7 +55,7 @@ $ sudo yum -y install curl-devel glibc-devel jansson-devel libcurl-devel json-c-
 1. $ git clone https://github.com/PerimeterX/mod_perimeterx.git
 2. $ cd mod_perimeterx/src
 3. Identify the location of the axps binary - usually in /data/apache/bin
-4. Either modify the PerimeterX Makefile and set the var CC = axps to CC = <path found above>  or update the path variable to     include the correct path so when running make it can find the binary it needs
+4. Either modify the PerimeterX Makefile and set the var CC = axps to CC = <path found above>  or update the path variable to include the correct path so when running make it can find the binary it needs
 5. $ sudo make && make install
 ```
 
@@ -95,7 +95,7 @@ Loaded Modules:
     CaptchaTimeout 1000
     ScoreHeader On
     ScoreHeaderName X-PX-SCORE
-    
+    MonitorMode Off 
 
     # service monitor directives
     PXServiceMonitor On
@@ -121,6 +121,7 @@ Loaded Modules:
                 AppID my_app_id
                 AuthToken my_auth_token
                 BlockingScore 90
+		MonitorMode Off
                 ReportPageRequest On
                 Captcha On
         </IfModule>
