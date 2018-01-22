@@ -13,7 +13,6 @@
 #include <http_log.h>
 
 static const char *LOGGER_DEBUG_FORMAT = "[PerimeterX - DEBUG][%s] - %s";
-static const char *LOGGER_ERROR_FORMAT = "[PerimeterX - ERROR][%s] - %s";
 
 #ifdef APLOG_USE_MODULE
 APLOG_USE_MODULE(perimeterx);
@@ -163,27 +162,27 @@ static void digest_payload1(const risk_payload*payload, request_context *ctx, co
     HMAC_Init_ex(&hmac, payload_key, strlen(payload_key), EVP_sha256(), NULL);
 
     if (payload->timestamp) {
-        HMAC_Update(&hmac, payload->timestamp, strlen(payload->timestamp));
+        HMAC_Update(&hmac, (unsigned char*) payload->timestamp, strlen(payload->timestamp));
     }
     if (payload->a) {
-        HMAC_Update(&hmac, payload->a, strlen(payload->a));
+        HMAC_Update(&hmac, (unsigned char*)  payload->a, strlen(payload->a));
     }
     if (payload->b) {
-        HMAC_Update(&hmac, payload->b, strlen(payload->b));
+        HMAC_Update(&hmac, (unsigned char*) payload->b, strlen(payload->b));
     }
     if (payload->uuid) {
-        HMAC_Update(&hmac, payload->uuid, strlen(payload->uuid));
+        HMAC_Update(&hmac, (unsigned char*) payload->uuid, strlen(payload->uuid));
     }
     if (payload->vid) {
-        HMAC_Update(&hmac, payload->vid, strlen(payload->vid));
+        HMAC_Update(&hmac, (unsigned char*) payload->vid, strlen(payload->vid));
     }
 
     while (*signing_fields) {
-        HMAC_Update(&hmac, *signing_fields, strlen(*signing_fields));
+        HMAC_Update(&hmac, (unsigned char*) *signing_fields, strlen(*signing_fields));
         signing_fields++;
     }
 
-    int len = buffer_len / 2;
+    unsigned int len = buffer_len / 2;
     HMAC_Final(&hmac, hash, &len);
     HMAC_CTX_cleanup(&hmac);
 
@@ -201,14 +200,14 @@ static void digest_payload3(const risk_payload *payload, request_context *ctx, c
     const char *d = strchr(ctx->px_payload, ':');
     if (d) {
         d += 1; // point after :
-        HMAC_Update(&hmac, d, strlen(d));
+        HMAC_Update(&hmac, (unsigned char*) d, strlen(d));
     }
     while (*signing_fields) {
-        HMAC_Update(&hmac, *signing_fields, strlen(*signing_fields));
+        HMAC_Update(&hmac, (unsigned char*) *signing_fields, strlen(*signing_fields));
         signing_fields++;
     }
 
-    int len = buffer_len / 2;
+    unsigned int len = buffer_len / 2;
     HMAC_Final(&hmac, hash, &len);
     HMAC_CTX_cleanup(&hmac);
     for (int i = 0; i < len; i++) {
@@ -312,10 +311,10 @@ risk_payload *decode_payload(const char *px_payload, const char *payload_key, re
 
     dpayload_len += len;
     dpayload[dpayload_len] = '\0';
-    r_ctx->px_payload_decrypted = dpayload;
+    r_ctx->px_payload_decrypted = (char *)dpayload;
 
     // parse payload string to risk struct
-    risk_payload *c = parse_risk_payload((const char*)dpayload, r_ctx);
+    risk_payload *c = parse_risk_payload(r_ctx->px_payload_decrypted, r_ctx);
     return c;
 }
 

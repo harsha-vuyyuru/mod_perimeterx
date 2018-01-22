@@ -20,7 +20,6 @@
 #include <http_request.h>
 #include <http_log.h>
 #include <apr_strings.h>
-#include <apr_escape.h>
 #include <apr_atomic.h>
 #include <apr_portable.h>
 #include <apr_signal.h>
@@ -58,10 +57,8 @@ static const char *VID_HEADER_NAME = "X-PX-VID";
 static const char *UUID_HEADER_NAME = "X-PX-UUID";
 static const char *ACCEPT_HEADER_NAME = "Accept";
 static const char *ACCESS_CONTROL_ALLOW_ORIGIN_HEADER_NAME = "Access-Control-Allow-Origin";
-static const char *ORIGIN_HEADER_NAME = "Origin";
 static const char *ORIGIN_WILDCARD_VALUE = "*";
 
-static const char *CAPTCHA_COOKIE = "_pxCaptcha";
 static const int MAX_CURL_POOL_SIZE = 10000;
 static const int ERR_BUF_SIZE = 128;
 
@@ -181,9 +178,9 @@ char *create_response(px_config *conf, request_context *ctx) {
     if (ctx->token_origin == TOKEN_ORIGIN_HEADER) {
         int expected_encoded_len = apr_base64_encode_len(html_size);
         char *encoded_html = apr_palloc(ctx->r->pool, expected_encoded_len + 1);
-        int encoded_len = apr_base64_encode(encoded_html, html, html_size);
+        apr_base64_encode(encoded_html, html, html_size);
         free(html);
-        if (encoded_html == 0) {
+        if (!encoded_html) {
             return NULL;
         }
         return create_mobile_response(conf, ctx, encoded_html);
@@ -265,18 +262,9 @@ int px_handle_request(request_rec *r, px_config *conf) {
         if (!request_valid && ctx->block_enabled) {
             // redirecting requests to custom block page if exists
             if (conf->block_page_url) {
-                const char *redirect_url;
-                const char *url_arg = r->args
-                    ? apr_pstrcat(r->pool, r->uri, "?", r->args, NULL)
-                    : apr_pstrcat(r->pool, r->uri, NULL);
-                apr_size_t encoded_url_len = 0;
-                if (apr_escape_urlencoded(NULL, url_arg, APR_ESCAPE_STRING, &encoded_url_len) == APR_SUCCESS)   {
-                    char *encoded_url = apr_pcalloc(r->pool,encoded_url_len + 1);
-                    apr_escape_urlencoded(encoded_url, url_arg, APR_ESCAPE_STRING, NULL);
-                    redirect_url = apr_pstrcat(r->pool, conf->block_page_url, "?url=", encoded_url, "&uuid=", ctx->uuid, "&vid=", ctx->vid,  NULL);
-                } else {
-                    redirect_url = apr_pstrcat(r->pool, conf->block_page_url, "?url=", r->uri, "&uuid=", ctx->uuid, "&vid=", ctx->vid,  NULL);
-                }
+                const char *url_arg = r->args ? apr_pstrcat(r->pool, r->uri, "?", r->args, NULL) : r->uri;
+                const char *url = pescape_urlencoded(r->pool, url_arg);
+                const char *redirect_url = apr_pstrcat(r->pool, conf->block_page_url, "?url=", url, "&uuid=", ctx->uuid, "&vid=", ctx->vid,  NULL);
                 apr_table_set(r->headers_out, "Location", redirect_url);
                 return HTTP_TEMPORARY_REDIRECT;
             }
@@ -325,7 +313,7 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
         }
 
         // do health check until success
-        CURLcode res = CURLE_AGAIN;
+        res = CURLE_AGAIN;
         while (!conf->should_exit_thread && res != CURLE_OK) {
             curl_easy_setopt(curl, CURLOPT_URL, health_check_url);
             curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, conf->api_timeout_ms);
@@ -451,8 +439,9 @@ static apr_status_t px_child_exit(void *data) {
         apr_thread_cond_signal(cfg->health_check_cond);
     }
     // terminate the queue and wake up all idle threads
+    apr_status_t rv = APR_SUCCESS;
     if (cfg->activity_queue) {
-        apr_status_t rv = apr_queue_term(cfg->activity_queue);
+        rv = apr_queue_term(cfg->activity_queue);
         if (rv != APR_SUCCESS) {
             char buf[ERR_BUF_SIZE];
             char *err = apr_strerror(rv, buf, sizeof(buf));
@@ -460,6 +449,7 @@ static apr_status_t px_child_exit(void *data) {
         }
     }
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "px_child_exit: cleanup finished");
+    return rv;
 }
 
 static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
@@ -746,7 +736,6 @@ static const char *set_block_page_url(cmd_parms *cmd, void *config, const char *
 }
 
 static const char *add_route_to_whitelist(cmd_parms *cmd, void *config, const char *route) {
-    const char *sep = ";";
     px_config *conf = get_config(cmd, config);
     if (!conf) {
         return ERROR_CONFIG_MISSING;

@@ -10,7 +10,6 @@ APLOG_USE_MODULE(perimeterx);
 #endif
 
 static const char *BLOCKED_ACTIVITY_TYPE = "block";
-static const char *PAGE_REQUESTED_ACTIVITY_TYPE = "page_requested";
 static const char *MONITOR_MODE = "monitor";
 static const char *ACTIVE_BLOCKING_MODE = "active_blocking";
 
