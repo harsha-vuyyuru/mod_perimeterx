@@ -29,7 +29,7 @@ Table of Contents
 - [openssl 1.0.1](https://www.openssl.org/source/) 
 - [libcurl >= 7.19.0](https://curl.haxx.se/docs/install.html) 
 - [jansson 2.6](http://www.digip.org/jansson/)
-- [Apache Portable Runtime (APR) >=1.4.6](https://apr.apache.org/)
+- [Apache Portable Runtime (APR) >= 1.6.3](https://apr.apache.org/)
 - [pkg-config](https://en.wikipedia.org/wiki/Pkg-config)
 - [json-c](https://github.com/json-c/json-c/wiki)
 
@@ -40,13 +40,27 @@ You can install dependencies using the Linux package manager (```yum``` / ```deb
 $ sudo apt-get install libjansson-dev libjson0 libjson0-dev libssl-dev libcurl4-openssl-dev apache2-dev pkg-config
 ```
 
+### RHEL/CentOS users
+```shell
+$ yum install -y yum-plugin-ovl
+$ yum install wget -y
+# Download the proper epel release for your distrubtion
+# http://mirror.nonstop.co.il/epel/
+# EXAMPLE FOR version 6
+# wget http://download.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm
+$ rpm -Uvh epel-release*.rpm
+$ yum -y groupinstall multilib_policy=all "Development tools"
+$ yum -y install curl-devel glibc-devel jansson-devel libcurl-devel json-c-devel libgcc libssh2-devel libstdc++-devel openssl-devel pcre-devel httpd-devel
+```
+
 <a name="installation"></a>Installation
 ----------------------------------------
 ```shell
-$ git clone https://github.com/PerimeterX/mod_perimeterx.git
-$ cd mod_perimeterx/src
-$ make
-$ sudo make install
+1. $ git clone https://github.com/PerimeterX/mod_perimeterx.git
+2. $ cd mod_perimeterx/src
+3. Identify the location of the axps binary - usually in /data/apache/bin
+4. Either modify the PerimeterX Makefile and set the var CC = axps to CC = <path found above>  or update the path variable to     include the correct path so when running make it can find the binary it needs
+5. $ sudo make && make install
 ```
 
 Make sure that the following line is added to your configuration file: 
