@@ -1,3 +1,19 @@
+libapache-mod-perimeterx (2.8.0) jessie; urgency=high
+
+    * Added CORS support
+    * Added Monitor Mode, default mode is Off
+    * Support new captcha flow
+    * Support Cookie V3
+    * Support for funCaptcha
+    * Rendering block pages by action
+    * Fixed internal request handling
+    * Bug fixes on mobile sdk and configurations
+    * Stability and memory allocations
+    * SSL Optimizations
+    * Support for APR 1.4.6
+
+ -- nitzanpx <nitzanpx@github>  Mon, 22 Jan 2018 10:30:00 +0000
+
 libapache-mod-perimeterx (2.8.0-rc.9) jessie; urgency=medium
 
     * Init and clean OpenSSL with threading support 

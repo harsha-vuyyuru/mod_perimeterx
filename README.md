@@ -42,15 +42,11 @@ $ sudo apt-get install libjansson-dev libjson0 libjson0-dev libssl-dev libcurl4-
 
 ### RHEL/CentOS users
 ```shell
-$ yum install -y yum-plugin-ovl
-$ yum install wget -y
-# Download the proper epel release for your distrubtion
-# http://mirror.nonstop.co.il/epel/
-# EXAMPLE FOR version 6
-# wget http://download.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm
-$ rpm -Uvh epel-release*.rpm
-$ yum -y groupinstall multilib_policy=all "Development tools"
-$ yum -y install curl-devel glibc-devel jansson-devel libcurl-devel json-c-devel libgcc libssh2-devel libstdc++-devel openssl-devel pcre-devel httpd-devel
+$ sudo yum install -y yum-plugin-ovl
+$ sudo yum install wget -y
+$ sudo yum install epel-release
+$ sudo yum -y groupinstall multilib_policy=all "Development tools"
+$ sudo yum -y install curl-devel glibc-devel jansson-devel libcurl-devel json-c-devel libgcc libssh2-devel libstdc++-devel openssl-devel pcre-devel httpd-devel
 ```
 
 <a name="installation"></a>Installation
