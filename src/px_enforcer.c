@@ -384,7 +384,7 @@ handle_response:
                 }
 
                 if (risk_response->action) {
-                    ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s] px_verify_request: parsing action (%s)", ctx->app_id, risk_response->action);
+                    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s] px_verify_request: parsing action (%s)", ctx->app_id, risk_response->action);
                     ctx->action = parseBlockAction(risk_response->action);
                 }
 
@@ -397,7 +397,7 @@ handle_response:
                     ctx->pass_reason = PASS_REASON_S2S;
                 }
             } else {
-                ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, LOGGER_ERROR_FORMAT, ctx->app_id, "Unexpected exception while evaluating Risk cookie.");
+                ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, LOGGER_ERROR_FORMAT, ctx->app_id, "Unexpected exception while evaluating risk.");
                 return true;
             }
             break;
