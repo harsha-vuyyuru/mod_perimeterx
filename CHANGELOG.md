@@ -5,18 +5,20 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [2.8.0] - 01-22-2018
-* Support for APR 1.4.6
+* Added support for APR 1.4.6
+* Added support for js challenge
+* Added new logs format
  -- RC Changes Below
 * Added CORS support
 * Added Monitor Mode, default mode is Off
-* Support new captcha flow
-* Support Cookie V3
-* Support for funCaptcha
-* Rendering block pages by action
+* Added support new captcha flow
+* Added support Cookie V3
+* Added support for funCaptcha
+* Modified rendering block pages by action
 * Fixed internal request handling
-* Bug fixes on mobile sdk and configurations
-* Stability and memory allocations 
-* SSL Optimizations
+* Fixed mobile sdk and configurations
+* Improved stability and memory allocations 
+* Improved SSL Optimizations
 
 ## [2.8.0-rc.9] 11-20-2017
 * Init and clean OpenSSL with threading support 
