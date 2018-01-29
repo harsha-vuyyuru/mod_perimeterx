@@ -10,7 +10,6 @@ APLOG_USE_MODULE(perimeterx);
 #endif
 
 static const char *BLOCKED_ACTIVITY_TYPE = "block";
-static const char *PAGE_REQUESTED_ACTIVITY_TYPE = "page_requested";
 static const char *MONITOR_MODE = "monitor";
 static const char *ACTIVE_BLOCKING_MODE = "active_blocking";
 
@@ -37,6 +36,7 @@ static const char *CALL_REASON_STR[] = {
     [CALL_REASON_SENSITIVE_ROUTE] = "sensitive_route",
     [CALL_REASON_CAPTCHA_FAILED] = "captcha_failed",
     [CALL_REASON_MOBILE_SDK_CONNECTION_ERROR] = "mobile_sdk_connection_error",
+    [CALL_REASON_MOBILE_SDK_PINNING_ERROR] = "mobile_sdk_pinning_error"
 };
 
 // using cookie as value instead of payload, changing it will effect the collector
@@ -198,6 +198,10 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf) {
     return request_str;
 }
 
+const char *get_call_reason_string(call_reason_t call_reason) {
+    return CALL_REASON_STR[call_reason];
+}
+
 char *create_captcha_payload(const request_context *ctx, const px_config *conf) {
     // headers array
     const apr_array_header_t *header_arr = apr_table_elts(ctx->headers);
@@ -285,6 +289,7 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
     int score = 0;
     const char *uuid = NULL;
     const char *action = NULL;
+    const char *action_data_body = NULL; 
     if (json_unpack(j_response, "{s:i,s:s,s:i,s:s}",
                 "status", &status,
                 "uuid", &uuid,
@@ -297,12 +302,24 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
         return NULL;
     }
 
+    if (!strcmp(action, "j")) {
+        json_t *action_data = json_object_get(j_response, "action_data");
+        if (json_unpack(action_data, "{s:s}",
+                    "body", &action_data_body)) { 
+           ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s]: parse_risk_response: failed to unpack risk api action_data", ctx->app_id);
+           json_decref(j_response);
+           return NULL;
+        }
+        ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, ctx->r->server, "[%s]: parse_risk_response: succsefully got aciton_data_body (%s)", ctx->app_id, action_data_body);
+    }
+
     risk_response *parsed_response = (risk_response*)apr_palloc(ctx->r->pool, sizeof(risk_response));
     if (parsed_response) {
         parsed_response->uuid = apr_pstrdup(ctx->r->pool, uuid);
         parsed_response->status = status;
         parsed_response->score = score;
         parsed_response->action = apr_pstrdup(ctx->r->pool, action);
+        parsed_response->action_data_body = apr_pstrdup(ctx->r->pool, action_data_body);
     }
     json_decref(j_response);
     return parsed_response;
@@ -359,7 +376,7 @@ const char* context_to_json_string(request_context *ctx) {
         }
     }
 
-    ctx_json = json_pack_ex(&error, JSON_DECODE_ANY, "{ss, ss, ss, ss, ss, ss, ss, ss, ss, si, ss, sb, sb, sO}",
+    ctx_json = json_pack_ex(&error, JSON_DECODE_ANY, "{ss, ss, ss, ss, ss, ss, ss, ss, ss, si, ss, sb, sb, sO, ss}",
             "ip", ctx->ip,
             "hostname", ctx->hostname,
             "full_url", ctx->full_url,
@@ -373,7 +390,8 @@ const char* context_to_json_string(request_context *ctx) {
             "uri", ctx->uri,
             "is_made_s2s_api_call", ctx->made_api_call,
             "sensitive_route", ctx->call_reason == CALL_REASON_SENSITIVE_ROUTE,
-            "headers", headers);
+            "headers", headers,
+            "cookie_origin", TOKEN_ORIGIN_STR[ctx->token_origin]);
     json_decref(headers);
 
     if (!ctx_json) {
@@ -383,6 +401,12 @@ const char* context_to_json_string(request_context *ctx) {
     }
 
     // nullable fields
+    if (ctx->px_payload_hmac) {
+        json_object_set_new(ctx_json, "px_cookie_hmac", json_string(ctx->px_payload_hmac));
+    }
+    if (ctx->action) {
+        json_object_set_new(ctx_json, "block_action", json_string(ACTION_STR[ctx->action]));
+    }
     if (ctx->vid) {
         json_object_set_new(ctx_json, "vid", json_string(ctx->vid));
     }

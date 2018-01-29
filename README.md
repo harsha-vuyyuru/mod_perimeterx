@@ -5,7 +5,7 @@
 [PerimeterX](http://www.perimeterx.com) Apache Module
 ===========================================
 
-> Latest stable version: [v2.7.0](https://github.com/PerimeterX/mod_perimeterx/releases/tag/v2.7.0)
+> Latest stable version: [v2.8.0](https://github.com/PerimeterX/mod_perimeterx/releases/tag/v2.8.0)
 
 
 Table of Contents
@@ -29,7 +29,7 @@ Table of Contents
 - [openssl 1.0.1](https://www.openssl.org/source/) 
 - [libcurl >= 7.19.0](https://curl.haxx.se/docs/install.html) 
 - [jansson 2.6](http://www.digip.org/jansson/)
-- [Apache Portable Runtime (APR) >= 1.6.3](https://apr.apache.org/)
+- [Apache Portable Runtime (APR) >= 1.4.6](https://apr.apache.org/)
 - [pkg-config](https://en.wikipedia.org/wiki/Pkg-config)
 - [json-c](https://github.com/json-c/json-c/wiki)
 
@@ -42,15 +42,11 @@ $ sudo apt-get install libjansson-dev libjson0 libjson0-dev libssl-dev libcurl4-
 
 ### RHEL/CentOS users
 ```shell
-$ yum install -y yum-plugin-ovl
-$ yum install wget -y
-# Download the proper epel release for your distrubtion
-# http://mirror.nonstop.co.il/epel/
-# EXAMPLE FOR version 6
-# wget http://download.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm
-$ rpm -Uvh epel-release*.rpm
-$ yum -y groupinstall multilib_policy=all "Development tools"
-$ yum -y install curl-devel glibc-devel jansson-devel libcurl-devel json-c-devel libgcc libssh2-devel libstdc++-devel openssl-devel pcre-devel httpd-devel
+$ sudo yum install -y yum-plugin-ovl
+$ sudo yum install wget -y
+$ sudo yum install epel-release
+$ sudo yum -y groupinstall multilib_policy=all "Development tools"
+$ sudo yum -y install curl-devel glibc-devel jansson-devel libcurl-devel json-c-devel libgcc libssh2-devel libstdc++-devel openssl-devel pcre-devel httpd-devel
 ```
 
 <a name="installation"></a>Installation
@@ -59,7 +55,7 @@ $ yum -y install curl-devel glibc-devel jansson-devel libcurl-devel json-c-devel
 1. $ git clone https://github.com/PerimeterX/mod_perimeterx.git
 2. $ cd mod_perimeterx/src
 3. Identify the location of the axps binary - usually in /data/apache/bin
-4. Either modify the PerimeterX Makefile and set the var CC = axps to CC = <path found above>  or update the path variable to     include the correct path so when running make it can find the binary it needs
+4. Either modify the PerimeterX Makefile and set the var CC = axps to CC = <path found above>  or update the path variable to include the correct path so when running make it can find the binary it needs
 5. $ sudo make && make install
 ```
 
@@ -99,7 +95,7 @@ Loaded Modules:
     CaptchaTimeout 1000
     ScoreHeader On
     ScoreHeaderName X-PX-SCORE
-    
+    MonitorMode Off 
 
     # service monitor directives
     PXServiceMonitor On
@@ -125,6 +121,7 @@ Loaded Modules:
                 AppID my_app_id
                 AuthToken my_auth_token
                 BlockingScore 90
+		MonitorMode Off
                 ReportPageRequest On
                 Captcha On
         </IfModule>
@@ -145,12 +142,14 @@ LogLevel debug
 According to your apache configurations you should find in the error log mod_perimeters log, for example: 
 
 ```
-[Mon May 22 06:05:48.090556 2017] [:debug] [pid 10923:tid 140374710441728] px_enforcer.c(308): [PXg3P9d2ZQ]: create_context: create_context: useragent: (curl/7.51.0), px_cookie: ((null)), full_url: (localhost/), hostname: (localhost) , http_method: (GET), http_version: (1.1), uri: (/), ip: (172.17.0.1), block_enabled: (1)
-[Mon May 22 06:05:48.090634 2017] [:debug] [pid 10923:tid 140374710441728] px_enforcer.c(208): [PXg3P9d2ZQ]: risk payload: {"additional":{"s2s_call_reason":"none","http_method":"GET","http_version":"1.1","module_version":"Apache Module v2.2.0-RC"},"request":{"url":"localhost/","ip":"172.17.0.1","uri":"/","headers":[{"name":"Host","value":"localhost:9095"},{"name":"User-Agent","value":"curl/7.51.0"},{"name":"Accept","value":"*/*"}]}}
-[Mon May 22 06:05:48.349949 2017] [:debug] [pid 10923:tid 140374710441728] px_enforcer.c(213): [PXg3P9d2ZQ]: risk response: {"status":0,"uuid":"b3921460-3eb4-11e7-92dc-f7aec45df953","score":100,"action":"c"}
-[Mon May 22 06:05:48.350126 2017] [perimeterx:debug] [pid 10923:tid 140374710441728] mod_perimeterx.c(121): [PXg3P9d2ZQ]: px_handle_request: request blocked. (1)
+[Sun Dec 17 09:44:13.799604 2017] [perimeterx:debug] [pid 9] mod_perimeterx.c(235): [PerimeterX - DEBUG][APP_ID] - Starting request verification
+[Sun Dec 17 09:44:13.799788 2017] [perimeterx:debug] [pid 9] px_enforcer.c(264): [PerimeterX - DEBUG][APP_ID] - Cookie V3 found, Evaluating
+[Sun Dec 17 09:44:13.799884 2017] [perimeterx:debug] [pid 9] mod_perimeterx.c(239): [PerimeterX - DEBUG][APP_ID] - Request context created successfully
+[Sun Dec 17 09:44:13.799904 2017] [perimeterx:debug] [pid 9] px_enforcer.c(322): [PerimeterX - DEBUG][APP_ID] - No Captcha cookie present on the request
+[Sun Dec 17 09:44:13.799922 2017] [perimeterx:debug] [pid 9] px_payload.c(237): [PerimeterX - DEBUG][APP_ID] - decode_payload: hmac for v3 is b224726ef08887b80b4a09ec3ef55a91536147d8b334fb3f0ae3c43f8dbc678a
+[Sun Dec 17 09:44:13.802889 2017] [perimeterx:debug] [pid 9] px_payload.c(352): [PerimeterX - DEBUG][APP_ID] - Cookie evaluation ended successfully, risk score: 0
+[Sun Dec 17 09:44:14.216108 2017] [perimeterx:debug] [pid 9] px_client.c(24): [APP_ID]: post_req_request: post request payload  {"type":"page_requested","socket_ip":"172.17.0.1","url":"localhost/","px_app_id":"APP_ID","details":{"block_score":0,"block_reason":"none","http_method":"GET","http_version":"1.1","module_version":"Apache Module v2.8.0-rc.9","px_cookie":"{\\"u\\":\\"d79b83b0-e30e-11e7-9fc6-6f721d4b631d\\",\\"v\\":\\"7f803340-9d42-11e7-83a5-8f78028be852\\",\\"t\\":1513504354651,\\"s\\":0,\\"a\\":\\"c\\"}","client_uuid":"d79b83b0-e30e-11e7-9fc6-6f721d4b631d","pass_reason":"cookie"},"headers":{"Host":"localhost:3000","Connection":"keep-alive","Pragma":"no-cache","Cache-Control":"no-cache","Upgrade-Insecure-Requests":"1","User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.84 Safari/537.36","Accept":"text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8","Accept-Encoding":"gzip, deflate, br","Accept-Language":"en-US,en;q=0.9,he;q=0.8","Cookie":"PHPSESSID=h04pp2pbb7atjmrq9ovqc65hqp; _px=YNWJo4NKmRjcSl2lvohGq2KnAixUiBNbQq1AO9D6EkyS8trJ2dJye3oXk8EL53fl1BwW1zH3RJ+d/INP58k4ZQ==:1000:bS5VI9Y33XHl1hMw7X2IAdk83BNYh+VhpETz31+LxrA+xsc/bBkZGB9yAIlaaEZd3r/nujxmcADAvQgmsTrQuGwJGF7Nts85cEG/JnQ+CmoXCBNgLapIvkxYI7MowWDip6oiZ0LPR3JTkuqHdd7efHfG6Ex9Q4HEJ7g4pbIGB68/6mqbN6MkY+3coBtzBwv4iyoxpHPtyst61vA5HbTyw5d+VLEiBqKPezgBYI55F3dMpPDCcC/V+5N//HFWuUZ/oIN0LpzYlXFVK9LBympnvA==; _px3=b224726ef08887b80b4a09ec3ef55a91536147d8b334fb3f0ae3c43f8dbc678a:fhsk7nKkdV5lvBFWsIelUlpgVY44sa3e336YYrJ9T2MQvv5iJLcWYc3aZmICiIq8VqwFryK8BUWZMBDCZ+sdPQ==:1000:9bBom31EJqfEvSyqRHm44tI2OacekjgKioNcnVlBvjSDl/dbQzNXZdHSTZI5m0yIUyAT/kxMjOWdrpO/UR69gVE6ohuy+rR98ttMx/94MD2dHYKMevqN/D7pNNCFelL3s4nM41U88gyIN/ADf7ajwaNRk/XJ1zHFs9P4ipcaqKc="},"vid":"7f803340-9d42-11e7-83a5-8f78028be852"}
 ```
-
 
 
 <a name="contributing"></a> Contributing

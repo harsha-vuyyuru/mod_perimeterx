@@ -30,15 +30,15 @@ Directives
 | VidHeaderName | Sets the key for the VID header on the response | X-PX-VID  | String | Works only when `VidHeader` is set to On |
 | UuidHeader | Enables UUID to be placed on the response headers | Off  | On / Off |
 | UuidHeaderName | Sets the key for the UUID header on the response | X-PX-UUID  | String | Works only when `UuidHeader` is set to On |
-| EnableJsonResponse | Turn on response json when accept headers are `application/json` | false  | bool | On / Off |
+| EnableJsonResponse | Turn on response json when accept headers are `application/json` | Off | bool | On / Off |
 | PXApplyAccessControlAllowOriginByEnvVar | Take the value of a defined environmental variable and apply it as the value of the response header Access-Control-Allow-Origin on a blocked response. If the value of the environmental variable is not a compliant URI (scheme "://" host [ ":" port ]; <scheme>, <host>, <port> from RFC 3986) then it will not be applied| NULL  | String | Only enabled when a value is provided|
-| EnableAccessControlAllowOriginWildcard | Apply **\*** as the value of the response header Access-Control-Allow-Origin. When set this directive will override **PXApplyAccessControlAllowOriginByEnvVar** if it is also defined. | false | Bool | On / Off|
+| EnableAccessControlAllowOriginWildcard | Apply **\*** as the value of the response header Access-Control-Allow-Origin. When set this directive will override **PXApplyAccessControlAllowOriginByEnvVar** if it is also defined. | Off | Bool | On / Off|
 | CaptchaType | Sets the type of which captcha provider to use | reCaptcha  | String | reCaptcha/funCaptcha |
-| EnableTokenViaHeader | Toggles on/off using mobile sdk| true | bool | On / Off |
-| BackgroundActivitySend | Toggles on/off asyncrounus activity reporting | true | bool | On / Off |
+| EnableTokenViaHeader | Toggles on/off using mobile sdk| On | bool | On / Off |
+| BackgroundActivitySend | Toggles on/off asyncrounus activity reporting | On | bool | On / Off |
 | BackgroundActivityWorkers | Number of background workers to send activities | 10 | Number | Integer |
 | BackgroundActivityQueueSize | Queue size for background activity send | 1000 | Number | Integer |
-| MonitorMode | Toggles the module monitor | false | bool | On / Off |
+| MonitorMode | Toggles the module monitor | False | bool | On / Off |
 #### <a name="ipheader">IPHeader Additional Information</a>: 
 
 * The order of headers in the configuration matters. The first header found with a value will be taken as the IP address.
