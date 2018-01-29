@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [2.8.0] - 01-22-2018
+* Support for APR 1.4.6
+ -- RC Changes Below
 * Added CORS support
 * Added Monitor Mode, default mode is Off
 * Support new captcha flow
@@ -15,7 +17,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 * Bug fixes on mobile sdk and configurations
 * Stability and memory allocations 
 * SSL Optimizations
-* Support for APR 1.4.6
 
 ## [2.8.0-rc.9] 11-20-2017
 * Init and clean OpenSSL with threading support 
