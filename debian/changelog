@@ -1,5 +1,8 @@
 libapache-mod-perimeterx (2.8.0) jessie; urgency=high
 
+    * Added support for APR 1.4.6
+    * Added new logs format
+    * Added support for js challenge
     * Added CORS support
     * Added Monitor Mode, default mode is Off
     * Support new captcha flow
