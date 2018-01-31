@@ -194,6 +194,8 @@ static unsigned char *c2x(unsigned what, unsigned char prefix, unsigned char *wh
     return where;
 }
 
+// Functions escape_urlencoded & pescape_urlencoded were copied from APR v1.6
+// http://svn.apache.org/repos/asf/apr/apr/branches/1.6.x/include/apr_escape.h
 int escape_urlencoded(char *escaped, const char *str, apr_size_t *len) {
     apr_size_t size = 1;
     int found = 0;
