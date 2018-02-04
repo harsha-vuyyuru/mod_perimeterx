@@ -74,6 +74,7 @@ typedef struct px_config_t {
     bool cors_headers_enabled;
     captcha_type_t captcha_type;
     bool monitor_mode;
+    bool captcha_subdomain;
 } px_config;
 
 typedef struct health_check_data_t {
