@@ -39,6 +39,7 @@ Directives
 | BackgroundActivityWorkers | Number of background workers to send activities | 10 | Number | Integer |
 | BackgroundActivityQueueSize | Queue size for background activity send | 1000 | Number | Integer |
 | MonitorMode | Toggles the module monitor | False | bool | On / Off |
+| CaptchaSubdomain | Toggles captcha on subdomain making the module remove pxCaptcha cookie from all domains under main domain (will use .\<domain\>.\<ext\> instead of www.\<domain\>.\<ext\>)| False | bool | On / Off |
 #### <a name="ipheader">IPHeader Additional Information</a>: 
 
 * The order of headers in the configuration matters. The first header found with a value will be taken as the IP address.
