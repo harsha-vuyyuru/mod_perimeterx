@@ -1019,6 +1019,15 @@ static const char *set_monitor_mode(cmd_parms *cmd, void *config, int arg) {
     return NULL;
 }
 
+static const char *enable_captcha_subdomain(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->captcha_subdomain = arg ? true : false;
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     return px_handle_request(r, conf);
@@ -1066,6 +1075,7 @@ static void *create_config(apr_pool_t *p) {
         conf->captcha_type = CAPTCHA_TYPE_RECAPTCHA;
         conf->monitor_mode = false;
         conf->enable_token_via_header = true;
+        conf->captcha_subdomain = false;
     }
     return conf;
 }
@@ -1292,6 +1302,11 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Toggle monitor mode, requests will be inspected but not be blocked"),
+    AP_INIT_FLAG("CaptchaSubdomain",
+            enable_captcha_subdomain,
+            NULL,
+            OR_ALL,
+            "Flags that _pxCaptcha can be signed is a subdomain"),
     { NULL }
 };
 
