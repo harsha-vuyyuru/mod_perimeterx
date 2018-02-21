@@ -61,8 +61,11 @@ static const char *CAPTCHA_TYPE_STR[] = {
     [CAPTCHA_TYPE_FUNCAPTCHA] = "funCaptcha",
 };
 
+const char *captcha_type_str(captcha_type_t captcha_type) {
+    return CAPTCHA_TYPE_STR[captcha_type];
+}
+
 // format json requests
-//
 char *create_activity(const char *activity_type, const px_config *conf, const request_context *ctx) {
     json_t *j_details = json_pack("{s:i,s:s,s:s,s:s,s:s}",
             "block_score", ctx->score,
@@ -151,10 +154,11 @@ char *create_risk_payload(const request_context *ctx, const px_config *conf) {
     json_t *j_headers = headers_to_json_helper(header_arr);
 
     // request object
-    json_t *j_request = json_pack("{s:s,s:s,s:s,s:O}",
+    json_t *j_request = json_pack("{s:s,s:s,s:s,s:b,s:O}",
             "ip", ctx->ip,
             "uri", ctx->uri,
             "url", ctx->full_url,
+            "firstParty", conf->first_party_enabled,
             "headers", j_headers);
     json_decref(j_headers);
 

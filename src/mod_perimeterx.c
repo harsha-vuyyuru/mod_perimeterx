@@ -58,6 +58,7 @@ static const char *UUID_HEADER_NAME = "X-PX-UUID";
 static const char *ACCEPT_HEADER_NAME = "Accept";
 static const char *ACCESS_CONTROL_ALLOW_ORIGIN_HEADER_NAME = "Access-Control-Allow-Origin";
 static const char *ORIGIN_WILDCARD_VALUE = "*";
+static const char *HEADER_DELIMETER = ":";
 
 static const int MAX_CURL_POOL_SIZE = 10000;
 static const int ERR_BUF_SIZE = 128;
@@ -67,6 +68,7 @@ static const char* MAX_CURL_POOL_SIZE_EXCEEDED = "mod_perimeterx: CurlPoolSize c
 static const char *INVALID_WORKER_NUMBER_QUEUE_SIZE = "mod_perimeterx: invalid number of background activity workers - must be greater than zero";
 static const char *INVALID_ACTIVITY_QUEUE_SIZE = "mod_perimeterx: invalid background activity queue size - must be greater than zero";
 static const char *ERROR_BASE_URL_BEFORE_APP_ID = "mod_perimeterx: BaseUrl was set before AppId";
+static const char *ERROR_SHORT_APP_ID = "mod_perimeterx: AppId must be longer than 2 chars";
 
 static const char *BLOCKED_ACTIVITY_TYPE = "block";
 static const char *PAGE_REQUESTED_ACTIVITY_TYPE = "page_requested";
@@ -205,6 +207,21 @@ void post_verification(request_context *ctx, px_config *conf, bool request_valid
     }
 }
 
+static void redirect_copy_headers_out(request_rec *r, const redirect_response *res) {
+    apr_array_header_t *response_headers = res->response_headers;
+    if (response_headers && response_headers->nelts > 0) {
+        apr_table_clear(r->headers_out);
+        for (int i = 0; i < response_headers->nelts; i++) {
+            char *header = APR_ARRAY_IDX(response_headers, i, char*);
+            char *value = NULL;
+            char *key = apr_strtok (header, HEADER_DELIMETER, &value);
+            apr_table_set(r->headers_out, key, &value[1]);
+        }
+    } else if (res->predefined && res->response_content_type) {
+        apr_table_set(r->headers_out, "Content-Type", res->response_content_type);
+    }
+}
+
 int px_handle_request(request_rec *r, px_config *conf) {
     // fail open mode
     if (apr_atomic_read32(&conf->px_errors_count) >= conf->px_errors_threshold) {
@@ -214,7 +231,26 @@ int px_handle_request(request_rec *r, px_config *conf) {
     // Decline internal redirects and subrequests
     if (r->prev) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Request declined - interal redirect or subrequest");
-	    return DECLINED;
+        return DECLINED;
+    }
+
+    const redirect_response *redirect_res = NULL;
+    // Redirect client
+    if (strncmp(conf->client_path_prefix, r->parsed_uri.path, strlen(conf->client_path_prefix)) == 0) {
+        redirect_res = redirect_client(r, conf);
+        r->status = HTTP_OK;
+        redirect_copy_headers_out(r, redirect_res);
+        ap_rwrite(redirect_res->content, redirect_res->content_size, r);
+        return DONE;
+    }
+
+    // Redirect XHR
+    if (strncmp(conf->xhr_path_prefix, r->parsed_uri.path, strlen(conf->xhr_path_prefix)) == 0) {
+        redirect_res = redirect_xhr(r, conf);
+        r->status = HTTP_OK;
+        redirect_copy_headers_out(r, redirect_res);
+        ap_rwrite(redirect_res->content, redirect_res->content_size, r);
+        return DONE;
     }
 
     if (!px_should_verify_request(r, conf)) {
@@ -230,7 +266,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
     }
 
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Starting request verification");
-
+ 
     request_context *ctx = create_context(r, conf);
     if (ctx) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Request context created successfully");
@@ -470,8 +506,8 @@ static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
             return rv;
         }
 
-        cfg->curl_pool = curl_pool_create(cfg->pool, cfg->curl_pool_size);
-
+        cfg->curl_pool = curl_pool_create(cfg->pool, cfg->curl_pool_size, false);
+        cfg->redirect_curl_pool = curl_pool_create(cfg->pool, cfg->redirect_curl_pool_size, true);
         if (cfg->background_activity_send) {
             ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg->app_id, "px_child_setup: start init for background_activity_send");
 
@@ -600,11 +636,19 @@ static const char *set_app_id(cmd_parms *cmd, void *config, const char *app_id) 
     if (conf->base_url_is_set){
         return ERROR_BASE_URL_BEFORE_APP_ID;
     }
+    if (strlen(app_id) < 3) {
+        return ERROR_SHORT_APP_ID;
+    }
     conf->app_id = app_id;
     conf->base_url = apr_psprintf(cmd->pool, DEFAULT_BASE_URL, app_id, NULL);
     conf->risk_api_url = apr_pstrcat(cmd->pool, conf->base_url, RISK_API, NULL);
     conf->captcha_api_url = apr_pstrcat(cmd->pool, conf->base_url, CAPTCHA_API, NULL);
     conf->activities_api_url = apr_pstrcat(cmd->pool, conf->base_url, ACTIVITIES_API, NULL);
+    const char *reverse_prefix =  &app_id[2];
+    conf->xhr_path_prefix = apr_psprintf(cmd->pool, "/%s/xhr", reverse_prefix);
+    conf->client_path_prefix = apr_psprintf(cmd->pool, "/%s/init.js", reverse_prefix);
+    conf->client_exteral_path = apr_psprintf(cmd->pool, "//client.perimeterx.net/%s/main.min.js", app_id);
+    conf->collector_base_uri = apr_psprintf(cmd->pool, "https://collector-%s.perimeterx.net", app_id);
     return NULL;
 }
 
@@ -702,6 +746,20 @@ static const char *set_curl_pool_size(cmd_parms *cmd, void *config, const char *
     conf->curl_pool_size = pool_size;
     return NULL;
 }
+
+static const char *set_redirect_curl_pool_size(cmd_parms *cmd, void *config, const char *curl_pool_size) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    int pool_size = atoi(curl_pool_size);
+    if (pool_size > MAX_CURL_POOL_SIZE) {
+        return MAX_CURL_POOL_SIZE_EXCEEDED;
+    }
+    conf->redirect_curl_pool_size = pool_size;
+    return NULL;
+}
+
 
 static const char *set_base_url(cmd_parms *cmd, void *config, const char *base_url) {
     px_config *conf = get_config(cmd, config);
@@ -1019,6 +1077,53 @@ static const char *set_monitor_mode(cmd_parms *cmd, void *config, int arg) {
     return NULL;
 }
 
+static const char *enable_captcha_subdomain(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->captcha_subdomain = arg ? true : false;
+    return NULL;
+}
+
+static const char *enable_first_party(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->first_party_enabled = arg ? true : false;
+    return NULL;
+}
+
+static const char *enable_first_party_xhr(cmd_parms *cmd, void *config, int arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->first_party_xhr_enabled = arg ? true : false;
+    return NULL;
+}
+
+static const char* set_collector_base_url(cmd_parms *cmd, void *config, const char *arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+
+    conf->collector_base_uri = arg;
+    return NULL;
+}
+
+static const char* set_client_base_url(cmd_parms *cmd, void *config, const char *arg) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+
+    conf->client_base_uri = arg;
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     return px_handle_request(r, conf);
@@ -1036,6 +1141,7 @@ static void *create_config(apr_pool_t *p) {
         conf->module_version = PERIMETERX_MODULE_VERSION;
         conf->skip_mod_by_envvar = false;
         conf->curl_pool_size = 100;
+        conf->redirect_curl_pool_size = 40;
         conf->base_url = DEFAULT_BASE_URL;
         conf->risk_api_url = apr_pstrcat(p, conf->base_url, RISK_API, NULL);
         conf->captcha_api_url = apr_pstrcat(p, conf->base_url, CAPTCHA_API, NULL);
@@ -1066,6 +1172,10 @@ static void *create_config(apr_pool_t *p) {
         conf->captcha_type = CAPTCHA_TYPE_RECAPTCHA;
         conf->monitor_mode = false;
         conf->enable_token_via_header = true;
+        conf->captcha_subdomain = false;
+        conf->first_party_enabled = true;
+        conf->first_party_xhr_enabled = true;
+        conf->client_base_uri = "https://client.perimeterx.net";
     }
     return conf;
 }
@@ -1143,6 +1253,11 @@ static const command_rec px_directives[] = {
             "This headers will be used to get the request real IP, first header to get valid IP will be usesd"),
     AP_INIT_TAKE1("CurlPoolSize",
             set_curl_pool_size,
+            NULL,
+            OR_ALL,
+            "Determines number of curl active handles"),
+        AP_INIT_TAKE1("RedirectCurlPoolSize",
+            set_redirect_curl_pool_size,
             NULL,
             OR_ALL,
             "Determines number of curl active handles"),
@@ -1292,6 +1407,31 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Toggle monitor mode, requests will be inspected but not be blocked"),
+    AP_INIT_FLAG("CaptchaSubdomain",
+            enable_captcha_subdomain,
+            NULL,
+            OR_ALL,
+            "Flags that _pxCaptcha can be signed is a subdomain"),
+    AP_INIT_FLAG("FirstPartyEnabled",
+            enable_first_party,
+            NULL,
+            OR_ALL,
+            "Toggles first party mode"),
+    AP_INIT_FLAG("FirstPartyXhrEnabled",
+            enable_first_party_xhr,
+            NULL,
+            OR_ALL,
+            "Toggles first party xhr"),
+    AP_INIT_TAKE1("ClientBaseUrl",
+            set_client_base_url,
+            NULL,
+            OR_ALL,
+            "Sets base url which client requerst will be redirected to"),
+    AP_INIT_TAKE1("CollectorBaseUrl",
+            set_collector_base_url,
+            NULL,
+            OR_ALL,
+            "Sets base url which client activity requersts will be redirected to"),
     { NULL }
 };
 

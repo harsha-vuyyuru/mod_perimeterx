@@ -2,6 +2,7 @@
 #include <apr_strings.h>
 #include <http_log.h>
 #include <util_cookies.h>
+#include <regex.h>        
 
 #include "px_payload.h"
 #include "px_json.h"
@@ -98,13 +99,47 @@ static bool enable_block_for_hostname(request_rec *r, apr_array_header_t *domain
     return false;
 }
 
+void get_host_domain(request_context *ctx, const char **domain) {
+    char *regex_string = "([a-zA-Z0-9-]{1,61}[a-zA-Z0-9])\\.([a-zA-Z]{2,5})$"; 
+    size_t max_groups = 1;
+
+    regex_t regex_compiled;
+    regmatch_t group_array[max_groups];
+
+    if (regcomp(&regex_compiled, regex_string, REG_EXTENDED)) {
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Failed to compile regex", NULL));
+        return;
+    };
+
+    if (regexec(&regex_compiled, ctx->hostname, max_groups, group_array, 0) == 0) {
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Captcha on subdomain is active, domain match found, on hostname ", ctx->hostname, NULL));
+        unsigned int g = 0;
+        for (g = 0; g < max_groups; g++) {
+            if (group_array[g].rm_so == (size_t)-1) {
+                break;  // No more groups
+            }
+            char source_copy[strlen(ctx->hostname) + 1];
+            strcpy(source_copy, ctx->hostname);
+            source_copy[group_array[g].rm_eo] = 0;
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Setting cookie domain as .", source_copy + group_array[g].rm_so, NULL));
+            *domain = apr_pstrcat(ctx->r->pool, "domain=.", source_copy + group_array[g].rm_so, NULL);
+        }
+    }
+    regfree(&regex_compiled);
+}
+
 bool verify_captcha(request_context *ctx, px_config *conf) {
     if (!ctx->px_captcha) {
         return false;
     }
 
+    const char *domain = "";
+    if (conf->captcha_subdomain) { 
+        get_host_domain(ctx, &domain);
+    }
+
     // preventing reuse of captcha cookie by deleting it
-    apr_status_t res = ap_cookie_remove(ctx->r, CAPTCHA_COOKIE, NULL, ctx->r->headers_out, ctx->r->err_headers_out, NULL);
+    apr_status_t res = ap_cookie_remove(ctx->r, CAPTCHA_COOKIE, domain, ctx->r->headers_out, ctx->r->err_headers_out, NULL);
     if (res != APR_SUCCESS) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Could not remove _pxCaptcha from request");
     }
