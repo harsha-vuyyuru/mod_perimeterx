@@ -10,13 +10,26 @@
 APLOG_USE_MODULE(perimeterx);
 #endif
 
+#define BLOCKSIZE 4096
 #define T_ESCAPE_URLENCODED    (16)
 #define TEST_CHAR(c, f)        (test_char_table[(unsigned)(c)] & (f))
+
+struct response_t {
+    char* data;
+    size_t size;
+    server_rec *server;
+    request_rec *r;
+    apr_array_header_t *headers;
+    const char *app_id;
+};
+
 
 static const char *JSON_CONTENT_TYPE = "Content-Type: application/json";
 static const char *EXPECT = "Expect:";
 static const char *MOBILE_SDK_HEADER = "X-PX-AUTHORIZATION";
-
+static const char *ENFORCER_TRUE_IP = "x-px-enforcer-true-ip";
+static const char *FIRST_PARTY_HEADER = "x-px-first-party";
+static const char *FIRST_PARTY_HEADER_VALUE = "1";
 static const unsigned char test_char_table[256] = {
     32,30,30,30,30,30,30,30,30,30,31,30,30,30,30,30,30,30,30,30,
     30,30,30,30,30,30,30,30,30,30,30,30,6,16,63,22,17,22,49,17,
@@ -45,6 +58,41 @@ static void update_and_notify_health_check(px_config *conf) {
     apr_thread_mutex_unlock(conf->health_check_cond_mutex);
 }
 
+/**
+ * Use this function to read the body from request_rec
+ * Pointer to data will be set to body, free(body) will be needed
+ * After you finished working on the payload
+ * Returns -1 if failed
+ */
+static int read_body(request_rec *r, char **body) {
+    *body = NULL;
+    int ret = ap_setup_client_block(r, REQUEST_CHUNKED_ERROR);
+    if(OK == ret && ap_should_client_block(r)) {
+        char* buffer = (char*)apr_pcalloc(r->pool, BLOCKSIZE);
+        int len;
+        char *data = malloc(1);
+        int d_size = 0;
+        data[0] = '\0';
+        while((len=ap_get_client_block(r, buffer, BLOCKSIZE)) > 0) {
+            data = realloc(data, d_size + len + 1);
+            if (data == NULL) {
+                return -1;
+            }
+            memcpy(&(data[d_size]), buffer, len);
+            d_size += len;
+            data[d_size] = '\0';
+        }
+        if (len == -1) {
+            free(data);
+            return -1;
+        }
+        *body = data;
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "requrest_rec body[%s]", data);
+        return 0;
+    }
+    return -1;
+}
+
 static size_t write_response_cb(void* contents, size_t size, size_t nmemb, void *stream) {
     struct response_t *res = (struct response_t*)stream;
     size_t realsize = size * nmemb;
@@ -57,6 +105,29 @@ static size_t write_response_cb(void* contents, size_t size, size_t nmemb, void 
     res->size += realsize;
     res->data[res->size] = 0;
     return realsize;
+}
+
+/*
+ * Callback function used for libCurl to exract response headers from curl request
+ * Sets an array of headers on response_t->headers
+ * Only headers that have 'key: value' format will be added
+ * Headers like HTTP/1.1 200 OK will be ignored
+ * Returns the real size of the header
+ */
+static size_t header_callback(char *buffer, size_t size, size_t nitems, void *stream) {
+   struct response_t *res = (struct response_t*)stream;
+   size_t realsize = size * nitems;
+
+   // Verify that real size is bigger than 2 and last bytes are  \r \n
+   if (realsize > 2 && buffer[realsize-2]  == '\r' && buffer[realsize-1] == '\n') {
+        char *header = apr_pstrndup(res->r->pool, buffer, realsize-2); 
+        // Take only headers that have a valid format key: value
+        if (strrchr(header, ':')) {
+            const char** entry = apr_array_push(res->headers);
+            *entry = header;
+        }
+   }
+   return realsize;
 }
 
 static const char* extract_first_ip(apr_pool_t *p, const char *ip) {
@@ -247,11 +318,108 @@ int escape_urlencoded(char *escaped, const char *str, apr_size_t *len) {
 }
 
 const char *pescape_urlencoded(apr_pool_t *p, const char *str) {
-    apr_size_t len;
+    apr_size_t len;       
     if (escape_urlencoded(NULL, str, &len) == 0) {
             char *encoded = apr_palloc(p, len);
             escape_urlencoded(encoded, str, NULL);
             return encoded;
     }
     return str;      
+}
+
+/*
+ * Helper function to send http request as a proxy
+ * The headers from the original request will be copied (except for Host & sensitive headers)
+ * and the body of the request will also be copied
+ * The data will be set on response_data, content_size, response_headers
+ * Unlike post_request_helper, response_data doesn't have to be free as it being allocated using apr
+ * Returns CURLcode
+ */
+CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, const char *vid, px_config *conf, request_rec *r, const char **response_data, apr_array_header_t **response_headers, int *content_size) {
+    const char *url = apr_pstrcat(r->pool, base_url, uri, NULL);
+    struct response_t response;
+    struct curl_slist *headers = NULL;
+    long status_code;
+    char errbuf[CURL_ERROR_SIZE];
+    errbuf[0] = 0;
+
+    response.data = malloc(1);
+    response.size = 0;
+    response.headers = apr_array_make(r->pool, 0, sizeof(char*));
+    response.r = r;
+    response.server = r->server;
+
+    // Prepare headers
+    const apr_array_header_t *header_arr = apr_table_elts(r->headers_in);
+
+    if (header_arr) {
+        for (int i = 0; i < header_arr->nelts; i++) {
+            apr_table_entry_t h = APR_ARRAY_IDX(header_arr, i, apr_table_entry_t);
+            // Remove sensitive headers
+            if (strcasecmp(h.key, "Host") != 0) {
+                headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", h.key, h.val));
+            }
+        }
+    }
+
+    // append vid cookie
+    if (vid) {
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: redirect_helper: attaching vid header 'Cookie: pxvid=%s'", conf->app_id, vid);
+        headers = curl_slist_append(headers, apr_psprintf(r->pool, "Cookie: pxvid=%s;", vid));
+    }
+
+    // Attach first party logics
+    headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", FIRST_PARTY_HEADER, FIRST_PARTY_HEADER_VALUE));
+    headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", ENFORCER_TRUE_IP, get_request_ip(r, conf)));
+    headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", "Host", &base_url[8]));
+
+    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    
+    // Case we have body
+    char *body;
+    int body_res = read_body(r, &body);
+    if (body_res == 0 && strcmp(r->method, "POST") == 0) {
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body);
+    }
+    
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, conf->api_timeout_ms);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_response_cb);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*) &response);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void*) &response);
+    if (conf->proxy_url) {
+        curl_easy_setopt(curl, CURLOPT_PROXY, conf->proxy_url);
+    }
+    CURLcode status = curl_easy_perform(curl);
+    curl_slist_free_all(headers);
+    
+    if (body) {
+        free(body);
+    }
+
+    if (status == CURLE_OK) {
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
+        if (status_code == HTTP_OK) {
+            if (response_data != NULL) {
+                *response_headers = response.headers;
+                *response_data = apr_pstrmemdup(r->pool, response.data, response.size);
+                *content_size = response.size;
+            }
+        } else {
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: post_request: status: %lu, url: %s", conf->app_id, status_code, url);
+            status = CURLE_HTTP_RETURNED_ERROR;
+        }
+    } else {
+        update_and_notify_health_check(conf);
+        size_t len = strlen(errbuf);
+        if (len) {
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: post_request failed: %s", conf->app_id, errbuf);
+        } else {
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: post_request failed: %s", conf->app_id, curl_easy_strerror(status));
+        }
+    }
+    free(response.data);
+    return status;
 }

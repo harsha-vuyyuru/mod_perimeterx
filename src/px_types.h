@@ -41,7 +41,9 @@ typedef struct px_config_t {
     bool send_page_activities;
     const char *module_version;
     curl_pool *curl_pool;
+    curl_pool *redirect_curl_pool;
     int curl_pool_size;
+    int redirect_curl_pool_size;
     const char *proxy_url;
     apr_array_header_t *routes_whitelist;
     apr_array_header_t *useragents_whitelist;
@@ -75,6 +77,13 @@ typedef struct px_config_t {
     captcha_type_t captcha_type;
     bool monitor_mode;
     bool captcha_subdomain;
+    bool first_party_enabled;
+    bool first_party_xhr_enabled;
+    const char *client_path_prefix;
+    const char *xhr_path_prefix;
+    const char *client_exteral_path;
+    const char *collector_base_uri;
+    const char *client_base_uri;
 } px_config;
 
 typedef struct health_check_data_t {
@@ -217,5 +226,13 @@ typedef enum {
     PAGE_TEMPLATE_RECAPTCHA_MOBILE =  (PT_FLAG_MOBILE | PT_FLAG_RECAPTCHA),
     PAGE_TEMPLATE_FUNCAPTCHA_MOBILE =  (PT_FLAG_MOBILE | PT_FLAG_FUNCAPTCHA),
 } page_template_t;
+
+typedef struct redirect_response_t {
+    const char *content;
+    const char *response_content_type;
+    int content_size; 
+    apr_array_header_t *response_headers;
+    bool predefined;
+} redirect_response;
 
 #endif
