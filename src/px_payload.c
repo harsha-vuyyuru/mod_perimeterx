@@ -31,16 +31,9 @@ static unsigned char *decode_base64(const char *s, int *len, apr_pool_t *p) {
     if (!s) {
         return NULL;
     }
-    int l = strlen(s);
     int buffsize = apr_base64_decode_len(s) + 1;
     unsigned char *o = (unsigned char*)apr_palloc(p, buffsize);
-    BIO *bio = BIO_new_mem_buf((void*)s, -1);
-    BIO *b64 = BIO_new(BIO_f_base64());
-    bio = BIO_push(b64, bio);
-    BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
-    *len = BIO_read(bio, o, l);
-    BIO_free_all(b64);
-    o[*len + 1] = '\0';
+    *len = apr_base64_decode((char*)o, s);
     return o;
 }
 
