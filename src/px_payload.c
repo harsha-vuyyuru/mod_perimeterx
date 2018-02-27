@@ -33,8 +33,7 @@ static unsigned char *decode_base64(const char *s, int *len, apr_pool_t *p) {
     }
     int buffsize = apr_base64_decode_len(s) + 1;
     unsigned char *o = (unsigned char*)apr_palloc(p, buffsize);
-    int plain_len = apr_base64_decode((char*)o, s);
-    *len = plain_len; 
+    *len = apr_base64_decode((char*)o, s);
     return o;
 }
 
