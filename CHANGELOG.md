@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 * Added first party support, enabled by default - please note that additional changes may be required, refer to directives for more information
 * Added support for funCaptcha on mobile
 
+## [2.9.1] - 02-27-2018
+* Fixed base64 handling for cookies 
+
+## [2.9.0] - 02-21-2018
+* Added support for removing captcha cookie on subdomain wildcard, disabled by default
+* Added first party support, enabled by default - please note that additional changes may be required, refer to directives for more information
+* Added support for funCaptcha on mobile
+
 ## [2.8.0] - 01-22-2018
 * Added support for APR 1.4.6
 * Added support for js challenge

@@ -74,7 +74,7 @@ const redirect_response *redirect_client(request_rec *r, px_config *conf) {
 
     redirect_response *redirect_res = apr_pcalloc(r->pool, sizeof(redirect_response));
     const char *client_uri = apr_psprintf(r->pool, CLIENT_URI, conf->app_id);
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]:  redirect_client: forwarding request from %s to %s", conf->app_id,r->parsed_uri.path, client_uri);
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]:  redirect_client: forwarding request from %s to %s%s", conf->app_id,r->parsed_uri.path, conf->client_base_uri, client_uri);
     CURLcode status = forward_to_perimeterx(r, conf, redirect_res, conf->client_base_uri, client_uri, NULL);
     redirect_res->response_content_type = default_res->response_content_type;
     if (status != CURLE_OK) {
@@ -97,7 +97,7 @@ const redirect_response *redirect_xhr(request_rec *r, px_config *conf) {
 
     int cut_prefix_size = strlen(conf->xhr_path_prefix);
     const char *xhr_url = &r->unparsed_uri[cut_prefix_size]; 
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s] redirect_xhr: forwarding request from %s to %s", conf->app_id, r->unparsed_uri, xhr_url);
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s] redirect_xhr: forwarding request from %s to %s%s", conf->app_id, r->unparsed_uri, conf->collector_base_uri,xhr_url);
 
     // Copy VID
     const char *vid = NULL;
