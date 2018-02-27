@@ -371,7 +371,7 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
     // Attach first party logics
     headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", FIRST_PARTY_HEADER, FIRST_PARTY_HEADER_VALUE));
     headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", ENFORCER_TRUE_IP, get_request_ip(r, conf)));
-    headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", "Host", &base_url[8]));
+    headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", "Host", &base_url[7]));
 
     curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
@@ -381,6 +381,8 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
     char *body;
     int body_res = read_body(r, &body);
     if (body_res == 0 && strcmp(r->method, "POST") == 0) {
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: Found body attaching CURLPORT_POST 1L");
+        curl_easy_setopt(curl, CURLOPT_POST, 1L);
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body);
     }
     
