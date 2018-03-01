@@ -85,7 +85,7 @@ extern const char *CALL_REASON_STR[];
 /*
  * SSL initialization magic copied from mod_auth_cas
  */
-#if defined(OPENSSL_THREADS) && APR_HAS_THREADS
+#if defined(OPENSSL_THREADS) && APR_HAS_THREADS && (OPENSSL_VERSION_NUMBER < 0x10100000L)
 
 static apr_thread_mutex_t **ssl_locks;
 static int ssl_num_locks;
@@ -540,19 +540,19 @@ static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
 }
 
 static apr_status_t px_cleanup_pre_config(void *data) {
-#if (defined (OPENSSL_THREADS) && APR_HAS_THREADS)
+#if (defined (OPENSSL_THREADS) && APR_HAS_THREADS) &&  (OPENSSL_VERSION_NUMBER < 0x10100000L)
     if (CRYPTO_get_locking_callback() == px_ssl_locking_callback) {
         CRYPTO_set_locking_callback(NULL);
     }
-#ifdef OPENSSL_NO_THREADID
+    #ifdef OPENSSL_NO_THREADID
     if (CRYPTO_get_id_callback() == px_ssl_id_callback) {
         CRYPTO_set_id_callback(NULL);
     }
-#else
+    #else
     if (CRYPTO_THREADID_get_callback() == px_ssl_id_callback) {
         CRYPTO_THREADID_set_callback(NULL);
     }
-#endif /* OPENSSL_NO_THREADID */
+    #endif /* OPENSSL_NO_THREADID */
 #endif /* defined(OPENSSL_THREADS) && APR_HAS_THREADS */
 
     curl_global_cleanup();
@@ -560,9 +560,9 @@ static apr_status_t px_cleanup_pre_config(void *data) {
 
     CRYPTO_cleanup_all_ex_data();
 
-#if OPENSSL_VERSION_NUMBER >= 0x1000000fL
+#if (OPENSSL_VERSION_NUMBER >= 0x1000000fL) && (OPENSSL_VERSION_NUMBER < 0x10100000L)
     ERR_remove_thread_state(NULL);
-#else
+#elif (OPENSSL_VERSION_NUMBER < 0x1000000fL)
     ERR_remove_state(0);
 #endif
 
@@ -587,7 +587,7 @@ static int px_hook_pre_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp
     curl_global_init(CURL_GLOBAL_ALL);
     /*OpenSSL_add_all_digests();*/
 
-#if (defined(OPENSSL_THREADS) && APR_HAS_THREADS)
+#if (defined(OPENSSL_THREADS) && APR_HAS_THREADS) && (OPENSSL_VERSION_NUMBER < 0x10100000L)
     ssl_num_locks = CRYPTO_num_locks();
     ssl_locks = apr_pcalloc(p, ssl_num_locks * sizeof(*ssl_locks));
 
