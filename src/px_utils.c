@@ -70,7 +70,7 @@ static int read_body(request_rec *r, char **body) {
     if(OK == ret && ap_should_client_block(r)) {
         char* buffer = (char*)apr_pcalloc(r->pool, BLOCKSIZE);
         int len;
-        char *data = malloc(1);
+        char *data = NULL; 
         int d_size = 0;
         data[0] = '\0';
         while((len=ap_get_client_block(r, buffer, BLOCKSIZE)) > 0) {
