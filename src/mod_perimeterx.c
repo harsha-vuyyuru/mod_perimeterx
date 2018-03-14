@@ -234,6 +234,11 @@ int px_handle_request(request_rec *r, px_config *conf) {
         return DECLINED;
     }
 
+    // Decline if module is disabled
+    if (!conf->module_enabled) {
+        return DECLINED;
+    }
+
     const redirect_response *redirect_res = NULL;
     // Redirect client
     if (strncmp(conf->client_path_prefix, r->parsed_uri.path, strlen(conf->client_path_prefix)) == 0) {

@@ -91,7 +91,7 @@ const redirect_response *redirect_xhr(request_rec *r, px_config *conf) {
         default_res = &DEFAULT_GIF_RESPONSE; 
     }
     // Handle xhr/client feature turned off
-    if (!conf->first_party_enabled || !conf->first_party_enabled ) {
+    if (!conf->first_party_enabled || !conf->first_party_xhr_enabled) {
         return default_res;
     }
 
