@@ -223,6 +223,11 @@ static void redirect_copy_headers_out(request_rec *r, const redirect_response *r
 }
 
 int px_handle_request(request_rec *r, px_config *conf) {
+    // Decline if module is disabled
+    if (!conf->module_enabled) {
+        return DECLINED;
+    }
+
     // fail open mode
     if (apr_atomic_read32(&conf->px_errors_count) >= conf->px_errors_threshold) {
         return DECLINED;
