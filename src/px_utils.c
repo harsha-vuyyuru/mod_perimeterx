@@ -70,14 +70,20 @@ static int read_body(request_rec *r, char **body) {
     if(OK == ret && ap_should_client_block(r)) {
         char* buffer = (char*)apr_pcalloc(r->pool, BLOCKSIZE);
         int len;
-        char *data = NULL; 
+        char *data = malloc(1); 
+        char *realloc_data = NULL; 
         int d_size = 0;
         data[0] = '\0';
+        // Read body
         while((len=ap_get_client_block(r, buffer, BLOCKSIZE)) > 0) {
-            data = realloc(data, d_size + len + 1);
-            if (data == NULL) {
+            realloc_data = realloc(data, d_size + len + 1);
+            // On fail return -1 and free data as it was allocated 
+            if (realloc_data == NULL) {
+                free(data);
                 return -1;
             }
+            // assign reallocated data to original data
+            data = realloc_data;
             memcpy(&(data[d_size]), buffer, len);
             d_size += len;
             data[d_size] = '\0';
