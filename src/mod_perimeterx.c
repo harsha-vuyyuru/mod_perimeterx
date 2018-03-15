@@ -51,7 +51,7 @@ static const char *CONTENT_TYPE_JSON = "application/json";
 static const char *CONTENT_TYPE_HTML = "text/html";
 
 // constants
-static const char *PERIMETERX_MODULE_VERSION = "Apache Module v2.10.0";
+static const char *PERIMETERX_MODULE_VERSION = "Apache Module v2.10.1";
 static const char *SCORE_HEADER_NAME = "X-PX-SCORE";
 static const char *VID_HEADER_NAME = "X-PX-VID";
 static const char *UUID_HEADER_NAME = "X-PX-UUID";
@@ -223,6 +223,11 @@ static void redirect_copy_headers_out(request_rec *r, const redirect_response *r
 }
 
 int px_handle_request(request_rec *r, px_config *conf) {
+    // Decline if module is disabled
+    if (!conf->module_enabled) {
+        return DECLINED;
+    }
+
     // fail open mode
     if (apr_atomic_read32(&conf->px_errors_count) >= conf->px_errors_threshold) {
         return DECLINED;
