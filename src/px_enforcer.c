@@ -177,10 +177,6 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
 }
 
 bool px_should_verify_request(request_rec *r, px_config *conf) {
-    if (!conf->module_enabled) {
-        return false;
-    }
-
     if (conf->block_page_url && strcmp(r->uri, conf->block_page_url) == 0) {
         return false;
     }

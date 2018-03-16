@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/) 
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [2.10.1] - 03-15-2018
+* Fixed potential memory leak on first party while reading body
+* Fixed first party XHR flag
+* Fixed crash on empty configuration 
+
 ## [2.10.0] - 03-01-2018
 * Added support for OpenSSL 1.1.0
 
