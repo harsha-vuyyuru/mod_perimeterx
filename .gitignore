@@ -52,10 +52,9 @@ debian/libapache2-mod-perimeterx.prerm.debhelper
 debian/libapache2-mod-perimeterx.substvars
 .idea
 dev/
-build/scripts/build_rpm.sh
-build/scripts/build_deb.sh
 build/rpm/mod_perimeterx.spec
 Makefile.in
 config.h.in
 build/build_centos.sh
 build/build_ubuntu.sh
+build/packages/
