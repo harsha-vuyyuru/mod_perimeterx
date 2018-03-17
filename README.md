@@ -26,8 +26,8 @@ Table of Contents
 
 <a name="dependencies"></a> Dependencies
 ----------------------------------------
-- [openssl 1.0.1](https://www.openssl.org/source/) 
-- [libcurl >= 7.19.0](https://curl.haxx.se/docs/install.html) 
+- [openssl 1.0.1](https://www.openssl.org/source/)
+- [libcurl >= 7.19.0](https://curl.haxx.se/docs/install.html)
 - [jansson 2.6](http://www.digip.org/jansson/)
 - [Apache Portable Runtime (APR) >= 1.4.6](https://apr.apache.org/)
 - [pkg-config](https://en.wikipedia.org/wiki/Pkg-config)
@@ -37,7 +37,7 @@ You can install dependencies using the Linux package manager (```yum``` / ```deb
 
 #### Ubuntu users:
 ```shell
-$ sudo apt-get install libjansson-dev libjson0 libjson0-dev libssl-dev libcurl4-openssl-dev apache2-dev pkg-config
+$ sudo apt-get install libtool m4 autoconf automake libjansson-dev libssl-dev libcurl4-openssl-dev apache2-dev
 ```
 
 ### RHEL/CentOS users
@@ -59,7 +59,7 @@ $ sudo yum -y install curl-devel glibc-devel jansson-devel libcurl-devel json-c-
 5. $ sudo make && make install
 ```
 
-Make sure that the following line is added to your configuration file: 
+Make sure that the following line is added to your configuration file:
 
 `LoadModule perimeterx_module $MODULES_PATH/mod_perimeterx.so`
 
@@ -95,13 +95,13 @@ Loaded Modules:
     CaptchaTimeout 1000
     ScoreHeader On
     ScoreHeaderName X-PX-SCORE
-    MonitorMode Off 
+    MonitorMode Off
 
     # service monitor directives
     PXServiceMonitor On
     MaxPXErrorsThreshold 100
     PXErrorsCountInterval 30000
-    
+
     # filter
     SensitiveRoutes /login
     PXWhitelistRoutes /server-status /staging
@@ -131,15 +131,15 @@ Loaded Modules:
 <a name="troubleshoot"></a>Logging and Troubleshooting
 ----------------------------------------
 ### Debug Logs
-mod_perimeterx is writing to apace error log. 
-In order to log debug messages to apache error log you should set the `LogLevel` [directive](https://httpd.apache.org/docs/2.4/mod/core.html#loglevel): 
+mod_perimeterx is writing to apace error log.
+In order to log debug messages to apache error log you should set the `LogLevel` [directive](https://httpd.apache.org/docs/2.4/mod/core.html#loglevel):
 
 ```
 # apache configuration
 LogLevel debug
 ```
 
-According to your apache configurations you should find in the error log mod_perimeters log, for example: 
+According to your apache configurations you should find in the error log mod_perimeters log, for example:
 
 ```
 [Sun Dec 17 09:44:13.799604 2017] [perimeterx:debug] [pid 9] mod_perimeterx.c(235): [PerimeterX - DEBUG][APP_ID] - Starting request verification

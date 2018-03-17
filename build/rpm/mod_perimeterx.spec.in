@@ -5,14 +5,14 @@
 
 Summary:	Apache 2 PerimeterX module
 Name:		mod_perimeterx
-Version:	2.10.0
+Version:	@VERSION@
 Release:	1%{?dist}
 Group:		System Environment/Daemons
 License:	MIT
 URL:		http://www.perimeterx.com/
-Source0:	https://github.com/PerimeterX/mod_perimeterx
+Source0:    %{name}-%{version}.tar.gz
 BuildRequires:	httpd-devel jansson-devel libcurl-devel
-BuildRoot:	%{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id} -u -n)
+BuildRoot:	%{_tmppath}/%{name}-root
 
 %description
 This is a PerimeterX module for the Apache 2.x web server.  PerimeterX is bot
@@ -20,15 +20,16 @@ detection platform for web applications, for more information please visit
 http://www.perimeterx.com/
 
 %prep
-%setup -q
+%setup -q -n %{name}-%{version}
 
 %build
 %configure
 %{__make} %{?_smp_mflags}
 
 %install
-rm -rf \$RPM_BUILD_ROOT
-install -m0755 src/.libs/mod_perimeterx.so %{buildroot}%{_httpd_moddir}/mod_perimeterx.so
+[ "$RPM_BUILD_ROOT" != "/" ] && rm -rf $RPM_BUILD_ROOT
+make DESTDIR=$RPM_BUILD_ROOT install
+install -D -m0755 src/.libs/mod_perimeterx.so %{buildroot}%{_httpd_moddir}/mod_perimeterx.so
 
 %if "%{_httpd_modconfdir}" != "%{_httpd_confdir}"
 # 2.4

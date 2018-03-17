@@ -1,4 +1,4 @@
-AC_INIT([mod_perimeterx], [2.10.0], [https://github.com/PerimeterX/mod_perimeterx])
+AC_INIT([mod_perimeterx], [2.10.1], [https://github.com/PerimeterX/mod_perimeterx])
 AC_PREREQ(2.63)
 
 AC_CONFIG_AUX_DIR([buildaux])
@@ -79,6 +79,9 @@ AX_CHECK_JANSSON([], [AC_MSG_ERROR([Can't find libjansson installation. Please s
 AC_CONFIG_FILES([
     Makefile
     src/Makefile
+    build/rpm/mod_perimeterx.spec
+    build/build_centos.sh
+    build/build_ubuntu.sh
 ])
 
 AC_OUTPUT

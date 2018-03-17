@@ -1,14 +1,14 @@
-Source: mod-perimeterx
+Source: libapache2-mod-perimeterx
 Section: non-free/web
 Priority: optional
 Maintainer: Eugene Aleynikov <a1j@guthub>
 Standards-Version: 3.9.1
-Build-Depends: debhelper (>> 5.0.0), dh-apache2, apache2-dev (>= 2.2.4), libtool-bin | libtool, libapr1-dev, libjansson-dev, libcurl4-openssl-dev
+Build-Depends: debhelper (>> 5.0.0), apache2, dh-apache2, apache2-dev (>= 2.2.4), libtool-bin | libtool, libapr1-dev, libjansson-dev, libcurl4-openssl-dev
 Homepage: https://github.com/PerimeterX/mod_perimeterx
 
 Package: libapache2-mod-perimeterx
 Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}, libcurl3, libjansson4, libssl, apache2-api-20120211
+Depends: ${shlibs:Depends}, ${misc:Depends}, libcurl3, libjansson4, apache2-api-20120211
 Description: Apache 2 PerimeterX module
  This is a PerimeterX module for the Apache 2.x web server.  PerimeterX is bot
  detection platform for web applications, for more information please visit

@@ -1,0 +1,30 @@
+#!/bin/bash
+
+VERSION=@VERSION@
+
+# prepare dist
+cd ..
+sh autogen.sh && ./configure && make clean && make dist
+cd build/
+
+dist=../mod_perimeterx-$VERSION.tar.gz
+[ ! -f $dist ] && echo "$dist does not exist" && exit 1
+
+build_deb() {
+    local name="$1"
+    local dockerfile="$2"
+
+    docker build --rm -t $name -f $dockerfile .
+    docker run -it --rm \
+        --volume=$(pwd)/../:/src:rw \
+        --volume=$(pwd)/packages/:/packages:rw \
+        --name $name \
+        -e "VERSION=$VERSION" \
+        -e "DISTR=$name" \
+        $name
+
+}
+
+build_deb ubuntu.14.04 Dockerfile.ubuntu.14.04
+build_deb ubuntu.16.04 Dockerfile.ubuntu.16.04
+build_deb ubuntu.17.10 Dockerfile.ubuntu.17.10

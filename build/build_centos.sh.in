@@ -1,0 +1,20 @@
+#!/bin/sh
+
+VERSION=@VERSION@
+
+# prepare dist
+cd ..
+sh autogen.sh && ./configure && make clean && make dist
+cd build/
+
+dist=../mod_perimeterx-$VERSION.tar.gz
+[ ! -f $dist ] && echo "$dist does not exist" && exit 1
+
+docker build --rm -t centos.7 -f Dockerfile.centos.7 .
+docker run -it --rm \
+    --volume=$(pwd)/../:/src:rw \
+    --volume=$(pwd)/packages/:/packages:rw \
+    --name centos.7 \
+    -e "VERSION=$VERSION" \
+    -e "DISTR=centos.7" \
+    centos.7
