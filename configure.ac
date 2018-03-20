@@ -76,12 +76,25 @@ AC_SUBST(CURL_LIBS)
 
 AX_CHECK_JANSSON([], [AC_MSG_ERROR([Can't find libjansson installation. Please specify –with-jansson=PATH, where PATH is the full path to libjansson installation directory.])])
 
+# Debug
+AC_ARG_ENABLE(debug,
+    AS_HELP_STRING([--enable-debug], [enable debug build]),
+    [], [enable_debug=no])
+
+# Enable debug flags / build
+if test "x$enable_debug" = "xyes" ; then
+    CFLAGS="$CFLAGS -DDEBUG=1"
+    AC_DEFINE([DEBUG], [1], [enable debug build])
+fi
+
+
 AC_CONFIG_FILES([
     Makefile
     src/Makefile
     build/rpm/mod_perimeterx.spec
     build/build_centos.sh
     build/build_ubuntu.sh
+    contrib/version.sh
 ])
 
 AC_OUTPUT

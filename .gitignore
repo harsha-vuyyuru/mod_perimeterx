@@ -58,3 +58,6 @@ config.h.in
 build/build_centos.sh
 build/build_ubuntu.sh
 build/packages/
+contrib/version.sh
+core
+valgrind.out
