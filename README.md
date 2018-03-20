@@ -5,7 +5,7 @@
 [PerimeterX](http://www.perimeterx.com) Apache Module
 ===========================================
 
-> Latest stable version: [v2.10.0](https://github.com/PerimeterX/mod_perimeterx/releases/tag/v2.8.0)
+> Latest stable version: [v2.10.1](https://github.com/PerimeterX/mod_perimeterx/releases/tag/v2.10.1)
 
 
 Table of Contents
@@ -30,8 +30,6 @@ Table of Contents
 - [libcurl >= 7.19.0](https://curl.haxx.se/docs/install.html)
 - [jansson 2.6](http://www.digip.org/jansson/)
 - [Apache Portable Runtime (APR) >= 1.4.6](https://apr.apache.org/)
-- [pkg-config](https://en.wikipedia.org/wiki/Pkg-config)
-- [json-c](https://github.com/json-c/json-c/wiki)
 
 You can install dependencies using the Linux package manager (```yum``` / ```debian``` packages) or install them manually.
 
@@ -46,17 +44,15 @@ $ sudo yum install -y yum-plugin-ovl
 $ sudo yum install wget -y
 $ sudo yum install epel-release
 $ sudo yum -y groupinstall multilib_policy=all "Development tools"
-$ sudo yum -y install curl-devel glibc-devel jansson-devel libcurl-devel json-c-devel libgcc libssh2-devel libstdc++-devel openssl-devel pcre-devel httpd-devel
+$ sudo yum -y install httpd-devel jansson-devel libcurl-devel openssl-devel gcc make
 ```
 
 <a name="installation"></a>Installation
 ----------------------------------------
 ```shell
 1. $ git clone https://github.com/PerimeterX/mod_perimeterx.git
-2. $ cd mod_perimeterx/src
-3. Identify the location of the axps binary - usually in /data/apache/bin
-4. Either modify the PerimeterX Makefile and set the var CC = axps to CC = <path found above>  or update the path variable to include the correct path so when running make it can find the binary it needs
-5. $ sudo make && make install
+2. $ cd mod_perimeterx/
+3. sh autogen.sh && ./configure && make clean && make && make install
 ```
 
 Make sure that the following line is added to your configuration file:
