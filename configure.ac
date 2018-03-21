@@ -76,16 +76,18 @@ AC_SUBST(CURL_LIBS)
 
 AX_CHECK_JANSSON([], [AC_MSG_ERROR([Can't find libjansson installation. Please specify –with-jansson=PATH, where PATH is the full path to libjansson installation directory.])])
 
-# Debug
 AC_ARG_ENABLE(debug,
     AS_HELP_STRING([--enable-debug], [enable debug build]),
     [], [enable_debug=no])
-
-# Enable debug flags / build
 if test "x$enable_debug" = "xyes" ; then
     CFLAGS="$CFLAGS -DDEBUG=1"
     AC_DEFINE([DEBUG], [1], [enable debug build])
 fi
+
+AC_ARG_ENABLE(module,
+    AS_HELP_STRING([--enable-module], [enable module in Apache configuration]),
+    [], [enable_module=no])
+AM_CONDITIONAL([ENMOD], [test x$enable_module = xyes])
 
 
 AC_CONFIG_FILES([

@@ -19,5 +19,11 @@ mod_perimeterx_la_LDFLAGS = -no-undefined -module -avoid-version \
 	@JANSSON_LIBS@ @JANSSON_LDFLAGS@
 
 
+if ENMOD
+install: $(lib_LTLIBRARIES)
+	@APXS@ -i -a $?
+else
+
 install: $(lib_LTLIBRARIES)
 	@APXS@ -i $?
+endif
