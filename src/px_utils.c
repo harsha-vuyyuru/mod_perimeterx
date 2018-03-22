@@ -43,7 +43,7 @@ static const unsigned char test_char_table[256] = {
     30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,
     30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,
     30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,
-    30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30 
+    30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30
 };
 
 static void update_and_notify_health_check(px_config *conf) {
@@ -60,36 +60,33 @@ static void update_and_notify_health_check(px_config *conf) {
 
 /**
  * Use this function to read the body from request_rec
- * Pointer to data will be set to body, free(body) will be needed
- * After you finished working on the payload
+ * Pointer to data will be set to body
  * Returns -1 if failed
  */
 static int read_body(request_rec *r, char **body) {
     *body = NULL;
     int ret = ap_setup_client_block(r, REQUEST_CHUNKED_ERROR);
     if(OK == ret && ap_should_client_block(r)) {
-        char* buffer = (char*)apr_pcalloc(r->pool, BLOCKSIZE);
+        char* buffer = apr_pcalloc(r->pool, BLOCKSIZE);;
         int len;
-        char *data = malloc(1); 
-        char *realloc_data = NULL; 
+        char *data = apr_pcalloc(r->pool, 1);
         int d_size = 0;
+
         data[0] = '\0';
         // Read body
         while((len=ap_get_client_block(r, buffer, BLOCKSIZE)) > 0) {
-            realloc_data = realloc(data, d_size + len + 1);
-            // On fail return -1 and free data as it was allocated 
-            if (realloc_data == NULL) {
-                free(data);
-                return -1;
-            }
-            // assign reallocated data to original data
-            data = realloc_data;
+            char *tmp;
+
+            // there is no apr_realloc
+            tmp = apr_pcalloc(r->pool, d_size + len + 1);
+            memcpy(tmp, data, d_size + 1);
+            data = tmp;
+
             memcpy(&(data[d_size]), buffer, len);
             d_size += len;
             data[d_size] = '\0';
         }
         if (len == -1) {
-            free(data);
             return -1;
         }
         *body = data;
@@ -102,11 +99,14 @@ static int read_body(request_rec *r, char **body) {
 static size_t write_response_cb(void* contents, size_t size, size_t nmemb, void *stream) {
     struct response_t *res = (struct response_t*)stream;
     size_t realsize = size * nmemb;
-    res->data = realloc(res->data, res->size + realsize + 1);
-    if (res->data == NULL) {
+    char *tmp;
+    tmp = realloc(res->data, res->size + realsize + 1);
+    if (tmp == NULL) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, res->server, "[%s]: not enough memory for post_request buffer alloc", res->app_id);
+        free(res->data);
         return 0;
     }
+    res->data = tmp;
     memcpy(&(res->data[res->size]), contents, realsize);
     res->size += realsize;
     res->data[res->size] = 0;
@@ -126,7 +126,7 @@ static size_t header_callback(char *buffer, size_t size, size_t nitems, void *st
 
    // Verify that real size is bigger than 2 and last bytes are  \r \n
    if (realsize > 2 && buffer[realsize-2]  == '\r' && buffer[realsize-1] == '\n') {
-        char *header = apr_pstrndup(res->r->pool, buffer, realsize-2); 
+        char *header = apr_pstrndup(res->r->pool, buffer, realsize-2);
         // Take only headers that have a valid format key: value
         if (strrchr(header, ':')) {
             const char** entry = apr_array_push(res->headers);
@@ -326,13 +326,13 @@ int escape_urlencoded(char *escaped, const char *str, apr_size_t *len) {
 }
 
 const char *pescape_urlencoded(apr_pool_t *p, const char *str) {
-    apr_size_t len;       
+    apr_size_t len;
     if (escape_urlencoded(NULL, str, &len) == 0) {
             char *encoded = apr_palloc(p, len);
             escape_urlencoded(encoded, str, NULL);
             return encoded;
     }
-    return str;      
+    return str;
 }
 
 /*
@@ -384,14 +384,14 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
     curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_URL, url);
-    
+
     // Case we have body
     char *body;
     int body_res = read_body(r, &body);
     if (body_res == 0 && strcmp(r->method, "POST") == 0) {
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body);
     }
-    
+
     curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, conf->api_timeout_ms);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_response_cb);
     curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
@@ -402,10 +402,6 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
     }
     CURLcode status = curl_easy_perform(curl);
     curl_slist_free_all(headers);
-    
-    if (body) {
-        free(body);
-    }
 
     if (status == CURLE_OK) {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);

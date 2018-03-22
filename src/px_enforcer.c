@@ -2,7 +2,7 @@
 #include <apr_strings.h>
 #include <http_log.h>
 #include <util_cookies.h>
-#include <regex.h>        
+#include <regex.h>
 
 #include "px_payload.h"
 #include "px_json.h"
@@ -100,7 +100,7 @@ static bool enable_block_for_hostname(request_rec *r, apr_array_header_t *domain
 }
 
 void get_host_domain(request_context *ctx, const char **domain) {
-    char *regex_string = "([a-zA-Z0-9-]{1,61}[a-zA-Z0-9])\\.([a-zA-Z]{2,5})$"; 
+    char *regex_string = "([a-zA-Z0-9-]{1,61}[a-zA-Z0-9])\\.([a-zA-Z]{2,5})$";
     size_t max_groups = 1;
 
     regex_t regex_compiled;
@@ -119,7 +119,7 @@ void get_host_domain(request_context *ctx, const char **domain) {
                 break;  // No more groups
             }
             char source_copy[strlen(ctx->hostname) + 1];
-            strcpy(source_copy, ctx->hostname);
+            apr_cpystrn(source_copy, ctx->hostname, sizeof(source_copy));
             source_copy[group_array[g].rm_eo] = 0;
             ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Setting cookie domain as .", source_copy + group_array[g].rm_so, NULL));
             *domain = apr_pstrcat(ctx->r->pool, "domain=.", source_copy + group_array[g].rm_so, NULL);
@@ -134,7 +134,7 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     }
 
     const char *domain = "";
-    if (conf->captcha_subdomain) { 
+    if (conf->captcha_subdomain) {
         get_host_domain(ctx, &domain);
     }
 
@@ -405,7 +405,7 @@ bool px_verify_request(request_context *ctx, px_config *conf) {
 handle_response:
             if (risk_response) {
                 ctx->score = risk_response->score;
-                
+
                 if (risk_response->action_data_body){
                     ctx->action_data_body = risk_response->action_data_body;
                 }
