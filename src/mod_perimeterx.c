@@ -271,7 +271,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
     }
 
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Starting request verification");
- 
+
     request_context *ctx = create_context(r, conf);
     if (ctx) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Request context created successfully");
@@ -285,13 +285,17 @@ int px_handle_request(request_rec *r, px_config *conf) {
         }
         post_verification(ctx, conf, request_valid);
 #if DEBUG
-        char *aut_test_header = apr_pstrdup(r->pool, (char *) apr_table_get(r->headers_in, PX_AUT_HEADER_KEY));
-        if (aut_test_header && strcmp(aut_test_header, PX_AUT_HEADER_VALUE) == 0) {
-            const char *ctx_str = json_context(ctx);
-            ap_set_content_type(r, CONTENT_TYPE_JSON);
-            ap_rprintf(r, "%s", ctx_str);
-            free((void*)ctx_str);
-            return DONE;
+        const char *PX_AUT_HEADER_KEY = getenv("PX_AUT_HEADER_KEY");
+        const char *PX_AUT_HEADER_VALUE = getenv("PX_AUT_HEADER_VALUE");
+        if (PX_AUT_HEADER_KEY && PX_AUT_HEADER_VALUE) {
+            char *aut_test_header = apr_pstrdup(r->pool, (char *) apr_table_get(r->headers_in, PX_AUT_HEADER_KEY));
+            if (aut_test_header && strcmp(aut_test_header, PX_AUT_HEADER_VALUE) == 0) {
+                const char *ctx_str = json_context(ctx);
+                ap_set_content_type(r, CONTENT_TYPE_JSON);
+                ap_rprintf(r, "%s", ctx_str);
+                free((void*)ctx_str);
+                return DONE;
+            }
         }
 #endif
 

@@ -1,2 +1,2 @@
-mod build/.libs/mod_perimeterx.so
+mod src/.libs/mod_perimeterx.so
 mod debian/perimeterx.load

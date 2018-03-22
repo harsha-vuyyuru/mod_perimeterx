@@ -1,25 +1,25 @@
-libapache-mod-perimeterx (2.10.1) jessie; urgency=medium
+libapache2-mod-perimeterx (2.10.1) jessie; urgency=medium
 
     * Fixed potential memory leak on first party while reading body
     * Fixed first party XHR flag
-    * Fixed crash on empty configuration 
+    * Fixed crash on empty configuration
 
  -- nitzanpx <nitzanpx@github> Thu, 15 Mar 2018 10:14:00 +0000
 
-libapache-mod-perimeterx (2.10.0) jessie; urgency=medium
+libapache2-mod-perimeterx (2.10.0) jessie; urgency=medium
 
-    * Added support for OpenSSL 1.1.0 
+    * Added support for OpenSSL 1.1.0
 
  -- nitzanpx <nitzanpx@github> Thu, 01 Mar 2018 15:30:00 +0000
 
-libapache-mod-perimeterx (2.9.1) jessie; urgency=medium
+libapache2-mod-perimeterx (2.9.1) jessie; urgency=medium
 
-    * Fixed base64 handling for cookies  
+    * Fixed base64 handling for cookies
 
  -- nitzanpx <nitzanpx@github> Tue, 27 Feb 2018 17:08:00 +0000
 
 
-libapache-mod-perimeterx (2.9.0) jessie; urgency=medium
+libapache2-mod-perimeterx (2.9.0) jessie; urgency=medium
 
     * Added support for removing captcha cookie on subdomain wildcard, disabled by default
     * Added first party support, enabled by default - please note that additional changes may be required, refer to directives for more information
@@ -27,7 +27,7 @@ libapache-mod-perimeterx (2.9.0) jessie; urgency=medium
 
  -- nitzanpx <nitzanpx@github>  Web, 21 Feb 2018 12:20:00 +0000
 
-libapache-mod-perimeterx (2.8.0) jessie; urgency=high
+libapache2-mod-perimeterx (2.8.0) jessie; urgency=high
 
     * Added support for APR 1.4.6
     * Added new logs format
@@ -46,9 +46,9 @@ libapache-mod-perimeterx (2.8.0) jessie; urgency=high
 
  -- nitzanpx <nitzanpx@github>  Mon, 22 Jan 2018 10:30:00 +0000
 
-libapache-mod-perimeterx (2.8.0-rc.9) jessie; urgency=medium
+libapache2-mod-perimeterx (2.8.0-rc.9) jessie; urgency=medium
 
-    * Init and clean OpenSSL with threading support 
+    * Init and clean OpenSSL with threading support
     * Switched background activities to off by default
     * Added debug symbols to debian installation
     * Fixed reCaptcha support for mobile sdk
@@ -57,44 +57,44 @@ libapache-mod-perimeterx (2.8.0-rc.9) jessie; urgency=medium
 
  -- nitzanpx <nitzanpx@github>  Mon, 20 Nov 2017 13:33:00 +0000
 
-libapache-mod-perimeterx (2.8.0-rc.8) jessie; urgency=medium
+libapache2-mod-perimeterx (2.8.0-rc.8) jessie; urgency=medium
 
     * virtual host improvements and log level fixes
 
  -- bendpx <bendpx@github>  Tue, 27 Oct 2017 14:24:00 +0000
 
-libapache-mod-perimeterx (2.8.0-rc.7) jessie; urgency=medium
+libapache2-mod-perimeterx (2.8.0-rc.7) jessie; urgency=medium
 
     * Support to modify CORS header by setting the Allow header using an envvar regex set on PXApplyAccessControlAllowOriginByEnvVar configs
     * Enabling wildcard CORS header with EnableAccessControlAllowOriginWildcard configuration
 
  -- bendpx <bendpx@github>  Tue, 23 Oct 2017 14:24:00 +0000
 
-libapache-mod-perimeterx (2.8.0-rc.6) jessie; urgency=medium
+libapache2-mod-perimeterx (2.8.0-rc.6) jessie; urgency=medium
 
    * Fixed crash when module gets empty header
    * Fixed cookie v1 score
-   * Fixed BaseUrl set before AppId 
+   * Fixed BaseUrl set before AppId
 
  -- nitzanpx <nitzanpx@github>  Tue, 03 Sep 2017 14:24:00 +0000
 
-libapache-mod-perimeterx (2.8.0-rc.5) jessie; urgency=medium
+libapache2-mod-perimeterx (2.8.0-rc.5) jessie; urgency=medium
 
   * Change the default values for the module conifguration ModuleMode and
-    BlockingScore 
+    BlockingScore
 
  -- nitzanpx <nitzanpx@github>  Wed, 28 Sep 2017 10:27:00 +0000
 
-libapache-mod-perimeterx (2.8.0-rc.4) jessie; urgency=medium
+libapache2-mod-perimeterx (2.8.0-rc.4) jessie; urgency=medium
 
   * Fixed internal request would not be inspected
-  * Added missing directives in docs 
+  * Added missing directives in docs
 
  -- nitzanpx <nitzanpx@github>  Wed, 27 Sep 2017 09:46:00 +0000
 
-libapache-mod-perimeterx (2.8.0-rc.3) jessie; urgency=medium
+libapache2-mod-perimeterx (2.8.0-rc.3) jessie; urgency=medium
 
-  * Added support for cookie v3 
+  * Added support for cookie v3
   * Rendering block page by action value
   * Added monitor mode
   * Added new captcah capabilities
@@ -103,63 +103,63 @@ libapache-mod-perimeterx (2.8.0-rc.3) jessie; urgency=medium
 
  -- nitzanpx <nitzanpx@github>  Thu, 16 Sep 2017 17:00:00 +0000
 
-libapache-mod-perimeterx (2.8.0-rc.1) jessie; urgency=medium
+libapache2-mod-perimeterx (2.8.0-rc.1) jessie; urgency=medium
 
-   * Added support for CORS headers 
-   * Better handling for threads 
+   * Added support for CORS headers
+   * Better handling for threads
 
  -- bendpx <nitzanpx@github>  Wed, 06 Sep 2017 13:00:00 +0000
 
-libapache-mod-perimeterx (2.7.0) jessie; urgency=medium
+libapache2-mod-perimeterx (2.7.0) jessie; urgency=medium
 
-   * Update default values for blocksing score 
+   * Update default values for blocksing score
 
  -- bendpx <bendpx@github>  Wed, 24 Aug 2017 18:00:00 +0000
 
-libapache-mod-perimeterx (2.6.3) jessie; urgency=medium
+libapache2-mod-perimeterx (2.6.3) jessie; urgency=medium
 
    * fixed missing debug messages
 
  -- bendpx <bendpx@github>  Wed, 22 Aug 2017 10:00:00 +0000
 
-libapache-mod-perimeterx (2.6.2) jessie; urgency=medium
+libapache2-mod-perimeterx (2.6.2) jessie; urgency=medium
 
-   * New call reason for mobile sdk 
+   * New call reason for mobile sdk
 
  -- nitzanpx <nitzanpx@github>  Wed, 16 Aug 2017 10:00:00 +0000
 
-libapache-mod-perimeterx (2.6.1) jessie; urgency=medium
+libapache2-mod-perimeterx (2.6.1) jessie; urgency=medium
 
    * Sending content-type application/json when needed
 
  -- nitzanpx <nitzanpx@github>  Wed, 09 Aug 2017 22:00:00 +0000
 
-libapache-mod-perimeterx (2.6.0) jessie; urgency=medium
+libapache2-mod-perimeterx (2.6.0) jessie; urgency=medium
 
     * Adding support for response body when expecting application/json
     * Remove json-c dependency.
 
  -- nitzanpx <nitzanpx@github>  Wed, 09 Aug 2017 19:00:00 +0000
 
-libapache-mod-perimeterx (2.5.0) jessie; urgency=medium
+libapache2-mod-perimeterx (2.5.0) jessie; urgency=medium
 
     * Added support for passing UUID/VID on reponse headers
 
  -- nitzanpx <nitzanpx@github>  Tue, 01 Aug 2017 09:22:00 +0000
 
-libapache-mod-perimeterx (2.4.2) jessie; urgency=medium
+libapache2-mod-perimeterx (2.4.2) jessie; urgency=medium
 
     * Remove special handling for POST requests.
 
  -- pxaviad <pxaviad@github>  Thu, 24 Jul 2017 09:33:00 +0000
 
-libapache-mod-perimeterx (2.4.1) jessie; urgency=medium
+libapache2-mod-perimeterx (2.4.1) jessie; urgency=medium
 
   * Add ScoreHeader on request instead of response.
 
  -- pxaviad <pxaviad@github>  Thu, 13 Jul 2017 12:40:00 +0000
 
-libapache-mod-perimeterx (2.4.0) jessie; urgency=medium
+libapache2-mod-perimeterx (2.4.0) jessie; urgency=medium
 
   * Add UUID to page_requested.
   * Add score header to response.
@@ -167,7 +167,7 @@ libapache-mod-perimeterx (2.4.0) jessie; urgency=medium
 
  -- pxaviad <pxaviad@github>  Mon, 10 Jul 2017 09:00:00 +0000
 
-libapache-mod-perimeterx (2.2.0) jessie; urgency=medium
+libapache2-mod-perimeterx (2.2.0) jessie; urgency=medium
 
   * Disable mod_perimeterx when reaching errors threshod.
   * Monitor PX service health.
@@ -180,7 +180,7 @@ libapache-mod-perimeterx (2.2.0) jessie; urgency=medium
 
  -- pxaviad <pxaviad@github>  Mon, 22 May 2017 13:00:15 +0000
 
-libapache-mod-perimeterx (2.1.3) jessie; urgency=medium
+libapache2-mod-perimeterx (2.1.3) jessie; urgency=medium
 
   * Initial Release.
 
