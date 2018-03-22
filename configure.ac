@@ -96,6 +96,7 @@ AC_CONFIG_FILES([
     build/rpm/mod_perimeterx.spec
     build/build_centos.sh
     build/build_ubuntu.sh
+    build/build_debian.sh
     contrib/version.sh
 ])
 

@@ -57,6 +57,7 @@ Makefile.in
 config.h.in
 build/build_centos.sh
 build/build_ubuntu.sh
+build/build_debian.sh
 build/packages/
 contrib/version.sh
 core
