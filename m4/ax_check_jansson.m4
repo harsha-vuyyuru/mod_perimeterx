@@ -69,7 +69,7 @@ AC_DEFUN([AX_CHECK_JANSSON], [
         JANSSON_INCLUDES=
         for janssondir in $janssondirs; do
             AC_MSG_CHECKING([for jansson.h in $janssondir])
-            if test -f "$janssondir/include/jansson/jansson.h"; then
+            if test -f "$janssondir/include/jansson.h"; then
                 JANSSON_INCLUDES="-I$janssondir/include/jansson"
                 JANSSON_LDFLAGS="-L$janssondir/lib"
                 JANSSON_LIBS="-ljansson"
