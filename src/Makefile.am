@@ -20,10 +20,10 @@ mod_perimeterx_la_LDFLAGS = -no-undefined -module -avoid-version \
 
 
 if ENMOD
-install: $(lib_LTLIBRARIES)
-	@APXS@ -i -a $?
+APXS_FLAGS= -i -a
 else
+APXS_FLAGS= -i
+endif
 
 install: $(lib_LTLIBRARIES)
-	@APXS@ -i $?
-endif
+	@APXS@ $(APXS_FLAGS) $?
