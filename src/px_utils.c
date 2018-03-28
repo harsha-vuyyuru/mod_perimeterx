@@ -67,7 +67,7 @@ static int read_body(request_rec *r, char **body) {
     *body = NULL;
     int ret = ap_setup_client_block(r, REQUEST_CHUNKED_ERROR);
     if(OK == ret && ap_should_client_block(r)) {
-        char* buffer = apr_pcalloc(r->pool, BLOCKSIZE);;
+        char* buffer = apr_pcalloc(r->pool, BLOCKSIZE);
         int len;
         char *data = apr_pcalloc(r->pool, 1);
         int d_size = 0;
