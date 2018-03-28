@@ -89,6 +89,7 @@ AC_ARG_ENABLE(module,
     [], [enable_module=no])
 AM_CONDITIONAL([ENMOD], [test x$enable_module = xyes])
 
+AX_CODE_COVERAGE
 
 AC_CONFIG_FILES([
     Makefile

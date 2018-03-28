@@ -5,6 +5,7 @@
 *.la
 *.slo
 *.h.in~
+*.gcno
 aclocal.m4
 autom4te.cache
 buildaux/
@@ -16,6 +17,7 @@ libtool
 src/config.h
 src/stamp-h1
 unknown
+aminclude_static.am
 .libs
 **/*.o
 *.tar.gz
