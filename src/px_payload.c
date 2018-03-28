@@ -31,8 +31,9 @@ static const char *COOKIE_DELIMITER = ":";
 static HMAC_CTX *HMAC_CTX_new(void)
 {
    HMAC_CTX *ctx = OPENSSL_malloc(sizeof(*ctx));
-   if (ctx != NULL)
+   if (ctx != NULL) {
        HMAC_CTX_init(ctx);
+   }
    return ctx;
 }
 
@@ -170,39 +171,47 @@ static int digest_payload1(const risk_payload*payload, request_context *ctx, con
 
     HMAC_CTX *hmac = HMAC_CTX_new();
 
-    if (!HMAC_Init_ex(hmac, payload_key, strlen(payload_key), EVP_sha256(), NULL))
+    if (!HMAC_Init_ex(hmac, payload_key, strlen(payload_key), EVP_sha256(), NULL)) {
         return 0;
+    }
 
     if (payload->timestamp) {
-        if (!HMAC_Update(hmac,(unsigned char*) payload->timestamp, strlen(payload->timestamp)))
+        if (!HMAC_Update(hmac,(unsigned char*) payload->timestamp, strlen(payload->timestamp))) {
             return 0;
+        }
     }
     if (payload->a) {
-        if (!HMAC_Update(hmac, (unsigned char*) payload->a, strlen(payload->a)))
+        if (!HMAC_Update(hmac, (unsigned char*) payload->a, strlen(payload->a))) {
             return 0;
+        }
     }
     if (payload->b) {
-        if (!HMAC_Update(hmac,(unsigned char*) payload->b, strlen(payload->b)))
+        if (!HMAC_Update(hmac,(unsigned char*) payload->b, strlen(payload->b))) {
             return 0;
+        }
     }
     if (payload->uuid) {
-        if (!HMAC_Update(hmac, (unsigned char*) payload->uuid, strlen(payload->uuid)))
+        if (!HMAC_Update(hmac, (unsigned char*) payload->uuid, strlen(payload->uuid))) {
             return 0;
+        }
     }
     if (payload->vid) {
-        if (!HMAC_Update(hmac, (unsigned char*) payload->vid, strlen(payload->vid)))
+        if (!HMAC_Update(hmac, (unsigned char*) payload->vid, strlen(payload->vid))) {
             return 0;
+        }
     }
 
     while (*signing_fields) {
-        if (!HMAC_Update(hmac, (unsigned char*) *signing_fields, strlen(*signing_fields)))
+        if (!HMAC_Update(hmac, (unsigned char*) *signing_fields, strlen(*signing_fields))) {
             return 0;
+        }
         signing_fields++;
     }
 
     unsigned int len = buffer_len / 2;
-    if (!HMAC_Final(hmac, hash, &len))
+    if (!HMAC_Final(hmac, hash, &len)) {
         return 0;
+    }
     HMAC_CTX_free(hmac);
 
     for (int i = 0; i < len; i++) {
@@ -216,23 +225,27 @@ static int digest_payload3(const risk_payload *payload, request_context *ctx, co
     unsigned char hash[32];
 
     HMAC_CTX *hmac = HMAC_CTX_new();
-    if (!HMAC_Init_ex(hmac, payload_key, strlen(payload_key), EVP_sha256(), NULL))
+    if (!HMAC_Init_ex(hmac, payload_key, strlen(payload_key), EVP_sha256(), NULL)) {
         return 0;
+    }
     const char *d = strchr(ctx->px_payload, ':');
     if (d) {
         d += 1; // point after :
-        if (!HMAC_Update(hmac, (unsigned char*)d, strlen(d)))
+        if (!HMAC_Update(hmac, (unsigned char*)d, strlen(d))) {
             return 0;
+        }
     }
     while (*signing_fields) {
-        if (!HMAC_Update(hmac, (unsigned char*) *signing_fields, strlen(*signing_fields)))
+        if (!HMAC_Update(hmac, (unsigned char*) *signing_fields, strlen(*signing_fields))) {
             return 0;
+        }
         signing_fields++;
     }
 
     unsigned int len = buffer_len / 2;
-    if (!HMAC_Final(hmac, hash, &len))
+    if (!HMAC_Final(hmac, hash, &len)) {
         return 0;
+    }
     HMAC_CTX_free(hmac);
 
     for (int i = 0; i < len; i++) {
