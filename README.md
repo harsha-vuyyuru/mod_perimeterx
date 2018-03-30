@@ -1,4 +1,8 @@
 [![Build Status](https://travis-ci.org/PerimeterX/mod_perimeterx.svg?branch=travisBuild)](https://travis-ci.org/PerimeterX/mod_perimeterx)
+<a href="https://scan.coverity.com/projects/mod_perimeterx">
+  <img alt="Coverity Scan Build Status"
+       src="https://scan.coverity.com/projects/10339/badge.svg"/>
+</a>
 
 ![image](https://s.perimeterx.net/logo.png)
 
