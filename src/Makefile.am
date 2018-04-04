@@ -27,5 +27,7 @@ else
 APXS_FLAGS= -i
 endif
 
+@CODE_COVERAGE_RULES@
+
 install: $(lib_LTLIBRARIES)
 	@APXS@ $(APXS_FLAGS) $?
