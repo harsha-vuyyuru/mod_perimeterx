@@ -1,5 +1,4 @@
 ACLOCAL_AMFLAGS = -I m4
-include $(top_srcdir)/aminclude_static.am
 
 lib_LTLIBRARIES = mod_perimeterx.la
 
@@ -30,6 +29,3 @@ endif
 
 install: $(lib_LTLIBRARIES)
 	@APXS@ $(APXS_FLAGS) $?
-
-clean-local: code-coverage-clean
-dist-clean-local: code-coverage-dist-clean

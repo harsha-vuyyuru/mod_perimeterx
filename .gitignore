@@ -17,7 +17,6 @@ libtool
 src/config.h
 src/stamp-h1
 unknown
-aminclude_static.am
 .libs
 **/*.o
 *.tar.gz
