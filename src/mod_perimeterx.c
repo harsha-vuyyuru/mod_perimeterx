@@ -504,7 +504,7 @@ static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
 
         px_config *cfg = ap_get_module_config(vs->module_config, &perimeterx_module);
         if (!cfg || !cfg->module_enabled) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg->app_id, "Request will not be verified, module is disabled or not properly configured");
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg ? cfg->app_id : 0, "Request will not be verified, module is disabled or not properly configured");
             continue;
         }
         // initialize the PerimeterX needed pools and background workers if the PerimeterX module is enabled

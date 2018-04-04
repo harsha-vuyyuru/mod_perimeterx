@@ -1,4 +1,5 @@
 ACLOCAL_AMFLAGS = -I m4
+include $(top_srcdir)/aminclude_static.am
 
 lib_LTLIBRARIES = mod_perimeterx.la
 
@@ -10,20 +11,25 @@ mod_perimeterx_la_CFLAGS = @CFLAGS@ \
 	@APR_INCLUDES@ @APR_CFLAGS@ \
 	@OPENSSL_INCLUDES@ \
 	@CURL_CFLAGS@ \
-	@JANSSON_INCLUDES@
+	@JANSSON_INCLUDES@ \
+	$(CODE_COVERAGE_CFLAGS)
 mod_perimeterx_la_LDFLAGS = -no-undefined -module -avoid-version \
 	@APXS_LIBS@ @APXS_LDFLAGS@ \
 	@APR_LDFLAGS@ \
 	@OPENSSL_LIBS@ @OPENSSL_LDFLAGS@ \
 	@CURL_LIBS@ @CURL_LDFLAGS@ \
-	@JANSSON_LIBS@ @JANSSON_LDFLAGS@
+	@JANSSON_LIBS@ @JANSSON_LDFLAGS@ \
+	$(CODE_COVERAGE_LIBS)
 
 
 if ENMOD
-install: $(lib_LTLIBRARIES)
-	@APXS@ -i -a $?
+APXS_FLAGS= -i -a
 else
+APXS_FLAGS= -i
+endif
 
 install: $(lib_LTLIBRARIES)
-	@APXS@ -i $?
-endif
+	@APXS@ $(APXS_FLAGS) $?
+
+clean-local: code-coverage-clean
+dist-clean-local: code-coverage-dist-clean

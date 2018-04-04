@@ -293,7 +293,7 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
     int score = 0;
     const char *uuid = NULL;
     const char *action = NULL;
-    const char *action_data_body = NULL; 
+    const char *action_data_body = NULL;
     if (json_unpack(j_response, "{s:i,s:s,s:i,s:s}",
                 "status", &status,
                 "uuid", &uuid,
@@ -309,7 +309,7 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
     if (!strcmp(action, "j")) {
         json_t *action_data = json_object_get(j_response, "action_data");
         if (json_unpack(action_data, "{s:s}",
-                    "body", &action_data_body)) { 
+                    "body", &action_data_body)) {
            ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s]: parse_risk_response: failed to unpack risk api action_data", ctx->app_id);
            json_decref(j_response);
            return NULL;
@@ -368,7 +368,7 @@ char *create_json_response(px_config *cfg, request_context *ctx) {
 #ifdef DEBUG
 const char* context_to_json_string(request_context *ctx) {
     json_error_t error;
-    json_t *px_payloads, *headers, *ctx_json;
+    json_t *px_payloads = NULL, *headers, *ctx_json;
 
     // format headers as key:value in JSON
     headers = json_object();

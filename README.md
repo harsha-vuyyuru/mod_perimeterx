@@ -1,4 +1,8 @@
 [![Build Status](https://travis-ci.org/PerimeterX/mod_perimeterx.svg?branch=travisBuild)](https://travis-ci.org/PerimeterX/mod_perimeterx)
+<a href="https://scan.coverity.com/projects/mod_perimeterx">
+  <img alt="Coverity Scan Build Status"
+       src="https://scan.coverity.com/projects/10339/badge.svg"/>
+</a>
 
 ![image](https://s.perimeterx.net/logo.png)
 
@@ -18,6 +22,7 @@ Table of Contents
 - [Directives](DIRECTIVES.md)
 - [Custom Block page](BLOCKPAGE.md)
 - [Logging and Troubleshooting](#troubleshoot)
+- [Testing](#testing)
 - [Contributing](#contributing)
 	- [Tests](#tests)
 
@@ -146,6 +151,19 @@ According to your apache configurations you should find in the error log mod_per
 [Sun Dec 17 09:44:13.802889 2017] [perimeterx:debug] [pid 9] px_payload.c(352): [PerimeterX - DEBUG][APP_ID] - Cookie evaluation ended successfully, risk score: 0
 [Sun Dec 17 09:44:14.216108 2017] [perimeterx:debug] [pid 9] px_client.c(24): [APP_ID]: post_req_request: post request payload  {"type":"page_requested","socket_ip":"172.17.0.1","url":"localhost/","px_app_id":"APP_ID","details":{"block_score":0,"block_reason":"none","http_method":"GET","http_version":"1.1","module_version":"Apache Module v2.8.0-rc.9","px_cookie":"{\\"u\\":\\"d79b83b0-e30e-11e7-9fc6-6f721d4b631d\\",\\"v\\":\\"7f803340-9d42-11e7-83a5-8f78028be852\\",\\"t\\":1513504354651,\\"s\\":0,\\"a\\":\\"c\\"}","client_uuid":"d79b83b0-e30e-11e7-9fc6-6f721d4b631d","pass_reason":"cookie"},"headers":{"Host":"localhost:3000","Connection":"keep-alive","Pragma":"no-cache","Cache-Control":"no-cache","Upgrade-Insecure-Requests":"1","User-Agent":"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/63.0.3239.84 Safari/537.36","Accept":"text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8","Accept-Encoding":"gzip, deflate, br","Accept-Language":"en-US,en;q=0.9,he;q=0.8","Cookie":"PHPSESSID=h04pp2pbb7atjmrq9ovqc65hqp; _px=YNWJo4NKmRjcSl2lvohGq2KnAixUiBNbQq1AO9D6EkyS8trJ2dJye3oXk8EL53fl1BwW1zH3RJ+d/INP58k4ZQ==:1000:bS5VI9Y33XHl1hMw7X2IAdk83BNYh+VhpETz31+LxrA+xsc/bBkZGB9yAIlaaEZd3r/nujxmcADAvQgmsTrQuGwJGF7Nts85cEG/JnQ+CmoXCBNgLapIvkxYI7MowWDip6oiZ0LPR3JTkuqHdd7efHfG6Ex9Q4HEJ7g4pbIGB68/6mqbN6MkY+3coBtzBwv4iyoxpHPtyst61vA5HbTyw5d+VLEiBqKPezgBYI55F3dMpPDCcC/V+5N//HFWuUZ/oIN0LpzYlXFVK9LBympnvA==; _px3=b224726ef08887b80b4a09ec3ef55a91536147d8b334fb3f0ae3c43f8dbc678a:fhsk7nKkdV5lvBFWsIelUlpgVY44sa3e336YYrJ9T2MQvv5iJLcWYc3aZmICiIq8VqwFryK8BUWZMBDCZ+sdPQ==:1000:9bBom31EJqfEvSyqRHm44tI2OacekjgKioNcnVlBvjSDl/dbQzNXZdHSTZI5m0yIUyAT/kxMjOWdrpO/UR69gVE6ohuy+rR98ttMx/94MD2dHYKMevqN/D7pNNCFelL3s4nM41U88gyIN/ADf7ajwaNRk/XJ1zHFs9P4ipcaqKc="},"vid":"7f803340-9d42-11e7-83a5-8f78028be852"}
 ```
+
+<a name="testing"></a> Testing
+------------------------------
+
+### Code coverage support
+By default code coverage is disabled. In order to collect code coverage, configure and build the module with gcov support:
+```
+./configure --enable-code-coverage
+```
+Enable mod_perimeterx in Apache configuration, (re-)start Apache and run tests.
+Code coverate files will be located in the project's source directory.
+[Gcovr](http://gcovr.com/) is a tool to generate HTML files with the code coverage report.
+You can run a simple script ```contrib/run_gcovr.sh``` from the project's root directory to generate ```code-coverage.html``` file.
 
 
 <a name="contributing"></a> Contributing
