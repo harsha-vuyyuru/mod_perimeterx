@@ -1168,7 +1168,7 @@ static void *create_config(apr_pool_t *p) {
         conf->background_activity_workers = 10;
         conf->background_activity_queue_size = 1000;
         conf->px_errors_threshold = 100;
-        conf->health_check_interval = apr_time_sec(60); // 1 minute
+        conf->health_check_interval = apr_time_from_sec(60); // 1 minute
         conf->px_health_check = false;
         conf->score_header_name = SCORE_HEADER_NAME;
         conf->vid_header_enabled = false;
