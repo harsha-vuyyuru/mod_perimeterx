@@ -427,15 +427,15 @@ static apr_status_t create_health_check(apr_pool_t *p, server_rec *s, px_config 
         return rv;
     }
 
-    rv = apr_thread_create(&cfg->health_check_thread, NULL, health_check, (void*) hc_data, p);
-    if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "error while init health_check thread create");
-        return rv;
-    }
-
     rv = apr_thread_mutex_create(&cfg->health_check_cond_mutex, 0, p);
     if (rv != APR_SUCCESS) {
         ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "error while creating health_check thread mutex");
+        return rv;
+    }
+
+    rv = apr_thread_create(&cfg->health_check_thread, NULL, health_check, (void*) hc_data, p);
+    if (rv != APR_SUCCESS) {
+        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "error while init health_check thread create");
         return rv;
     }
 
@@ -1168,7 +1168,7 @@ static void *create_config(apr_pool_t *p) {
         conf->background_activity_workers = 10;
         conf->background_activity_queue_size = 1000;
         conf->px_errors_threshold = 100;
-        conf->health_check_interval = apr_time_sec(60); // 1 minute
+        conf->health_check_interval = apr_time_from_sec(60); // 1 minute
         conf->px_health_check = false;
         conf->score_header_name = SCORE_HEADER_NAME;
         conf->vid_header_enabled = false;
