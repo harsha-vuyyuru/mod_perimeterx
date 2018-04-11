@@ -51,7 +51,7 @@ static const char *CONTENT_TYPE_JSON = "application/json";
 static const char *CONTENT_TYPE_HTML = "text/html";
 
 // constants
-static const char *PERIMETERX_MODULE_VERSION = "Apache Module v2.10.1";
+static const char *PERIMETERX_MODULE_VERSION = "Apache Module v2.11.0";
 static const char *SCORE_HEADER_NAME = "X-PX-SCORE";
 static const char *VID_HEADER_NAME = "X-PX-VID";
 static const char *UUID_HEADER_NAME = "X-PX-UUID";
@@ -223,8 +223,8 @@ static void redirect_copy_headers_out(request_rec *r, const redirect_response *r
 }
 
 int px_handle_request(request_rec *r, px_config *conf) {
-    // Decline if module is disabled
-    if (!conf->module_enabled) {
+    // Decline if module is disabled or not properly configured
+    if (!conf || !conf->module_enabled || !conf->app_id) {
         return DECLINED;
     }
 
@@ -241,7 +241,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
 
     const redirect_response *redirect_res = NULL;
     // Redirect client
-    if (strncmp(conf->client_path_prefix, r->parsed_uri.path, strlen(conf->client_path_prefix)) == 0) {
+    if (conf->client_path_prefix && strncmp(conf->client_path_prefix, r->parsed_uri.path, strlen(conf->client_path_prefix)) == 0) {
         redirect_res = redirect_client(r, conf);
         r->status = HTTP_OK;
         redirect_copy_headers_out(r, redirect_res);
@@ -250,7 +250,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
     }
 
     // Redirect XHR
-    if (strncmp(conf->xhr_path_prefix, r->parsed_uri.path, strlen(conf->xhr_path_prefix)) == 0) {
+    if (conf->xhr_path_prefix && strncmp(conf->xhr_path_prefix, r->parsed_uri.path, strlen(conf->xhr_path_prefix)) == 0) {
         redirect_res = redirect_xhr(r, conf);
         r->status = HTTP_OK;
         redirect_copy_headers_out(r, redirect_res);
@@ -271,7 +271,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
     }
 
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Starting request verification");
- 
+
     request_context *ctx = create_context(r, conf);
     if (ctx) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Request context created successfully");
@@ -285,13 +285,17 @@ int px_handle_request(request_rec *r, px_config *conf) {
         }
         post_verification(ctx, conf, request_valid);
 #if DEBUG
-        char *aut_test_header = apr_pstrdup(r->pool, (char *) apr_table_get(r->headers_in, PX_AUT_HEADER_KEY));
-        if (aut_test_header && strcmp(aut_test_header, PX_AUT_HEADER_VALUE) == 0) {
-            const char *ctx_str = json_context(ctx);
-            ap_set_content_type(r, CONTENT_TYPE_JSON);
-            ap_rprintf(r, "%s", ctx_str);
-            free((void*)ctx_str);
-            return DONE;
+        const char *PX_AUT_HEADER_KEY = getenv("PX_AUT_HEADER_KEY");
+        const char *PX_AUT_HEADER_VALUE = getenv("PX_AUT_HEADER_VALUE");
+        if (PX_AUT_HEADER_KEY && PX_AUT_HEADER_VALUE) {
+            char *aut_test_header = apr_pstrdup(r->pool, (char *) apr_table_get(r->headers_in, PX_AUT_HEADER_KEY));
+            if (aut_test_header && strcmp(aut_test_header, PX_AUT_HEADER_VALUE) == 0) {
+                const char *ctx_str = json_context(ctx);
+                ap_set_content_type(r, CONTENT_TYPE_JSON);
+                ap_rprintf(r, "%s", ctx_str);
+                free((void*)ctx_str);
+                return DONE;
+            }
         }
 #endif
 
@@ -423,15 +427,15 @@ static apr_status_t create_health_check(apr_pool_t *p, server_rec *s, px_config 
         return rv;
     }
 
-    rv = apr_thread_create(&cfg->health_check_thread, NULL, health_check, (void*) hc_data, p);
-    if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "error while init health_check thread create");
-        return rv;
-    }
-
     rv = apr_thread_mutex_create(&cfg->health_check_cond_mutex, 0, p);
     if (rv != APR_SUCCESS) {
         ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "error while creating health_check thread mutex");
+        return rv;
+    }
+
+    rv = apr_thread_create(&cfg->health_check_thread, NULL, health_check, (void*) hc_data, p);
+    if (rv != APR_SUCCESS) {
+        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "error while init health_check thread create");
         return rv;
     }
 
@@ -500,7 +504,7 @@ static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
 
         px_config *cfg = ap_get_module_config(vs->module_config, &perimeterx_module);
         if (!cfg || !cfg->module_enabled) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg->app_id, "Request will not be verified, module is disabled");
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg ? cfg->app_id : 0, "Request will not be verified, module is disabled or not properly configured");
             continue;
         }
         // initialize the PerimeterX needed pools and background workers if the PerimeterX module is enabled
@@ -638,7 +642,7 @@ static const char *set_app_id(cmd_parms *cmd, void *config, const char *app_id) 
     if (!conf) {
         return ERROR_CONFIG_MISSING;
     }
-    if (conf->base_url_is_set){
+    if (conf->base_url_is_set) {
         return ERROR_BASE_URL_BEFORE_APP_ID;
     }
     if (strlen(app_id) < 3) {
@@ -1151,8 +1155,12 @@ static void *create_config(apr_pool_t *p) {
         conf->risk_api_url = apr_pstrcat(p, conf->base_url, RISK_API, NULL);
         conf->captcha_api_url = apr_pstrcat(p, conf->base_url, CAPTCHA_API, NULL);
         conf->activities_api_url = apr_pstrcat(p, conf->base_url, ACTIVITIES_API, NULL);
-        conf->auth_token = "";
-        conf->auth_header = "";
+        conf->app_id = NULL;
+        conf->payload_key = NULL;
+        conf->auth_token = NULL;
+        conf->auth_header = NULL;
+        conf->client_path_prefix = NULL;
+        conf->xhr_path_prefix = NULL;
         conf->routes_whitelist = apr_array_make(p, 0, sizeof(char*));
         conf->useragents_whitelist = apr_array_make(p, 0, sizeof(char*));
         conf->custom_file_ext_whitelist = apr_array_make(p, 0, sizeof(char*));
@@ -1164,7 +1172,7 @@ static void *create_config(apr_pool_t *p) {
         conf->background_activity_workers = 10;
         conf->background_activity_queue_size = 1000;
         conf->px_errors_threshold = 100;
-        conf->health_check_interval = apr_time_sec(60); // 1 minute
+        conf->health_check_interval = apr_time_from_sec(60); // 1 minute
         conf->px_health_check = false;
         conf->score_header_name = SCORE_HEADER_NAME;
         conf->vid_header_enabled = false;

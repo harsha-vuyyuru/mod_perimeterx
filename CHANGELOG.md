@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/) 
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [2.11.0] - 04-11-2018
+* Added autoconf support, make sure to follow the installation instructions, package dependencies have changed
+* Fixed bug in PXMonitorService
+* Fixed apache crash when module is not configured properly
+* Fixed possible memory leak in debug mode
+* Memory optimizations - using apr instead of malloc
+
 ## [2.10.1] - 03-15-2018
 * Fixed potential memory leak on first party while reading body
 * Fixed first party XHR flag

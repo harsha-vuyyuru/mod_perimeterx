@@ -3,28 +3,11 @@ FROM debian:jessie
 MAINTAINER aviad@perimeterx.com
 
 RUN apt-get update
-RUN apt-get install -y \
-        apache2 \
-        apache2-dev \
-        wget \
-        build-essential \
-        libcurl4-openssl-dev \
-        libjansson-dev \
-        libssl-dev \
-        vim \
-        git \
-        pkg-config \
-        silversearcher-ag \
-        libperl-dev \
-        libgdm-dev \
-        cpanminus \
-        libjson0 \
-        libjson0-dev \
-        devscripts
+RUN apt-get install -y --no-install-recommends git ca-certificates libtool m4 autoconf automake libjansson-dev libssl-dev libcurl4-openssl-dev apache2-dev apache2
 
 WORKDIR tmp
-RUN git clone https://github.com/PerimeterX/mod_perimeterx.git
-RUN cd mod_perimeterx/src && make && make install
+RUN git clone https://github.com/PerimeterX/mod_perimeterx.git mod_perimeterx
+RUN cd mod_perimeterx && sh autogen.sh && ./configure && make clean && make && make install
 
 EXPOSE 80
 
