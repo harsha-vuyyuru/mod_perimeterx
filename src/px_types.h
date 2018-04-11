@@ -6,6 +6,7 @@
 #include <http_protocol.h>
 #include <apr_thread_pool.h>
 #include <apr_queue.h>
+#include <apr_thread_rwlock.h>
 
 #include "curl_pool.h"
 typedef enum {
@@ -65,6 +66,8 @@ typedef struct px_config_t {
     volatile apr_uint32_t px_errors_count;
     long health_check_interval; // in ms
     bool should_exit_thread;
+    apr_thread_t *remote_config_thread;
+    apr_thread_rwlock_t *remote_config_lock;
     bool enable_token_via_header;
     bool uuid_header_enabled;
     bool vid_header_enabled;
@@ -86,10 +89,10 @@ typedef struct px_config_t {
     const char *client_base_uri;
 } px_config;
 
-typedef struct health_check_data_t {
+typedef struct thread_data_t {
     server_rec *server;
     px_config *config;
-} health_check_data;
+} thread_data;
 
 typedef struct activity_consumer_data_t {
     px_config *config;
@@ -230,7 +233,7 @@ typedef enum {
 typedef struct redirect_response_t {
     const char *content;
     const char *response_content_type;
-    int content_size; 
+    int content_size;
     apr_array_header_t *response_headers;
     bool predefined;
 } redirect_response;

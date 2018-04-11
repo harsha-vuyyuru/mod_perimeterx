@@ -14,14 +14,6 @@ APLOG_USE_MODULE(perimeterx);
 #define T_ESCAPE_URLENCODED    (16)
 #define TEST_CHAR(c, f)        (test_char_table[(unsigned)(c)] & (f))
 
-struct response_t {
-    char* data;
-    size_t size;
-    server_rec *server;
-    request_rec *r;
-    apr_array_header_t *headers;
-    const char *app_id;
-};
 
 
 static const char *JSON_CONTENT_TYPE = "Content-Type: application/json";
@@ -96,7 +88,7 @@ static int read_body(request_rec *r, char **body) {
     return -1;
 }
 
-static size_t write_response_cb(void* contents, size_t size, size_t nmemb, void *stream) {
+size_t write_response_cb(void* contents, size_t size, size_t nmemb, void *stream) {
     struct response_t *res = (struct response_t*)stream;
     size_t realsize = size * nmemb;
     char *tmp;

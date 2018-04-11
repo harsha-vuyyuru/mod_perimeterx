@@ -45,6 +45,8 @@ static const char *RISK_API = "/api/v2/risk";
 static const char *CAPTCHA_API = "/api/v2/risk/captcha";
 static const char *ACTIVITIES_API = "/api/v1/collector/s2s";
 static const char *HEALTH_CHECK_API = "/api/v1/kpi/status";
+static const char *CONFIGURATION_SERVER_URL = "https://px-conf.perimeterx.net";
+static const char *REMOTE_CONFIGURATIONS_PATH = "/api/v1/enforcer";
 
 
 static const char *CONTENT_TYPE_JSON = "application/json";
@@ -76,6 +78,7 @@ static const char *PAGE_REQUESTED_ACTIVITY_TYPE = "page_requested";
 static const char *LOGGER_DEBUG_FORMAT = "[PerimeterX - DEBUG][%s] - %s";
 static const char *LOGGER_ERROR_FORMAT = "[PerimeterX - ERROR][%s] - %s";
 
+static void set_app_id_helper(apr_pool_t *pool, px_config *conf, const char *app_id);
 
 #ifdef DEBUG
 extern const char *BLOCK_REASON_STR[];
@@ -336,7 +339,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
 
 // Background thread that wakes up after reacing X timeoutes in interval length Y and checks when service is available again
 static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
-    health_check_data *hc = (health_check_data*) data;
+    thread_data *hc = (thread_data*) data;
     px_config *conf = hc->config;
 
     const char *health_check_url = apr_pstrcat(hc->server->process->pool, hc->config->base_url, HEALTH_CHECK_API, NULL);
@@ -372,6 +375,174 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
 
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, LOGGER_DEBUG_FORMAT, conf->app_id, "health_check: thread exiting");
 
+    curl_easy_cleanup(curl);
+    apr_thread_exit(thd, 0);
+    return NULL;
+}
+
+// periodically check for remote configuration changes
+static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
+    thread_data *th_data = (thread_data*) data;
+    px_config *conf = th_data->config;
+    char *checksum = NULL;
+
+    apr_pool_t *pool;
+    apr_status_t rv;
+    rv = apr_pool_create(&pool, conf->pool);
+    if (rv != APR_SUCCESS) {
+        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, th_data->server, LOGGER_ERROR_FORMAT, conf->app_id, "remote configuration: error while trying to initialize apr_pool");
+        return NULL;
+    }
+
+    CURL *curl = curl_easy_init();
+    CURLcode res;
+    long status_code;
+    struct curl_slist *headers = NULL;
+
+    headers = curl_slist_append(headers, conf->auth_header);
+    headers = curl_slist_append(headers, CONTENT_TYPE_JSON);
+
+    while (!conf->should_exit_thread) {
+        char errbuf[CURL_ERROR_SIZE];
+        struct response_t response;
+        const char *url;
+
+        apr_sleep(APR_USEC_PER_SEC * 5);
+
+        response.data = malloc(1);
+        response.size = 0;
+        response.server = th_data->server;
+
+        if (checksum) {
+            url = apr_psprintf(pool, "%s%s?checksum=%s", CONFIGURATION_SERVER_URL, REMOTE_CONFIGURATIONS_PATH, checksum);
+        } else {
+            url = apr_psprintf(pool, "%s%s", CONFIGURATION_SERVER_URL, REMOTE_CONFIGURATIONS_PATH);
+        }
+
+        curl_easy_setopt(curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, conf->api_timeout_ms);
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
+
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_response_cb);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)&response);
+        if (conf->proxy_url) {
+            curl_easy_setopt(curl, CURLOPT_PROXY, conf->proxy_url);
+        }
+
+        res = curl_easy_perform(curl);
+        if (res != CURLE_OK) {
+            free(response.data);
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server, "[%s]: remote configuration request failed: %s (%d)", conf->app_id, errbuf, res);
+            continue;
+        }
+
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
+        if (status_code == 204) {
+            free(response.data);
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Configuration was not changed");
+            continue;
+        }
+
+        if (status_code != HTTP_OK) {
+            free(response.data);
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server, "[%s]: remote configuration request failed: %s (%ld)", conf->app_id, errbuf, status_code);
+            continue;
+        }
+
+        json_error_t j_error;
+        json_t *j = json_loads(response.data, 0, &j_error);
+        if (!j) {
+            free(response.data);
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server,
+                "[%s]: remote configuration request: failed to parse json: %s", conf->app_id, j_error.text);
+            continue;
+        }
+        free(response.data);
+
+        // parse JSON
+        const char *checksum_tmp = NULL;
+        int px_enabled = 1;
+        const char *cookie_secret = NULL;
+        const char *px_appId = NULL;
+        int blocking_score = 0;
+        int px_debug = 0;
+        const char *module_mode = NULL;
+        int client_timeout = 0;
+        const char *s2s_timeout = NULL;
+        int first_party_enabled = 0;
+        int reverse_xhr_enabled = 0;
+        if (json_unpack_ex(j, &j_error, 0, "{s:b, s:s, s:i, s:s, s:s, s:i, s:i, s:b, s:s, s:b, s:b}",
+                "moduleEnabled", &px_enabled,
+                "cookieKey", &cookie_secret,
+                "blockingScore", &blocking_score,
+                "appId", &px_appId,
+                "moduleMode", &module_mode,
+
+                "connectTimeout", &client_timeout,
+                "riskTimeout", &s2s_timeout,
+
+                "debugMode", &px_debug,
+                "checksum", &checksum_tmp,
+                "firstPartyEnabled", &first_party_enabled,
+                "firstPartyXhrEnabled", &reverse_xhr_enabled)) {
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server,
+                "[%s]: remote configuration request: failed to parse json response: %s\n", conf->app_id, j_error.text);
+            json_decref(j);
+            continue;
+        }
+
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server,
+                "[%s]: applying new configuration (module_enabled: %d)", conf->app_id, px_enabled);
+
+        // all good, acquire rw lock and update configuration data
+        apr_thread_rwlock_wrlock(conf->remote_config_lock);
+
+        conf->module_enabled = px_enabled;
+        conf->payload_key = apr_pstrdup(pool, cookie_secret);
+        conf->blocking_score = blocking_score;
+        set_app_id_helper(pool, conf, apr_pstrdup(pool, px_appId));
+        if (module_mode) {
+            conf->monitor_mode = strcmp(module_mode, "monitoring") == 0;
+        }
+        // it comes in milliseconds
+        conf->api_timeout_ms = client_timeout;
+        // TODO: s2s_timeout
+        // TODO: px_debug
+
+        checksum = apr_pstrdup(pool, checksum_tmp);
+
+        conf->first_party_enabled = first_party_enabled;
+        conf->first_party_xhr_enabled = reverse_xhr_enabled;
+
+        json_t *j_hdrs = json_object_get(j, "ipHeaders");
+        if (j_hdrs && json_array_size(j_hdrs)) {
+
+            apr_array_clear(conf->ip_header_keys);
+
+            for (size_t i = 0; i< json_array_size(j_hdrs); i++) {
+                const char *str;
+                json_t *obj_txt;
+
+                obj_txt = json_array_get(j_hdrs, i);
+                if (!obj_txt || !json_is_string(obj_txt)) {
+                    continue;
+                }
+                str = json_string_value(obj_txt);
+                const char** entry = apr_array_push(conf->ip_header_keys);
+                *entry = apr_pstrdup(pool, str);
+            }
+        }
+
+        // TODO: update sensitiveHeaders
+
+        // release the lock
+        apr_thread_rwlock_unlock(conf->remote_config_lock);
+
+        json_decref(j);
+    }
+
+    curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
     apr_thread_exit(thd, 0);
     return NULL;
@@ -416,7 +587,7 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
 static apr_status_t create_health_check(apr_pool_t *p, server_rec *s, px_config *cfg) {
     apr_status_t rv;
 
-    health_check_data *hc_data= (health_check_data*)apr_palloc(p, sizeof(health_check_data));
+    thread_data *hc_data= (thread_data*)apr_palloc(p, sizeof(thread_data));
     cfg->px_errors_count = 0;
     hc_data->server = s;
     hc_data->config = cfg;
@@ -436,6 +607,28 @@ static apr_status_t create_health_check(apr_pool_t *p, server_rec *s, px_config 
     rv = apr_thread_create(&cfg->health_check_thread, NULL, health_check, (void*) hc_data, p);
     if (rv != APR_SUCCESS) {
         ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "error while init health_check thread create");
+        return rv;
+    }
+
+    return rv;
+}
+
+static apr_status_t create_remote_config(apr_pool_t *p, server_rec *s, px_config *cfg) {
+    apr_status_t rv;
+
+    thread_data *th_data= (thread_data*)apr_palloc(p, sizeof(thread_data));
+    th_data->server = s;
+    th_data->config = cfg;
+
+    rv = apr_thread_rwlock_create(&cfg->remote_config_lock, p);
+    if (rv != APR_SUCCESS) {
+        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "error while creating remote config rwlocks");
+        return rv;
+    }
+
+    rv = apr_thread_create(&cfg->remote_config_thread, NULL, remote_config, (void*)th_data, p);
+    if (rv != APR_SUCCESS) {
+        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "error while init remote config thread");
         return rv;
     }
 
@@ -535,6 +728,12 @@ static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
                 ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "px_child_setup: error while trying to init health_check_thread");
                 return rv;
             }
+        }
+
+        rv = create_remote_config(cfg->pool, vs, cfg);
+        if (rv != APR_SUCCESS) {
+            ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "px_child_setup: error while trying to init remote_config_thread");
+            return rv;
         }
     }
     apr_pool_cleanup_register(p, s, px_child_exit, apr_pool_cleanup_null);
@@ -637,6 +836,19 @@ static const char *set_px_enabled(cmd_parms *cmd, void *config, int arg) {
     return NULL;
 }
 
+static void set_app_id_helper(apr_pool_t *pool, px_config *conf, const char *app_id) {
+    conf->app_id = app_id;
+    conf->base_url = apr_psprintf(pool, DEFAULT_BASE_URL, app_id, NULL);
+    conf->risk_api_url = apr_pstrcat(pool, conf->base_url, RISK_API, NULL);
+    conf->captcha_api_url = apr_pstrcat(pool, conf->base_url, CAPTCHA_API, NULL);
+    conf->activities_api_url = apr_pstrcat(pool, conf->base_url, ACTIVITIES_API, NULL);
+    const char *reverse_prefix =  &app_id[2];
+    conf->xhr_path_prefix = apr_psprintf(pool, "/%s/xhr", reverse_prefix);
+    conf->client_path_prefix = apr_psprintf(pool, "/%s/init.js", reverse_prefix);
+    conf->client_exteral_path = apr_psprintf(pool, "//client.perimeterx.net/%s/main.min.js", app_id);
+    conf->collector_base_uri = apr_psprintf(pool, "https://collector-%s.perimeterx.net", app_id);
+}
+
 static const char *set_app_id(cmd_parms *cmd, void *config, const char *app_id) {
     px_config *conf = get_config(cmd, config);
     if (!conf) {
@@ -648,16 +860,7 @@ static const char *set_app_id(cmd_parms *cmd, void *config, const char *app_id) 
     if (strlen(app_id) < 3) {
         return ERROR_SHORT_APP_ID;
     }
-    conf->app_id = app_id;
-    conf->base_url = apr_psprintf(cmd->pool, DEFAULT_BASE_URL, app_id, NULL);
-    conf->risk_api_url = apr_pstrcat(cmd->pool, conf->base_url, RISK_API, NULL);
-    conf->captcha_api_url = apr_pstrcat(cmd->pool, conf->base_url, CAPTCHA_API, NULL);
-    conf->activities_api_url = apr_pstrcat(cmd->pool, conf->base_url, ACTIVITIES_API, NULL);
-    const char *reverse_prefix =  &app_id[2];
-    conf->xhr_path_prefix = apr_psprintf(cmd->pool, "/%s/xhr", reverse_prefix);
-    conf->client_path_prefix = apr_psprintf(cmd->pool, "/%s/init.js", reverse_prefix);
-    conf->client_exteral_path = apr_psprintf(cmd->pool, "//client.perimeterx.net/%s/main.min.js", app_id);
-    conf->collector_base_uri = apr_psprintf(cmd->pool, "https://collector-%s.perimeterx.net", app_id);
+    set_app_id_helper(cmd->pool, conf, app_id);
     return NULL;
 }
 
@@ -1135,7 +1338,14 @@ static const char* set_client_base_url(cmd_parms *cmd, void *config, const char 
 
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
-    return px_handle_request(r, conf);
+    int res;
+
+    // only blocks while configuration is refreshing
+    apr_thread_rwlock_rdlock(conf->remote_config_lock);
+    res = px_handle_request(r, conf);
+    apr_thread_rwlock_unlock(conf->remote_config_lock);
+
+    return res;
 }
 
 static void *create_config(apr_pool_t *p) {
