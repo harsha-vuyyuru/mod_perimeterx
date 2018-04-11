@@ -85,28 +85,13 @@ Loaded Modules:
 <IfModule mod_perimeterx.c>
     # basic directives
     PXEnabled On
-    CookieKey my_key
-    AppID my_app_id
-    AuthToken my_auth_token
-    BlockingScore 90
+    CookieKey [COOKIE KEY PLACEHOLDER]
+    AppID [APPID PLACEHOLDER]
+    AuthToken [AUTHTOKEN PLACEHOLDER]
+    BlockingScore 100
     ReportPageRequest On
     IPHeader X-True-IP
-    CurlPoolSize 100
-    Captcha On
-    CaptchaTimeout 1000
-    ScoreHeader On
-    ScoreHeaderName X-PX-SCORE
     MonitorMode Off
-
-    # service monitor directives
-    PXServiceMonitor On
-    MaxPXErrorsThreshold 100
-    PXErrorsCountInterval 30000
-
-    # filter
-    SensitiveRoutes /login
-    PXWhitelistRoutes /server-status /staging
-    PXWhitelistUserAgents "Mozilla/5.0 (Macintosh; Intel Mac OS X) AppleWebKit/534.34 (KHTML,  like Gecko) PhantomJS/1.9.0 (development) Safari/534.34"
 </IfModule>
 ```
 
@@ -118,13 +103,12 @@ Loaded Modules:
         DocumentRoot /var/www/html
         <IfModule mod_perimeterx.c>
                 PXEnabled On
-                CookieKey my_key
-                AppID my_app_id
-                AuthToken my_auth_token
-                BlockingScore 90
+		CookieKey [COOKIE KEY PLACEHOLDER]
+		AppID [APPID PLACEHOLDER]
+		AuthToken [AUTHTOKEN PLACEHOLDER]
+                BlockingScore 100
 		MonitorMode Off
                 ReportPageRequest On
-                Captcha On
         </IfModule>
 </VirtualHost>
 ```
