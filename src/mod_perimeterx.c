@@ -1447,10 +1447,16 @@ static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     int res;
 
-    // only blocks while configuration is refreshing
-    apr_thread_rwlock_rdlock(conf->remote_config_lock);
+    if (conf->remote_config_enabled) {
+        // only blocks while configuration is refreshing
+        apr_thread_rwlock_rdlock(conf->remote_config_lock);
+    }
+
     res = px_handle_request(r, conf);
-    apr_thread_rwlock_unlock(conf->remote_config_lock);
+
+    if (conf->remote_config_enabled) {
+        apr_thread_rwlock_unlock(conf->remote_config_lock);
+    }
 
     return res;
 }
