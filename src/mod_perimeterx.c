@@ -397,6 +397,7 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
     thread_data *th_data = (thread_data*) data;
     px_config *conf = th_data->config;
     char *checksum = NULL;
+    bool startup = true;
 
     apr_pool_t *pool;
     apr_status_t rv;
@@ -422,8 +423,13 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
         struct response_t response;
         const char *url;
 
-        // Sleep for the specified number of micro-seconds
-        apr_sleep(conf->remote_config_interval_ms);
+        // immediately request the remote config upon startup
+        if (!startup) {
+            // Sleep for the specified number of micro-seconds
+            apr_sleep(conf->remote_config_interval_ms);
+        } else {
+            startup = false;
+        }
 
         response.data = apr_pcalloc(pool, 1);
         response.size = 0;
