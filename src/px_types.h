@@ -26,6 +26,7 @@ typedef struct px_config_t {
     const char *risk_api_url;
     const char *captcha_api_url;
     const char *activities_api_url;
+    const char *telemetry_api_url;
     const char *css_ref;
     const char *js_ref;
     const char *custom_logo;
@@ -53,6 +54,7 @@ typedef struct px_config_t {
     apr_array_header_t *sensitive_routes;
     apr_array_header_t *sensitive_routes_prefix;
     apr_array_header_t *enabled_hostnames;
+    apr_array_header_t *sensitive_header_keys;
     bool background_activity_send;
     int background_activity_workers;
     int background_activity_queue_size;
@@ -87,6 +89,9 @@ typedef struct px_config_t {
     const char *client_exteral_path;
     const char *collector_base_uri;
     const char *client_base_uri;
+    bool remote_config_enabled;
+    const char *remote_config_url;
+    int remote_config_interval_ms;
 } px_config;
 
 typedef struct thread_data_t {

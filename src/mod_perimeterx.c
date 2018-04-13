@@ -47,7 +47,7 @@ static const char *ACTIVITIES_API = "/api/v1/collector/s2s";
 static const char *HEALTH_CHECK_API = "/api/v1/kpi/status";
 static const char *CONFIGURATION_SERVER_URL = "https://px-conf.perimeterx.net";
 static const char *REMOTE_CONFIGURATIONS_PATH = "/api/v1/enforcer";
-
+static const char *TELEMETRY_API = "/api/v2/risk/telemetry";
 
 static const char *CONTENT_TYPE_JSON = "application/json";
 static const char *CONTENT_TYPE_HTML = "text/html";
@@ -74,6 +74,8 @@ static const char *ERROR_SHORT_APP_ID = "mod_perimeterx: AppId must be longer th
 
 static const char *BLOCKED_ACTIVITY_TYPE = "block";
 static const char *PAGE_REQUESTED_ACTIVITY_TYPE = "page_requested";
+static const char *UPDATE_REASON_REMOTE_CONFIG = "remote_config";
+static const char *UPDATE_REASON_INITIAL_CONFIG = "initial_config";
 
 static const char *LOGGER_DEBUG_FORMAT = "[PerimeterX - DEBUG][%s] - %s";
 static const char *LOGGER_ERROR_FORMAT = "[PerimeterX - ERROR][%s] - %s";
@@ -380,6 +382,16 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
     return NULL;
 }
 
+void telemetry_activity_send(CURL *telemetry_curl, server_rec *s, px_config *cfg, const char *update_reason) {
+    char *activity = config_to_json_string(cfg, update_reason);
+    if (!activity) {
+        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s, "[%s]: telemetry_activity_send: create telemetry activity failed", cfg->app_id);
+        return;
+    }
+    post_request_helper(telemetry_curl, cfg->telemetry_api_url, activity, cfg->api_timeout_ms, cfg, s, NULL);
+    free(activity);
+}
+
 // periodically check for remote configuration changes
 static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
     thread_data *th_data = (thread_data*) data;
@@ -393,12 +405,15 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
         ap_log_error(APLOG_MARK, APLOG_CRIT, rv, th_data->server, LOGGER_ERROR_FORMAT, conf->app_id, "remote configuration: error while trying to initialize apr_pool");
         return NULL;
     }
+    CURL *telemetry_curl = curl_easy_init();
+
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server, "px_hook_child_init: start init for telemetry_activity_send");
+    telemetry_activity_send(telemetry_curl, th_data->server, conf, UPDATE_REASON_INITIAL_CONFIG);
 
     CURL *curl = curl_easy_init();
     CURLcode res;
     long status_code;
     struct curl_slist *headers = NULL;
-
     headers = curl_slist_append(headers, conf->auth_header);
     headers = curl_slist_append(headers, CONTENT_TYPE_JSON);
 
@@ -407,16 +422,18 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
         struct response_t response;
         const char *url;
 
-        apr_sleep(APR_USEC_PER_SEC * 5);
+        // Sleep for the specified number of micro-seconds
+        apr_sleep(conf->remote_config_interval_ms);
 
-        response.data = malloc(1);
+        response.data = apr_pcalloc(pool, 1);
         response.size = 0;
         response.server = th_data->server;
+        response.pool = pool;
 
         if (checksum) {
-            url = apr_psprintf(pool, "%s%s?checksum=%s", CONFIGURATION_SERVER_URL, REMOTE_CONFIGURATIONS_PATH, checksum);
+            url = apr_psprintf(pool, "%s?checksum=%s", conf->remote_config_url, checksum);
         } else {
-            url = apr_psprintf(pool, "%s%s", CONFIGURATION_SERVER_URL, REMOTE_CONFIGURATIONS_PATH);
+            url = conf->remote_config_url;
         }
 
         curl_easy_setopt(curl, CURLOPT_URL, url);
@@ -424,7 +441,7 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
         curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
 
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_response_cb);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_response_pool_cb);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)&response);
         if (conf->proxy_url) {
             curl_easy_setopt(curl, CURLOPT_PROXY, conf->proxy_url);
@@ -534,16 +551,38 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
             }
         }
 
-        // TODO: update sensitiveHeaders
+        j_hdrs = json_object_get(j, "sensitiveHeaders");
+        if (j_hdrs && json_array_size(j_hdrs)) {
+
+            apr_array_clear(conf->sensitive_header_keys);
+
+            for (size_t i = 0; i< json_array_size(j_hdrs); i++) {
+                const char *str;
+                json_t *obj_txt;
+
+                obj_txt = json_array_get(j_hdrs, i);
+                if (!obj_txt || !json_is_string(obj_txt)) {
+                    continue;
+                }
+                str = json_string_value(obj_txt);
+                const char** entry = apr_array_push(conf->sensitive_header_keys);
+                *entry = apr_pstrdup(pool, str);
+            }
+        }
 
         // release the lock
         apr_thread_rwlock_unlock(conf->remote_config_lock);
 
         json_decref(j);
+
+        telemetry_activity_send(telemetry_curl, th_data->server, conf, UPDATE_REASON_REMOTE_CONFIG);
     }
+
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server, LOGGER_DEBUG_FORMAT, conf->app_id, "remote_config: thread exiting");
 
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
+    curl_easy_cleanup(telemetry_curl);
     apr_thread_exit(thd, 0);
     return NULL;
 }
@@ -576,8 +615,6 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
 
     curl_easy_cleanup(curl);
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, consumer_data->server, LOGGER_DEBUG_FORMAT, conf->app_id, "activity consumer thread exited");
-    apr_thread_exit(thd, 0);
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, consumer_data->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Sending activity completed");
     return NULL;
 }
 
@@ -615,7 +652,6 @@ static apr_status_t create_health_check(apr_pool_t *p, server_rec *s, px_config 
 
 static apr_status_t create_remote_config(apr_pool_t *p, server_rec *s, px_config *cfg) {
     apr_status_t rv;
-
     thread_data *th_data= (thread_data*)apr_palloc(p, sizeof(thread_data));
     th_data->server = s;
     th_data->config = cfg;
@@ -669,24 +705,46 @@ static apr_status_t background_activity_send_init(apr_pool_t *pool, server_rec *
 // free all (apache) unmanaged resources
 static apr_status_t px_child_exit(void *data) {
     server_rec *s = (server_rec*)data;
-    px_config *cfg = ap_get_module_config(s->module_config, &perimeterx_module);
-
-    // signaling health check thread to exit
-    if (cfg->px_health_check) {
-        cfg->should_exit_thread = true;
-        apr_thread_cond_signal(cfg->health_check_cond);
-    }
-    // terminate the queue and wake up all idle threads
     apr_status_t rv = APR_SUCCESS;
-    if (cfg->activity_queue) {
-        rv = apr_queue_term(cfg->activity_queue);
-        if (rv != APR_SUCCESS) {
-            char buf[ERR_BUF_SIZE];
-            char *err = apr_strerror(rv, buf, sizeof(buf));
-            ap_log_error(APLOG_MARK, LOG_ERR, 0, s, "px_child_exit: could not terminate the queue - %s", err);
+
+    for (server_rec *vs = s; vs; vs = vs->next) {
+        px_config *cfg = ap_get_module_config(vs->module_config, &perimeterx_module);
+
+        cfg->should_exit_thread = true;
+
+        // signaling health check thread to exit
+        if (cfg->px_health_check) {
+            apr_thread_cond_signal(cfg->health_check_cond);
+            apr_status_t status;
+            apr_thread_join(&status, cfg->health_check_thread);
         }
+
+        // wait for remote config thread to exit
+        if (cfg->remote_config_thread) {
+            apr_status_t status;
+            apr_thread_join(&status, cfg->remote_config_thread);
+        }
+
+        // terminate the queue and wake up all idle threads
+        if (cfg->activity_queue) {
+            rv = apr_queue_term(cfg->activity_queue);
+            if (rv != APR_SUCCESS) {
+                char buf[ERR_BUF_SIZE];
+                char *err = apr_strerror(rv, buf, sizeof(buf));
+                ap_log_error(APLOG_MARK, LOG_ERR, 0, s, "px_child_exit: could not terminate the queue - %s", err);
+            }
+        }
+
+        if (cfg->activity_thread_pool) {
+            apr_thread_pool_destroy(cfg->activity_thread_pool);
+        }
+
+        if (cfg->app_id)
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_ERROR_FORMAT, cfg->app_id, "px_child_exit: cleanup finished");
+        else
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "px_child_exit: cleanup finished");
     }
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "px_child_exit: cleanup finished");
+
     return rv;
 }
 
@@ -730,10 +788,14 @@ static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
             }
         }
 
-        rv = create_remote_config(cfg->pool, vs, cfg);
-        if (rv != APR_SUCCESS) {
-            ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "px_child_setup: error while trying to init remote_config_thread");
-            return rv;
+        if (cfg->remote_config_enabled && !cfg->remote_config_thread) {
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg->app_id, "px_child_setup: setting up remote_config thread");
+
+            rv = create_remote_config(cfg->pool, vs, cfg);
+            if (rv != APR_SUCCESS) {
+                ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "px_child_setup: error while trying to init remote_config_thread");
+                return rv;
+            }
         }
     }
     apr_pool_cleanup_register(p, s, px_child_exit, apr_pool_cleanup_null);
@@ -847,6 +909,7 @@ static void set_app_id_helper(apr_pool_t *pool, px_config *conf, const char *app
     conf->client_path_prefix = apr_psprintf(pool, "/%s/init.js", reverse_prefix);
     conf->client_exteral_path = apr_psprintf(pool, "//client.perimeterx.net/%s/main.min.js", app_id);
     conf->collector_base_uri = apr_psprintf(pool, "https://collector-%s.perimeterx.net", app_id);
+    conf->telemetry_api_url = apr_pstrcat(pool, conf->base_url, TELEMETRY_API, NULL);
 }
 
 static const char *set_app_id(cmd_parms *cmd, void *config, const char *app_id) {
@@ -1254,7 +1317,6 @@ static const char* set_origin_envvar(cmd_parms *cmd, void *config, const char *o
     return NULL;
 }
 
-
 static const char *enable_origin_wildcard(cmd_parms *cmd, void *config, int arg) {
     px_config *conf = get_config(cmd, config);
     if (!conf) {
@@ -1263,7 +1325,6 @@ static const char *enable_origin_wildcard(cmd_parms *cmd, void *config, int arg)
     conf->origin_wildcard_enabled = arg ? true : false;
     return NULL;
 }
-
 
 static const char* set_captcha_type(cmd_parms *cmd, void *config, const char *captcha_type) {
     px_config *conf = get_config(cmd, config);
@@ -1336,6 +1397,46 @@ static const char* set_client_base_url(cmd_parms *cmd, void *config, const char 
     return NULL;
 }
 
+static const char *set_remote_configuration(cmd_parms *cmd, void *config, int arg) {
+
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->remote_config_enabled = arg ? true : false;
+    return NULL;
+}
+
+static const char* set_remote_config_url(cmd_parms *cmd, void *config, const char *remote_config_url) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+
+    conf->remote_config_url = remote_config_url;
+    return NULL;
+}
+
+static const char *set_remote_config_interval_ms(cmd_parms *cmd, void *config, const char *interval_ms) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    conf->remote_config_interval_ms = atoi(interval_ms) * 1000;
+    return NULL;
+}
+
+static const char *set_sensitive_headers(cmd_parms *cmd, void *config, const char *sensitive_header) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    const char** entry = apr_array_push(conf->sensitive_header_keys);
+    *entry = sensitive_header;
+    return NULL;
+}
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
     int res;
@@ -1378,6 +1479,7 @@ static void *create_config(apr_pool_t *p) {
         conf->sensitive_routes = apr_array_make(p, 0, sizeof(char*));
         conf->enabled_hostnames = apr_array_make(p, 0, sizeof(char*));
         conf->sensitive_routes_prefix = apr_array_make(p, 0, sizeof(char*));
+        conf->sensitive_header_keys = apr_array_make(p, 0, sizeof(char*));
         conf->background_activity_send = false;
         conf->background_activity_workers = 10;
         conf->background_activity_queue_size = 1000;
@@ -1399,6 +1501,12 @@ static void *create_config(apr_pool_t *p) {
         conf->first_party_enabled = true;
         conf->first_party_xhr_enabled = true;
         conf->client_base_uri = "https://client.perimeterx.net";
+        conf->remote_config_thread = NULL;
+        conf->remote_config_enabled = false;
+        conf->remote_config_url = apr_pstrcat(p, CONFIGURATION_SERVER_URL, REMOTE_CONFIGURATIONS_PATH, NULL);
+        conf->remote_config_interval_ms = apr_time_from_sec(5);
+        conf->activity_thread_pool = NULL;
+        conf->telemetry_api_url = apr_pstrcat(p, conf->base_url, TELEMETRY_API, NULL);
     }
     return conf;
 }
@@ -1594,12 +1702,12 @@ static const command_rec px_directives[] = {
             set_vid_header_name,
             NULL,
             OR_ALL,
-            "Sets the name of vid response header"),
+            "Set the name of vid response header"),
     AP_INIT_TAKE1("UuidHeaderName",
             set_uuid_header_name,
             NULL,
             OR_ALL,
-            "Sets the name of uuid response header"),
+            "Set the name of uuid response header"),
     AP_INIT_FLAG("UuidHeader",
             enable_uuid_header,
             NULL,
@@ -1624,7 +1732,7 @@ static const command_rec px_directives[] = {
             set_captcha_type,
             NULL,
             OR_ALL,
-            "Sets the captcha provider"),
+            "Set the captcha provider"),
     AP_INIT_FLAG("MonitorMode",
             set_monitor_mode,
             NULL,
@@ -1649,12 +1757,32 @@ static const command_rec px_directives[] = {
             set_client_base_url,
             NULL,
             OR_ALL,
-            "Sets base url which client requerst will be redirected to"),
+            "Set base url which client request will be redirected to"),
     AP_INIT_TAKE1("CollectorBaseUrl",
             set_collector_base_url,
             NULL,
             OR_ALL,
-            "Sets base url which client activity requersts will be redirected to"),
+            "Set base url which client activity requersts will be redirected to"),
+    AP_INIT_FLAG("EnableRemoteConfiguration",
+            set_remote_configuration,
+            NULL,
+            OR_ALL,
+            "Toggle remote configuration on/off"),
+    AP_INIT_TAKE1("RemoteConfigurationUrl",
+            set_remote_config_url,
+            NULL,
+            OR_ALL,
+            "Set the URL for the remote configurations"),
+    AP_INIT_TAKE1("RemoteConfigurationIntervalMS",
+            set_remote_config_interval_ms,
+            NULL,
+            OR_ALL,
+            "Set timeout for risk API request in milliseconds"),
+      AP_INIT_ITERATE("SensitiveHeader",
+            set_sensitive_headers,
+            NULL,
+            OR_ALL,
+            "Set a value for a sensitive header which will be filtered and not be reported back"),
     { NULL }
 };
 
