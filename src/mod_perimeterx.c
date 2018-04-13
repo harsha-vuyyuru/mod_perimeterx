@@ -455,20 +455,17 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
 
         res = curl_easy_perform(curl);
         if (res != CURLE_OK) {
-            free(response.data);
             ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server, "[%s]: remote configuration request failed: %s (%d)", conf->app_id, errbuf, res);
             continue;
         }
 
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
         if (status_code == 204) {
-            free(response.data);
             ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Configuration was not changed");
             continue;
         }
 
         if (status_code != HTTP_OK) {
-            free(response.data);
             ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server, "[%s]: remote configuration request failed: %s (%ld)", conf->app_id, errbuf, status_code);
             continue;
         }
@@ -476,12 +473,10 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
         json_error_t j_error;
         json_t *j = json_loads(response.data, 0, &j_error);
         if (!j) {
-            free(response.data);
             ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server,
                 "[%s]: remote configuration request: failed to parse json: %s", conf->app_id, j_error.text);
             continue;
         }
-        free(response.data);
 
         // parse JSON
         const char *checksum_tmp = NULL;
