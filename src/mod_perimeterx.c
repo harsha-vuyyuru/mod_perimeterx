@@ -382,13 +382,13 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
     return NULL;
 }
 
-static void telemetry_activity_send(server_rec *s, px_config *cfg, const char *update_reason) {
+static void telemetry_activity_send(CURL *telemetry_curl, server_rec *s, px_config *cfg, const char *update_reason) {
     char *activity = config_to_json_string(cfg, update_reason);
     if (!activity) {
         ap_log_error(APLOG_MARK, APLOG_ERR, 0, s, "[%s]: telemetry_activity_send: create telemetry activity failed", cfg->app_id);
         return;
     }
-    post_request_helper(cfg->telemetry_curl, cfg->telemetry_api_url, activity, cfg->api_timeout_ms, cfg, s, NULL);
+    post_request_helper(telemetry_curl, cfg->telemetry_api_url, activity, cfg->api_timeout_ms, cfg, s, NULL);
     free(activity);
 }
 
@@ -407,6 +407,7 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
     }
 
     CURL *curl = curl_easy_init();
+    CURL *telemetry_curl = curl_easy_init();
     CURLcode res;
     long status_code;
     struct curl_slist *headers = NULL;
@@ -571,13 +572,14 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
 
         json_decref(j);
 
-        telemetry_activity_send(th_data->server, conf, UPDATE_REASON_REMOTE_CONFIG);
+        telemetry_activity_send(telemetry_curl, th_data->server, conf, UPDATE_REASON_REMOTE_CONFIG);
     }
 
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server, LOGGER_DEBUG_FORMAT, conf->app_id, "remote_config: thread exiting");
 
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
+    curl_easy_cleanup(telemetry_curl);
     apr_thread_exit(thd, 0);
     return NULL;
 }
@@ -719,7 +721,6 @@ static apr_status_t px_child_exit(void *data) {
             apr_status_t status;
             apr_thread_join(&status, cfg->remote_config_thread);
         }
-        curl_easy_cleanup(cfg->telemetry_curl);
 
         // terminate the queue and wake up all idle threads
         if (cfg->activity_queue) {
@@ -785,9 +786,10 @@ static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
         }
 
         // send the initial telemetry request
-        cfg->telemetry_curl = curl_easy_init();
-        telemetry_activity_send(s, cfg, UPDATE_REASON_INITIAL_CONFIG);
+        CURL *telemetry_curl = curl_easy_init();
+        telemetry_activity_send(telemetry_curl, s, cfg, UPDATE_REASON_INITIAL_CONFIG);
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_ERROR_FORMAT, cfg->app_id, "px_child_setup: start init for telemetry_activity_send");
+        curl_easy_cleanup(telemetry_curl);
 
         // launch remote_config thread
         if (cfg->remote_config_enabled && !cfg->remote_config_thread) {

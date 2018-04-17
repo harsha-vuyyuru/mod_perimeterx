@@ -93,7 +93,6 @@ typedef struct px_config_t {
     const char *remote_config_url;
     int remote_config_interval_ms;
     char *checksum;
-    CURL *telemetry_curl;
 } px_config;
 
 typedef struct thread_data_t {
