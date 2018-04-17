@@ -382,13 +382,13 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
     return NULL;
 }
 
-void telemetry_activity_send(CURL *telemetry_curl, server_rec *s, px_config *cfg, const char *update_reason) {
+static void telemetry_activity_send(server_rec *s, px_config *cfg, const char *update_reason) {
     char *activity = config_to_json_string(cfg, update_reason);
     if (!activity) {
         ap_log_error(APLOG_MARK, APLOG_ERR, 0, s, "[%s]: telemetry_activity_send: create telemetry activity failed", cfg->app_id);
         return;
     }
-    post_request_helper(telemetry_curl, cfg->telemetry_api_url, activity, cfg->api_timeout_ms, cfg, s, NULL);
+    post_request_helper(cfg->telemetry_curl, cfg->telemetry_api_url, activity, cfg->api_timeout_ms, cfg, s, NULL);
     free(activity);
 }
 
@@ -396,7 +396,6 @@ void telemetry_activity_send(CURL *telemetry_curl, server_rec *s, px_config *cfg
 static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
     thread_data *th_data = (thread_data*) data;
     px_config *conf = th_data->config;
-    char *checksum = NULL;
     bool startup = true;
 
     apr_pool_t *pool;
@@ -406,10 +405,6 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
         ap_log_error(APLOG_MARK, APLOG_CRIT, rv, th_data->server, LOGGER_ERROR_FORMAT, conf->app_id, "remote configuration: error while trying to initialize apr_pool");
         return NULL;
     }
-    CURL *telemetry_curl = curl_easy_init();
-
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server, "px_hook_child_init: start init for telemetry_activity_send");
-    telemetry_activity_send(telemetry_curl, th_data->server, conf, UPDATE_REASON_INITIAL_CONFIG);
 
     CURL *curl = curl_easy_init();
     CURLcode res;
@@ -436,8 +431,8 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
         response.server = th_data->server;
         response.pool = pool;
 
-        if (checksum) {
-            url = apr_psprintf(pool, "%s?checksum=%s", conf->remote_config_url, checksum);
+        if (conf->checksum) {
+            url = apr_psprintf(pool, "%s?checksum=%s", conf->remote_config_url, conf->checksum);
         } else {
             url = conf->remote_config_url;
         }
@@ -528,7 +523,7 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
         // TODO: s2s_timeout
         // TODO: px_debug
 
-        checksum = apr_pstrdup(pool, checksum_tmp);
+        conf->checksum = apr_pstrdup(pool, checksum_tmp);
 
         conf->first_party_enabled = first_party_enabled;
         conf->first_party_xhr_enabled = reverse_xhr_enabled;
@@ -576,14 +571,13 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
 
         json_decref(j);
 
-        telemetry_activity_send(telemetry_curl, th_data->server, conf, UPDATE_REASON_REMOTE_CONFIG);
+        telemetry_activity_send(th_data->server, conf, UPDATE_REASON_REMOTE_CONFIG);
     }
 
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server, LOGGER_DEBUG_FORMAT, conf->app_id, "remote_config: thread exiting");
 
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
-    curl_easy_cleanup(telemetry_curl);
     apr_thread_exit(thd, 0);
     return NULL;
 }
@@ -725,6 +719,7 @@ static apr_status_t px_child_exit(void *data) {
             apr_status_t status;
             apr_thread_join(&status, cfg->remote_config_thread);
         }
+        curl_easy_cleanup(cfg->telemetry_curl);
 
         // terminate the queue and wake up all idle threads
         if (cfg->activity_queue) {
@@ -789,6 +784,12 @@ static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
             }
         }
 
+        // send the initial telemetry request
+        cfg->telemetry_curl = curl_easy_init();
+        telemetry_activity_send(s, cfg, UPDATE_REASON_INITIAL_CONFIG);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_ERROR_FORMAT, cfg->app_id, "px_child_setup: start init for telemetry_activity_send");
+
+        // launch remote_config thread
         if (cfg->remote_config_enabled && !cfg->remote_config_thread) {
             ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg->app_id, "px_child_setup: setting up remote_config thread");
 
@@ -1440,18 +1441,36 @@ static const char *set_sensitive_headers(cmd_parms *cmd, void *config, const cha
 
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
+
+    // process without locking if remote config disabled
+    if (!conf->remote_config_enabled) {
+        return px_handle_request(r, conf);
+    }
+
+#ifdef DEBUG
+    apr_time_t start = apr_time_now();
+#endif
+
     int res;
+    // only blocks while configuration is refreshing
+    apr_thread_rwlock_rdlock(conf->remote_config_lock);
 
-    if (conf->remote_config_enabled) {
-        // only blocks while configuration is refreshing
-        apr_thread_rwlock_rdlock(conf->remote_config_lock);
+    // if checksum is set: we've received remote configuration at least once
+    if (conf->checksum) {
+        res = px_handle_request(r, conf);
+    } else {
+        // we still haven't got the required remote configuration, do not process this request with mod_perimeterx
+        res = DECLINED;
     }
 
-    res = px_handle_request(r, conf);
+    apr_thread_rwlock_unlock(conf->remote_config_lock);
 
-    if (conf->remote_config_enabled) {
-        apr_thread_rwlock_unlock(conf->remote_config_lock);
+#ifdef DEBUG
+    apr_time_t finish = apr_time_now();
+    if (finish > start) {
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: Request processing time: %ld ms (result: %d)", conf->app_id, apr_time_as_msec(finish) - apr_time_as_msec(start), res);
     }
+#endif
 
     return res;
 }
@@ -1514,6 +1533,7 @@ static void *create_config(apr_pool_t *p) {
         conf->remote_config_interval_ms = apr_time_from_sec(5);
         conf->activity_thread_pool = NULL;
         conf->telemetry_api_url = apr_pstrcat(p, conf->base_url, TELEMETRY_API, NULL);
+        conf->checksum = NULL;
     }
     return conf;
 }
