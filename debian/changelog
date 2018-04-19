@@ -6,7 +6,7 @@ libapache2-mod-perimeterx (2.11.0) jessie; urgency=high
     * Fixed possible memory leak in debug mode
     * Memory optimizations - using apr instead of malloc
 
- -- nitzanpx <nitzanpx@github> Wed, 11 Apr 2018 10:10:00 +0000
+ -- nitzanpx <nitzanpx@github>  Wed, 11 Apr 2018 10:10:00 +0000
 
 libapache2-mod-perimeterx (2.10.1) jessie; urgency=medium
 
@@ -14,19 +14,19 @@ libapache2-mod-perimeterx (2.10.1) jessie; urgency=medium
     * Fixed first party XHR flag
     * Fixed crash on empty configuration
 
- -- nitzanpx <nitzanpx@github> Thu, 15 Mar 2018 10:14:00 +0000
+ -- nitzanpx <nitzanpx@github>  Thu, 15 Mar 2018 10:14:00 +0000
 
 libapache2-mod-perimeterx (2.10.0) jessie; urgency=medium
 
     * Added support for OpenSSL 1.1.0
 
- -- nitzanpx <nitzanpx@github> Thu, 01 Mar 2018 15:30:00 +0000
+ -- nitzanpx <nitzanpx@github>  Thu, 01 Mar 2018 15:30:00 +0000
 
 libapache2-mod-perimeterx (2.9.1) jessie; urgency=medium
 
     * Fixed base64 handling for cookies
 
- -- nitzanpx <nitzanpx@github> Tue, 27 Feb 2018 17:08:00 +0000
+ -- nitzanpx <nitzanpx@github>  Tue, 27 Feb 2018 17:08:00 +0000
 
 
 libapache2-mod-perimeterx (2.9.0) jessie; urgency=medium
@@ -35,7 +35,7 @@ libapache2-mod-perimeterx (2.9.0) jessie; urgency=medium
     * Added first party support, enabled by default - please note that additional changes may be required, refer to directives for more information
     * Added support for funCaptcha on mobile
 
- -- nitzanpx <nitzanpx@github>  Web, 21 Feb 2018 12:20:00 +0000
+ -- nitzanpx <nitzanpx@github>  Wed, 21 Feb 2018 12:20:00 +0000
 
 libapache2-mod-perimeterx (2.8.0) jessie; urgency=high
 
