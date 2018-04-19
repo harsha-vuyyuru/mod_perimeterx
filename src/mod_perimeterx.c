@@ -737,7 +737,7 @@ static apr_status_t px_child_exit(void *data) {
         }
 
         if (cfg->app_id)
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_ERROR_FORMAT, cfg->app_id, "px_child_exit: cleanup finished");
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg->app_id, "px_child_exit: cleanup finished");
         else
             ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "px_child_exit: cleanup finished");
     }
@@ -788,7 +788,7 @@ static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
         // send the initial telemetry request
         CURL *telemetry_curl = curl_easy_init();
         telemetry_activity_send(telemetry_curl, s, cfg, UPDATE_REASON_INITIAL_CONFIG);
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_ERROR_FORMAT, cfg->app_id, "px_child_setup: start init for telemetry_activity_send");
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg->app_id, "px_child_setup: start init for telemetry_activity_send");
         curl_easy_cleanup(telemetry_curl);
 
         // launch remote_config thread
