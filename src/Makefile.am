@@ -30,4 +30,5 @@ endif
 @CODE_COVERAGE_RULES@
 
 install: $(lib_LTLIBRARIES)
-	@APXS@ $(APXS_FLAGS) $?
+	if test ! -d ${DESTDIR}${APXS_LIBEXECDIR}; then mkdir -p ${DESTDIR}${APXS_LIBEXECDIR}; fi
+	@APXS@ -i -S LIBEXECDIR=${DESTDIR}${APXS_LIBEXECDIR} mod_perimeterx.la
