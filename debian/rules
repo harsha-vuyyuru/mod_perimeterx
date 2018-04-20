@@ -3,8 +3,27 @@ override_dh_auto_configure:
 	./autogen.sh
 	dh_auto_configure
 
-override_dh_install:
+install: build
+	dh_testdir
+	dh_testroot
+	dh_prep
+	dh_installdirs
 	dh_install
+	$(MAKE) DESTDIR="$(CURDIR)/debian/libapache2-mod-perimeterx/" APXS_LIBEXECDIR="usr/lib/apache2/modules/" all
+	dh_apache2
 
+binary-arch: build install
+	dh_testdir
+	dh_testroot
+	dh_installdocs
+	dh_installchangelogs
+	dh_link
+	dh_strip
+	dh_compress
+	dh_installdeb
+	dh_shlibdeps -a -L libapache2-mod-perimeterx -l debian/libapache2-mod-perimeterx/usr/lib/apache2/modules
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
 %:
 	dh $@ --with apache2
