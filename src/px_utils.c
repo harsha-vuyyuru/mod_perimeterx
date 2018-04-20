@@ -14,14 +14,6 @@ APLOG_USE_MODULE(perimeterx);
 #define T_ESCAPE_URLENCODED    (16)
 #define TEST_CHAR(c, f)        (test_char_table[(unsigned)(c)] & (f))
 
-struct response_t {
-    char* data;
-    size_t size;
-    server_rec *server;
-    request_rec *r;
-    apr_array_header_t *headers;
-    const char *app_id;
-};
 
 
 static const char *JSON_CONTENT_TYPE = "Content-Type: application/json";
@@ -96,7 +88,21 @@ static int read_body(request_rec *r, char **body) {
     return -1;
 }
 
-static size_t write_response_cb(void* contents, size_t size, size_t nmemb, void *stream) {
+size_t write_response_pool_cb(void* contents, size_t size, size_t nmemb, void *stream) {
+    struct response_t *res = (struct response_t*)stream;
+    size_t realsize = size * nmemb;
+    char *tmp;
+    tmp = apr_pcalloc(res->pool, res->size + realsize + 1);
+    memcpy(tmp, res->data, res->size + 1);
+
+    res->data = tmp;
+    memcpy(&(res->data[res->size]), contents, realsize);
+    res->size += realsize;
+    res->data[res->size] = 0;
+    return realsize;
+}
+
+size_t write_response_cb(void* contents, size_t size, size_t nmemb, void *stream) {
     struct response_t *res = (struct response_t*)stream;
     size_t realsize = size * nmemb;
     char *tmp;
@@ -216,9 +222,9 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, l
         update_and_notify_health_check(conf);
         size_t len = strlen(errbuf);
         if (len) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server, "[%s]: post_request failed: %s", conf->app_id, errbuf);
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server, "[%s]: post_request failed for %s: %s", conf->app_id, url, errbuf);
         } else {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server, "[%s]: post_request failed: %s", conf->app_id, curl_easy_strerror(status));
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server, "[%s]: post_request failed for %s: %s", conf->app_id, url, curl_easy_strerror(status));
         }
     }
     free(response.data);
@@ -363,10 +369,27 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
     if (header_arr) {
         for (int i = 0; i < header_arr->nelts; i++) {
             apr_table_entry_t h = APR_ARRAY_IDX(header_arr, i, apr_table_entry_t);
+
             // Remove sensitive headers
-            if (strcasecmp(h.key, "Host") != 0) {
-                headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", h.key, h.val));
+            if (strcasecmp(h.key, "Host") == 0) {
+                continue;
             }
+
+            bool skip = false;
+            for (int j = 0; j < conf->sensitive_header_keys->nelts; j++) {
+                const char *s = APR_ARRAY_IDX(conf->sensitive_header_keys, j, char*);
+
+                if (strcasecmp(h.key, s) == 0) {
+                    skip = true;
+                    break;
+                }
+            }
+
+            if (skip) {
+                continue;
+            }
+
+            headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", h.key, h.val));
         }
     }
 
@@ -405,6 +428,7 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
 
     if (status == CURLE_OK) {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
+        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: redirect_helper: status: %lu, url: %s", conf->app_id, status_code, url);
         if (status_code == HTTP_OK) {
             if (response_data != NULL) {
                 *response_headers = response.headers;
@@ -412,16 +436,15 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
                 *content_size = response.size;
             }
         } else {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: post_request: status: %lu, url: %s", conf->app_id, status_code, url);
             status = CURLE_HTTP_RETURNED_ERROR;
         }
     } else {
         update_and_notify_health_check(conf);
         size_t len = strlen(errbuf);
         if (len) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: post_request failed: %s", conf->app_id, errbuf);
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: redirect_helper failed: %s", conf->app_id, errbuf);
         } else {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: post_request failed: %s", conf->app_id, curl_easy_strerror(status));
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: redirect_helper failed: %s", conf->app_id, curl_easy_strerror(status));
         }
     }
     free(response.data);
