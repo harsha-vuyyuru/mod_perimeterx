@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/) 
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [2.11.1] - 04-20-2018
+* Fixed Debian packaging  
+
 ## [2.11.0] - 04-11-2018
 * Added autoconf support, make sure to follow the installation instructions, package dependencies have changed
 * Fixed bug in PXMonitorService

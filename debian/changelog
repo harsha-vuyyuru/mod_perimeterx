@@ -1,3 +1,9 @@
+libapache2-mod-perimeterx (2.11.1) jessie; urgency=medium
+
+    * Fixed Debian packaging 
+
+ -- nitzanpx <nitzanpx@github>  Fri, 20 Apr 2018 13:10:00 +0000
+
 libapache2-mod-perimeterx (2.11.0) jessie; urgency=high
 
     * Added autoconf support, make sure to follow the installation instructions, package dependencies have changed
