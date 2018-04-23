@@ -38,7 +38,7 @@ Directives
 | BackgroundActivitySend | Toggles on/off asyncrounus activity reporting | On | bool | On / Off |
 | BackgroundActivityWorkers | Number of background workers to send activities | 10 | Number | Integer |
 | BackgroundActivityQueueSize | Queue size for background activity send | 1000 | Number | Integer |
-| MonitorMode | Toggles the module monitor | False | bool | On / Off |
+| MonitorMode | Toggles the module monitor | Off | bool | On / Off |
 | CaptchaSubdomain | Toggles captcha on subdomain making the module remove pxCaptcha cookie from all domains under main domain (using `.<domain>.<ext>` instead of `www.<domain>.<ext>`)| Off | bool | On / Off |
 | FirstPartyEnabled | Toggles first party mode | On | bool | On / Off |
 | FirstPartyXhrEnabled | Toggles sending xhr requests through first party | On | bool | On / Off |
