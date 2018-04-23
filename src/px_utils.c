@@ -38,7 +38,7 @@ static const unsigned char test_char_table[256] = {
     30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30
 };
 
-static void update_and_notify_health_check(px_config *conf) {
+void update_and_notify_health_check(px_config *conf) {
     if (!conf->px_health_check) {
         return;
     }

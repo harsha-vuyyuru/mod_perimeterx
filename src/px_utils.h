@@ -23,4 +23,6 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, l
 CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, const char *vid, px_config *conf, request_rec *r, const char **response_data,  apr_array_header_t **response_headers, int *content_size);
 size_t write_response_cb(void* contents, size_t size, size_t nmemb, void *stream);
 size_t write_response_pool_cb(void* contents, size_t size, size_t nmemb, void *stream);
+void update_and_notify_health_check(px_config *conf);
+
 #endif

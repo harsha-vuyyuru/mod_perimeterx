@@ -3,6 +3,7 @@
  */
 #include <stdio.h>
 #include <stdbool.h>
+#include <unistd.h>
 
 #include <jansson.h>
 #include <curl/curl.h>
@@ -33,6 +34,7 @@
 #include "px_enforcer.h"
 #include "px_json.h"
 #include "px_client.h"
+#include "background_activity.h"
 
 module AP_MODULE_DECLARE_DATA perimeterx_module;
 
@@ -203,8 +205,11 @@ void post_verification(request_context *ctx, px_config *conf, bool request_valid
             ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "post_verification: ", activity_type, " create activity failed", NULL));
             return;
         }
+
         if (conf->background_activity_send) {
-            apr_queue_push(conf->activity_queue, activity);
+            apr_queue_push(conf->background_activity_queue, activity);
+            // notify background activity thread that we have a new task
+            background_activity_wakeup(conf->background_activity_wakeup_fds);
         } else {
             post_request(conf->activities_api_url, activity, conf->api_timeout_ms, conf, ctx, NULL, NULL);
             free(activity);
@@ -584,37 +589,6 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
     return NULL;
 }
 
-static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, void *data) {
-    activity_consumer_data *consumer_data = (activity_consumer_data*)data;
-    px_config *conf = consumer_data->config;
-    CURL *curl = curl_easy_init();
-
-    void *v;
-    if (!curl) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, consumer_data->server, LOGGER_DEBUG_FORMAT, conf->app_id, "could not create curl handle, thread will not run to consume messages");
-        return NULL;
-    }
-
-    while (true) {
-        apr_status_t rv = apr_queue_pop(conf->activity_queue, &v);
-        if (rv == APR_EINTR) {
-            continue;
-        }
-        if (rv == APR_EOF) {
-            break;
-        }
-        if (rv == APR_SUCCESS && v) {
-            char *activity = (char *)v;
-            post_request_helper(curl, conf->activities_api_url, activity, conf->api_timeout_ms, conf, consumer_data->server, NULL);
-            free(activity);
-        }
-    }
-
-    curl_easy_cleanup(curl);
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, consumer_data->server, LOGGER_DEBUG_FORMAT, conf->app_id, "activity consumer thread exited");
-    return NULL;
-}
-
 // --------------------------------------------------------------------------------
 //
 
@@ -668,37 +642,6 @@ static apr_status_t create_remote_config(apr_pool_t *p, server_rec *s, px_config
     return rv;
 }
 
-static apr_status_t background_activity_send_init(apr_pool_t *pool, server_rec *s, px_config *cfg) {
-    apr_status_t rv;
-
-    rv = apr_queue_create(&cfg->activity_queue, cfg->background_activity_queue_size, pool);
-    if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "failed to initialize background activity queue");
-        return rv;
-    }
-
-    activity_consumer_data *consumer_data = apr_palloc(s->process->pool, sizeof(activity_consumer_data));
-    consumer_data->server = s;
-    consumer_data->config = cfg;
-
-    rv = apr_thread_pool_create(&cfg->activity_thread_pool, 0, cfg->background_activity_workers, pool);
-    if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "failed to initialize background activity thread pool");
-        return rv;
-    }
-
-    for (unsigned int i = 0; i < cfg->background_activity_workers; ++i) {
-        rv = apr_thread_pool_push(cfg->activity_thread_pool, background_activity_consumer, consumer_data, 0, NULL);
-        if (rv != APR_SUCCESS) {
-            ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "failed to push background activity consumer");
-            return rv;
-        }
-    }
-
-    ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "finished init background activities");
-    return rv;
-}
-
 // free all (apache) unmanaged resources
 static apr_status_t px_child_exit(void *data) {
     server_rec *s = (server_rec*)data;
@@ -723,8 +666,8 @@ static apr_status_t px_child_exit(void *data) {
         }
 
         // terminate the queue and wake up all idle threads
-        if (cfg->activity_queue) {
-            rv = apr_queue_term(cfg->activity_queue);
+        if (cfg->background_activity_queue) {
+            rv = apr_queue_term(cfg->background_activity_queue);
             if (rv != APR_SUCCESS) {
                 char buf[ERR_BUF_SIZE];
                 char *err = apr_strerror(rv, buf, sizeof(buf));
@@ -732,8 +675,8 @@ static apr_status_t px_child_exit(void *data) {
             }
         }
 
-        if (cfg->activity_thread_pool) {
-            apr_thread_pool_destroy(cfg->activity_thread_pool);
+        if (cfg->background_activity_thread) {
+            apr_thread_join(&rv, cfg->background_activity_thread);
         }
 
         if (cfg->app_id)
@@ -743,6 +686,34 @@ static apr_status_t px_child_exit(void *data) {
     }
 
     return rv;
+}
+
+static apr_status_t background_activity_init(px_config *cfg, server_rec *s) {
+    background_activity_data *thd_data = apr_pcalloc(cfg->pool, sizeof(background_activity_data));
+    apr_status_t rv;
+
+    thd_data->conf = cfg;
+    thd_data->server = s;
+
+    // setup wakeup pipe
+    if (pipe(cfg->background_activity_wakeup_fds)) {
+        ap_log_error(APLOG_MARK, APLOG_CRIT, 0, s, LOGGER_ERROR_FORMAT, cfg->app_id, "background_activity_init: error calling pipe()");
+        return APR_EINVAL;
+    }
+
+    rv = apr_queue_create(&cfg->background_activity_queue, cfg->background_activity_queue_size, cfg->pool);
+    if (rv != APR_SUCCESS) {
+        ap_log_error(APLOG_MARK, APLOG_CRIT, 0, s, LOGGER_ERROR_FORMAT, cfg->app_id, "background_activity_init: error calling apr_queue_create(), queue size: %d", cfg->background_activity_queue_size);
+        return rv;
+    }
+
+    rv = apr_thread_create(&cfg->background_activity_thread, NULL, background_activity, thd_data, cfg->pool);
+    if (rv) {
+        ap_log_error(APLOG_MARK, APLOG_CRIT, 0, s, LOGGER_ERROR_FORMAT, cfg->app_id, "background_activity_init: error calling apr_thread_create()");
+        return rv;
+    }
+
+    return APR_SUCCESS;
 }
 
 static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
@@ -766,11 +737,11 @@ static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
         cfg->curl_pool = curl_pool_create(cfg->pool, cfg->curl_pool_size, false);
         cfg->redirect_curl_pool = curl_pool_create(cfg->pool, cfg->redirect_curl_pool_size, true);
         if (cfg->background_activity_send) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg->app_id, "px_child_setup: start init for background_activity_send");
+            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg->app_id, "px_child_setup: start init for background_activity");
 
-            rv = background_activity_send_init(cfg->pool, vs, cfg);
+            rv = background_activity_init(cfg, s);
+
             if (rv != APR_SUCCESS) {
-                ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "px_child_setup: error while trying to init background_activity_consumer");
                 return rv;
             }
         }
@@ -1533,7 +1504,8 @@ static void *create_config(apr_pool_t *p) {
         conf->remote_config_enabled = false;
         conf->remote_config_url = apr_pstrcat(p, CONFIGURATION_SERVER_URL, REMOTE_CONFIGURATIONS_PATH, NULL);
         conf->remote_config_interval_ms = apr_time_from_sec(5);
-        conf->activity_thread_pool = NULL;
+        conf->background_activity_thread = NULL;
+        conf->background_activity_queue = NULL;
         conf->telemetry_api_url = apr_pstrcat(p, conf->base_url, TELEMETRY_API, NULL);
         conf->checksum = NULL;
     }

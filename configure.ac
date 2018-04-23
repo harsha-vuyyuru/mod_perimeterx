@@ -25,6 +25,8 @@ AC_PROG_INSTALL
 AC_PROG_LN_S
 AC_CONFIG_MACRO_DIR([m4])
 
+AC_CHECK_HEADERS(sys/select.h)
+
 AC_ARG_WITH(
     [apxs],
     [AS_HELP_STRING([--with-apxs], [full path to apxs (or apxs2) executable])],
