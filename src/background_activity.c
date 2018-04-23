@@ -16,6 +16,9 @@
 #include "px_utils.h"
 #include "background_activity.h"
 
+#define LOGGER_DEBUG_HDR "[PerimeterX - DEBUG][%s] - "
+#define LOGGER_ERROR_HDR "[PerimeterX - ERROR][%s] - "
+#define LOGGER_FTR , app_id
 /*
  * data structure to work with cURL handles
  */
@@ -174,27 +177,35 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
     int maxfd;
     bool running = TRUE;
     CURLMcode res;
+    char *app_id;
 
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, thd_data->server, "background_activity thread init");
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, thd_data->server, LOGGER_DEBUG_HDR"background_activity thread init", conf->app_id);
 
     rv = apr_pool_create(&pool, NULL);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, "Failed to call apr_pool_create()");
+        ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, LOGGER_ERROR_HDR"Failed to call apr_pool_create()", conf->app_id);
         return NULL;
     }
 
+    // TODO: app_id can be updated via remote_config
+    app_id = apr_pstrdup(pool, conf->app_id);
+
     rv = cqueue_create(&q_waiting, pool);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, "Failed to call apr_pool_create()");
+        ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, LOGGER_ERROR_HDR"Failed to call apr_pool_create()"LOGGER_FTR);
         return NULL;
     }
     rv = cqueue_create(&q_busy, pool);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, "Failed to call apr_pool_create()");
+        ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, LOGGER_ERROR_HDR"Failed to call apr_pool_create()"LOGGER_FTR);
         return NULL;
     }
 
     multi_curl = curl_multi_init();
+    if (!multi_curl) {
+        ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, LOGGER_ERROR_HDR"background_activity: failed to create multi cUCL handle"LOGGER_FTR);
+        return NULL;
+    }
 
     // init curl_h array, put in the waiting queue
     curl_h **cha = apr_pcalloc(pool, sizeof(curl_h *) * conf->background_activity_workers);
@@ -203,6 +214,10 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
         cha[i] = ch;
         ch->id = i;
         ch->curl = curl_easy_init();
+        if (!ch->curl) {
+            ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, LOGGER_ERROR_HDR"background_activity: failed to create cUCL handle"LOGGER_FTR);
+            return NULL;
+        }
         ch->prev = NULL;
         ch->next = NULL;
         ch->owner = NULL;
@@ -232,7 +247,7 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
             if (wakeup_read(conf->background_activity_wakeup_fds) != APR_SUCCESS) {
                 // report an error, but could potentially spam the log file
                 // we still continue, as we could get further notifies via cURL events
-                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, thd_data->server, "Failed to call wakeup_read()");
+                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, thd_data->server, LOGGER_DEBUG_HDR"Failed to call wakeup_read()"LOGGER_FTR);
             }
         }
 
@@ -259,7 +274,8 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
 
                 // get the next cURL handle from the queue, the queue should have at least 1 item
                 if (cqueue_pop(q_waiting, &ch) != APR_SUCCESS) {
-                    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, thd_data->server, "Failed to extract item from the waiting queue.");
+                    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, thd_data->server,
+                        LOGGER_DEBUG_HDR"background_activity: failed to extract item from the waiting queue"LOGGER_FTR);
                     free(activity);
                     continue;
                 }
@@ -281,10 +297,10 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
                 // fire request
                 res = curl_multi_add_handle(multi_curl, ch->curl);
                 if (res != CURLM_OK) {
-                    ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, "background_activity: curl_multi_add_handle() error: %d", res);
+                    ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, LOGGER_ERROR_HDR"background_activity: curl_multi_add_handle() error: %d"LOGGER_FTR, res);
                 }
 
-                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, thd_data->server, "[handle:%d] background_activity new request", ch->id);
+                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, thd_data->server, LOGGER_DEBUG_HDR"[ch:%d] background_activity new request"LOGGER_FTR, ch->id);
             }
         }
 
@@ -295,13 +311,13 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
         // recommended by cURL docs
         res = curl_multi_perform(multi_curl, &n);
         if (res != CURLM_OK) {
-            ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, "background_activity: curl_multi_perform() error: %d", res);
+            ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, LOGGER_ERROR_HDR"background_activity: curl_multi_perform() error: %d"LOGGER_FTR, res);
         }
 
         //  max is FD_SETSIZE
         res = curl_multi_fdset(multi_curl, &rfds, &wfds, &efds, &maxfd);
         if (res != CURLM_OK) {
-            ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, "background_activity: curl_multi_fdset() error: %d", res);
+            ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, LOGGER_ERROR_HDR"background_activity: curl_multi_fdset() error: %d"LOGGER_FTR, res);
         }
 
         FD_SET(conf->background_activity_wakeup_fds[0], &rfds);
@@ -316,7 +332,7 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
 
             // something bad
             // TODO: handle select error
-            ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, "background_activity: select error: %s", strerror(errno));
+            ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, LOGGER_ERROR_HDR"background_activity: select error: %s"LOGGER_FTR, strerror(errno));
 
             // reset
             FD_ZERO(&rfds);
@@ -326,7 +342,7 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
         // let cURL process requests
         res = curl_multi_perform(multi_curl, &running_handles);
         if (res != CURLM_OK) {
-            ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, "background_activity: curl_multi_perform() error: %d", res);
+            ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, LOGGER_ERROR_HDR"background_activity: curl_multi_perform() error: %d"LOGGER_FTR, res);
         }
 
         // check if there is any finished requests
@@ -339,9 +355,11 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
 
                 if (msg->data.result != CURLE_OK) {
                     update_and_notify_health_check(conf);
-                    ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, "[handle:%d] background_activity request error: (%d)%s", ch->id, msg->data.result, curl_easy_strerror(msg->data.result));
+                    ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server,
+                        LOGGER_ERROR_HDR"[ch:%d] background_activity request error: (%d)%s"LOGGER_FTR, ch->id, msg->data.result, curl_easy_strerror(msg->data.result));
                 } else {
-                    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, thd_data->server, "[handle:%d] background_activity request success", ch->id);
+                    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, thd_data->server,
+                        LOGGER_DEBUG_HDR"[ch:%d] background_activity request success"LOGGER_FTR, ch->id);
                 }
 
                 // here we can handle response data, currently we do not process activity response
@@ -361,7 +379,7 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
     }
     curl_multi_cleanup(multi_curl);
 
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, thd_data->server, "background_activity thread exited");
+    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, thd_data->server, LOGGER_DEBUG_HDR"background_activity thread exited"LOGGER_FTR);
 
     apr_thread_exit(thd, 0);
 
