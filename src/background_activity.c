@@ -173,6 +173,7 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
     fd_set rfds, wfds, efds;
     int maxfd;
     bool running = TRUE;
+    CURLMcode res;
 
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, thd_data->server, "background_activity thread init");
 
@@ -227,7 +228,6 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
     FD_ZERO(&rfds);
 
     while (running) {
-
         if (FD_ISSET(conf->background_activity_wakeup_fds[0], &rfds)) {
             if (wakeup_read(conf->background_activity_wakeup_fds) != APR_SUCCESS) {
                 // report an error, but could potentially spam the log file
@@ -279,7 +279,10 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
                 curl_easy_setopt(ch->curl, CURLOPT_URL, url);
 
                 // fire request
-                curl_multi_add_handle(multi_curl, ch->curl);
+                res = curl_multi_add_handle(multi_curl, ch->curl);
+                if (res != CURLM_OK) {
+                    ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, "background_activity: curl_multi_add_handle() error: %d", res);
+                }
 
                 ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, thd_data->server, "[handle:%d] background_activity new request", ch->id);
             }
@@ -289,8 +292,17 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
         FD_ZERO(&wfds);
         FD_ZERO(&efds);
 
-        curl_multi_perform(multi_curl, &n);
-        curl_multi_fdset(multi_curl, &rfds, &wfds, &efds, &maxfd);
+        // recommended by cURL docs
+        res = curl_multi_perform(multi_curl, &n);
+        if (res != CURLM_OK) {
+            ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, "background_activity: curl_multi_perform() error: %d", res);
+        }
+
+        //  max is FD_SETSIZE
+        res = curl_multi_fdset(multi_curl, &rfds, &wfds, &efds, &maxfd);
+        if (res != CURLM_OK) {
+            ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, "background_activity: curl_multi_fdset() error: %d", res);
+        }
 
         FD_SET(conf->background_activity_wakeup_fds[0], &rfds);
         if (conf->background_activity_wakeup_fds[0] > maxfd)
@@ -298,6 +310,7 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
 
         // hard-coded SELECT timeout, refer SELECT(2) for additional information
         struct timeval wait = { 0, SELECT_TIMEOUT_MS * 1000 };
+
         // wait until one of fd is active or timeout
         if (select(maxfd+1, &rfds, &wfds, &efds, &wait) < 0) {
 
@@ -310,7 +323,13 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
             continue;
         }
 
-        curl_multi_perform(multi_curl, &running_handles);
+        // let cURL process requests
+        res = curl_multi_perform(multi_curl, &running_handles);
+        if (res != CURLM_OK) {
+            ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, "background_activity: curl_multi_perform() error: %d", res);
+        }
+
+        // check if there is any finished requests
         while ((msg = curl_multi_info_read(multi_curl, &n))) {
 
             // currently CURLMSG_DONE is the only case
