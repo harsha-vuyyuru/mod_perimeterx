@@ -136,8 +136,8 @@ apr_status_t background_activity_wakeup(int wakeup_fds[2])
 
 static apr_status_t wakeup_read(int wakeup_fds[2])
 {
-	char buf[0x100];
-	if (read(wakeup_fds[0], buf, sizeof(buf)) < 1) {
+    char buf[0x100];
+    if (read(wakeup_fds[0], buf, sizeof(buf)) < 1) {
         return APR_EINVAL;
     }
 
@@ -167,11 +167,11 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
     apr_status_t rv;
     int running_handles;
     CURLM *multi_curl;
-	CURLMsg *msg;
+    CURLMsg *msg;
     int i;
     int n;
-	fd_set rfds, wfds, efds;
-	int maxfd;
+    fd_set rfds, wfds, efds;
+    int maxfd;
     bool running = TRUE;
 
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, thd_data->server, "background_activity thread init");
@@ -228,13 +228,13 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
 
     while (running) {
 
-		if (FD_ISSET(conf->background_activity_wakeup_fds[0], &rfds)) {
-			if (wakeup_read(conf->background_activity_wakeup_fds) != APR_SUCCESS) {
+        if (FD_ISSET(conf->background_activity_wakeup_fds[0], &rfds)) {
+            if (wakeup_read(conf->background_activity_wakeup_fds) != APR_SUCCESS) {
                 // report an error, but could potentially spam the log file
                 // we still continue, as we could get further notifies via cURL events
                 ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, thd_data->server, "Failed to call wakeup_read()");
             }
-		}
+        }
 
         // if we have room to run one more CURL request
         if (q_waiting->count > 0) {
@@ -285,21 +285,21 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
             }
         }
 
-		FD_ZERO(&rfds);
-		FD_ZERO(&wfds);
-		FD_ZERO(&efds);
+        FD_ZERO(&rfds);
+        FD_ZERO(&wfds);
+        FD_ZERO(&efds);
 
-		curl_multi_perform(multi_curl, &n);
-		curl_multi_fdset(multi_curl, &rfds, &wfds, &efds, &maxfd);
+        curl_multi_perform(multi_curl, &n);
+        curl_multi_fdset(multi_curl, &rfds, &wfds, &efds, &maxfd);
 
-		FD_SET(conf->background_activity_wakeup_fds[0], &rfds);
+        FD_SET(conf->background_activity_wakeup_fds[0], &rfds);
         if (conf->background_activity_wakeup_fds[0] > maxfd)
             maxfd = conf->background_activity_wakeup_fds[0];
 
         // hard-coded SELECT timeout, refer SELECT(2) for additional information
         struct timeval wait = { 0, SELECT_TIMEOUT_MS * 1000 };
         // wait until one of fd is active or timeout
-		if (select(maxfd+1, &rfds, &wfds, &efds, &wait) < 0) {
+        if (select(maxfd+1, &rfds, &wfds, &efds, &wait) < 0) {
 
             // something bad
             // TODO: handle select error
@@ -307,14 +307,14 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
 
             // reset
             FD_ZERO(&rfds);
-			continue;
-		}
+            continue;
+        }
 
         curl_multi_perform(multi_curl, &running_handles);
-		while ((msg = curl_multi_info_read(multi_curl, &n))) {
+        while ((msg = curl_multi_info_read(multi_curl, &n))) {
 
             // currently CURLMSG_DONE is the only case
-			if (msg && msg->msg == CURLMSG_DONE) {
+            if (msg && msg->msg == CURLMSG_DONE) {
                 curl_h *ch;
                 curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, (void *)&ch);
 
@@ -328,7 +328,7 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
                 // here we can handle response data, currently we do not process activity response
 
                 // set cURL handle ready for reuse
-				curl_multi_remove_handle(multi_curl, msg->easy_handle);
+                curl_multi_remove_handle(multi_curl, msg->easy_handle);
                 cqueue_remove(q_busy, ch);
                 cqueue_push(q_waiting, ch);
             }
@@ -336,7 +336,7 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
     }
 
     for (i = 0; i < conf->background_activity_workers; i++) {
-		curl_multi_remove_handle(multi_curl, cha[i]->curl);
+        curl_multi_remove_handle(multi_curl, cha[i]->curl);
         curl_easy_cleanup(cha[i]->curl);
         curl_slist_free_all(cha[i]->headers);
     }
