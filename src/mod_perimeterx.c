@@ -910,6 +910,7 @@ static void set_app_id_helper(apr_pool_t *pool, px_config *conf, const char *app
     conf->activities_api_url = apr_pstrcat(pool, conf->base_url, ACTIVITIES_API, NULL);
     const char *reverse_prefix =  &app_id[2];
     conf->xhr_path_prefix = apr_psprintf(pool, "/%s/xhr", reverse_prefix);
+    conf->captcha_path_prefix = apr_psprintf(pool, "/%s/captcha/", reverse_prefix);
     conf->client_path_prefix = apr_psprintf(pool, "/%s/init.js", reverse_prefix);
     conf->client_exteral_path = apr_psprintf(pool, "//client.perimeterx.net/%s/main.min.js", app_id);
     conf->collector_base_uri = apr_psprintf(pool, "https://collector-%s.perimeterx.net", app_id);
@@ -1536,6 +1537,7 @@ static void *create_config(apr_pool_t *p) {
         conf->activity_thread_pool = NULL;
         conf->telemetry_api_url = apr_pstrcat(p, conf->base_url, TELEMETRY_API, NULL);
         conf->checksum = NULL;
+        conf->captcha_exteral_path = "//captcha.px-cdn.net/";
     }
     return conf;
 }

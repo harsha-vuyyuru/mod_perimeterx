@@ -93,6 +93,8 @@ typedef struct px_config_t {
     const char *remote_config_url;
     int remote_config_interval_ms;
     char *checksum;
+    const char *captcha_exteral_path;
+    const char *captcha_path_prefix;
 } px_config;
 
 typedef struct thread_data_t {
