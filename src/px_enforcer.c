@@ -15,7 +15,6 @@ APLOG_USE_MODULE(perimeterx);
 
 static const char *PX_PAYLOAD_COOKIE_V1_PREFIX = "_px";
 static const char *PX_PAYLOAD_COOKIE_V3_PREFIX = "_px3";
-static const char *CAPTCHA_COOKIE = "_pxCaptcha";
 
 static const char *NO_TOKEN = "1";
 static const char *MOBILE_SDK_CONNECTION_ERROR = "2";
@@ -99,82 +98,6 @@ static bool enable_block_for_hostname(request_rec *r, apr_array_header_t *domain
     return false;
 }
 
-void get_host_domain(request_context *ctx, const char **domain) {
-    char *regex_string = "([a-zA-Z0-9-]{1,61}[a-zA-Z0-9])\\.([a-zA-Z]{2,5})$";
-    size_t max_groups = 1;
-
-    regex_t regex_compiled;
-    regmatch_t group_array[max_groups];
-
-    if (regcomp(&regex_compiled, regex_string, REG_EXTENDED)) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Failed to compile regex", NULL));
-        return;
-    };
-
-    if (regexec(&regex_compiled, ctx->hostname, max_groups, group_array, 0) == 0) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Captcha on subdomain is active, domain match found, on hostname ", ctx->hostname, NULL));
-        unsigned int g = 0;
-        for (g = 0; g < max_groups; g++) {
-            if (group_array[g].rm_so == (size_t)-1) {
-                break;  // No more groups
-            }
-            char source_copy[strlen(ctx->hostname) + 1];
-            apr_cpystrn(source_copy, ctx->hostname, sizeof(source_copy));
-            source_copy[group_array[g].rm_eo] = 0;
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Setting cookie domain as .", source_copy + group_array[g].rm_so, NULL));
-            *domain = apr_pstrcat(ctx->r->pool, "domain=.", source_copy + group_array[g].rm_so, NULL);
-        }
-    }
-    regfree(&regex_compiled);
-}
-
-bool verify_captcha(request_context *ctx, px_config *conf) {
-    if (!ctx->px_captcha) {
-        return false;
-    }
-
-    const char *domain = "";
-    if (conf->captcha_subdomain) {
-        get_host_domain(ctx, &domain);
-    }
-
-    // preventing reuse of captcha cookie by deleting it
-    apr_status_t res = ap_cookie_remove(ctx->r, CAPTCHA_COOKIE, domain, ctx->r->headers_out, ctx->r->err_headers_out, NULL);
-    if (res != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Could not remove _pxCaptcha from request");
-    }
-
-    char *payload = create_captcha_payload(ctx, conf);
-    if (!payload) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "verify_captcha: failed to format captcha payload. url: ", ctx->full_url, NULL));
-        ctx->pass_reason = PASS_REASON_ERROR;
-        return true;
-    }
-
-    char *response_str = NULL;
-    CURLcode status = post_request(conf->captcha_api_url, payload, conf->captcha_timeout, conf, ctx, &response_str, &ctx->api_rtt);
-    free(payload);
-    if (status == CURLE_OK) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "verify_captcha: server response ", response_str, NULL));
-        captcha_response *c = parse_captcha_response(response_str, ctx);
-        free(response_str);
-        bool passed = (c && c->status == 0);
-        if (passed) {
-            ctx->pass_reason = PASS_REASON_CAPTCHA;
-        }
-        return passed;
-    }
-
-    if (status == CURLE_OPERATION_TIMEDOUT) {
-        ctx->pass_reason = PASS_REASON_CAPTCHA_TIMEOUT;
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Captcha response timeout - passing request");
-    } else {
-        ctx->pass_reason = PASS_REASON_ERROR;
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "verify_captcha: failed to perform captcha validation request. url: ", ctx->full_url, NULL));
-    }
-
-    return false;
-}
 
 bool px_should_verify_request(request_rec *r, px_config *conf) {
     if (conf->block_page_url && strcmp(r->uri, conf->block_page_url) == 0) {
@@ -280,8 +203,6 @@ request_context* create_context(request_rec *r, const px_config *conf) {
         ap_cookie_read(r, PX_PAYLOAD_COOKIE_V1_PREFIX, &px_payload1, 0);
     }
 
-    ap_cookie_read(r, CAPTCHA_COOKIE, &ctx->px_captcha, 1);
-
     ctx->ip = get_request_ip(r, conf);
     if (!ctx->ip) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id , "create_context: request IP is NULL");
@@ -328,29 +249,6 @@ bool px_verify_request(request_context *ctx, px_config *conf) {
 
     risk_response *risk_response;
 
-    if (conf->captcha_enabled && ctx->px_captcha) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Captcha cookie found, evaluating");
-        if (verify_captcha(ctx, conf)) {
-            // clean users cookie on captcha verification
-            apr_status_t res1 = ap_cookie_remove2(ctx->r, PX_PAYLOAD_COOKIE_V1_PREFIX, NULL, ctx->r->headers_out, ctx->r->err_headers_out, NULL);
-            if (res1 != APR_SUCCESS) {
-                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Could not remove _px from request");
-            }
-            apr_status_t res3 = ap_cookie_remove2(ctx->r, PX_PAYLOAD_COOKIE_V3_PREFIX, NULL, ctx->r->headers_out, ctx->r->err_headers_out, NULL);
-            if (res3 != APR_SUCCESS) {
-                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Could not remove _px3 from request");
-            }
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Captcha API response validation status: passed");
-            return request_valid;
-        } else {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Captcha API response validation status: failed");
-            ctx->call_reason = CALL_REASON_CAPTCHA_FAILED;
-            risk_response = risk_api_get(ctx, conf);
-            goto handle_response;
-        }
-    }
-
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "No Captcha cookie present on the request");
     validation_result_t vr;
 
     if (ctx->px_payload == NULL || (ctx->token_origin == TOKEN_ORIGIN_HEADER && strcmp(ctx->px_payload, NO_TOKEN) == 0)) {
