@@ -72,32 +72,6 @@ void cqueue_push(cqueue_t *queue, curl_h *c)
     }
 }
 
-// get curl_h from the queue, return APR_SUCCESS if success
-apr_status_t cqueue_pop(cqueue_t *queue, curl_h **c)
-{
-    if (!queue->count) {
-        return APR_EOF;
-    }
-
-    queue->count--;
-
-    curl_h *tmp = queue->head;
-    queue->head = queue->head->next;
-    if (queue->head) {
-        queue->head->prev = NULL;
-        if (!queue->head->next) {
-            queue->tail = queue->head;
-        }
-    }
-
-    tmp->next = NULL;
-    tmp->prev = NULL;
-    tmp->owner = NULL;
-    *c = tmp;
-
-    return APR_SUCCESS;
-}
-
 // remove curl_h from the queue (curl_h must be owned by the queue), return APR_SUCCESS if success
 apr_status_t cqueue_remove(cqueue_t *queue, curl_h *c)
 {
@@ -126,6 +100,13 @@ apr_status_t cqueue_remove(cqueue_t *queue, curl_h *c)
     }
 
     return APR_SUCCESS;
+}
+
+// get curl_h from the queue, return APR_SUCCESS if success
+apr_status_t cqueue_pop(cqueue_t *queue, curl_h **c)
+{
+    *c = queue->head;
+    return cqueue_remove(queue, *c);
 }
 
 // pipe write / read
@@ -158,6 +139,17 @@ static size_t dummy_cb(void* contents, size_t size, size_t nmemb, void *stream) 
     return realsize;
 }
 
+// curl_multi_wait() was added in libcurl 7.28.0.
+// use alternative select() interface if this function isn't present
+#if (LIBCURL_VERSION_MAJOR == 7 && LIBCURL_VERSION_MINOR < 28)
+    #undef HAS_CURL_MULTI
+    #warning Using select() interface, please update cURL library
+#elif (LIBCURL_VERSION_MAJOR < 7)
+    #error Unsupported cURL library version, please update cURL library
+#else
+    #define HAS_CURL_MULTI 1
+#endif
+
 #define SELECT_TIMEOUT_MS 200
 // background_activity thread func
 void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
@@ -173,8 +165,6 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
     CURLMsg *msg;
     int i;
     int n;
-    fd_set rfds, wfds, efds;
-    int maxfd;
     bool running = TRUE;
     CURLMcode res;
     char *app_id;
@@ -240,9 +230,21 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
         }
     }
 
+#ifdef HAS_CURL_MULTI
+    struct curl_waitfd waitfd[1];
+    int numfds;
+    // setup pipe socket
+    waitfd[0].fd = conf->background_activity_wakeup_fds[0];
+    waitfd[0].events = CURL_WAIT_POLLIN;
+#else
+    fd_set rfds, wfds, efds;
+    int maxfd;
+
     FD_ZERO(&rfds);
+#endif
 
     while (running) {
+#ifndef HAS_CURL_MULTI
         if (FD_ISSET(conf->background_activity_wakeup_fds[0], &rfds)) {
             if (wakeup_read(conf->background_activity_wakeup_fds) != APR_SUCCESS) {
                 // report an error, but could potentially spam the log file
@@ -250,7 +252,7 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
                 ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, thd_data->server, LOGGER_DEBUG_HDR"Failed to call wakeup_read()"LOGGER_FTR);
             }
         }
-
+#endif
         // if we have room to run one more CURL request
         if (q_waiting->count > 0) {
             char *activity;
@@ -304,6 +306,7 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
             }
         }
 
+#ifndef HAS_CURL_MULTI
         FD_ZERO(&rfds);
         FD_ZERO(&wfds);
         FD_ZERO(&efds);
@@ -338,7 +341,22 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
             FD_ZERO(&rfds);
             continue;
         }
+#else
+        // wait until one of fd is active or timeout
+        res = curl_multi_wait(multi_curl, waitfd, 1, SELECT_TIMEOUT_MS, &numfds);
+        if (res != CURLM_OK) {
+            ap_log_error(APLOG_MARK, APLOG_ERR, 0, thd_data->server, LOGGER_ERROR_HDR"background_activity: curl_multi_wait() error: %d"LOGGER_FTR, res);
+        }
 
+        // pipe is readable
+        if (numfds && waitfd[0].revents & CURL_WAIT_POLLIN) {
+            if (wakeup_read(conf->background_activity_wakeup_fds) != APR_SUCCESS) {
+                // report an error, but could potentially spam the log file
+                // we still continue, as we could get further notifies via cURL events
+                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, thd_data->server, LOGGER_DEBUG_HDR"Failed to call wakeup_read()"LOGGER_FTR);
+            }
+        }
+#endif
         // let cURL process requests
         res = curl_multi_perform(multi_curl, &running_handles);
         if (res != CURLM_OK) {
