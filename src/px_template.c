@@ -156,7 +156,7 @@ int render_template(char **html, request_context *ctx, const px_config *conf, si
         .firstPartyEnabled = conf->first_party_enabled ? "true" : "false",
         .logoVisibility = conf->custom_logo ? visible : hidden,
         .captchaType = captcha_type_str(conf->captcha_type),
-        .hostUrl =  apr_psprintf(ctx->r->pool, collector_url, conf->app_id, NULL),
+        .hostUrl = ctx->host_url,
         .blockScript = ctx->captcha_js_src
     };
 
@@ -170,11 +170,22 @@ const char* select_template(const px_config *conf, request_context *ctx) {
         return ctx->action_data_body;
     }
 
-    // Prepare captcha src
-    const char *template_host = conf->first_party_enabled ? conf->captcha_path_prefix : conf->captcha_exteral_path; // src according to first party mode
+    // default hosts
+    const char *template_host = conf->captcha_exteral_path; // src according to first party mode
+    const char *host_url = apr_psprintf(ctx->r->pool, collector_url, conf->app_id, NULL);
+
+    // template selection
     const char *template_prefix = ctx->action == ACTION_BLOCK ? "block" : captcha_type_str(conf->captcha_type); // template name according to action
     const char *template_postfix = ctx->token_origin == TOKEN_ORIGIN_COOKIE ? "" : ".mobile"; // for mobile captcha 
+
+    // modify hosts according to first party
+    const char *jsClientSrc = conf->client_exteral_path;
+    if (conf->first_party_enabled && ctx->token_origin == TOKEN_ORIGIN_COOKIE) {
+        template_host = conf->captcha_path_prefix;
+        host_url = conf->xhr_path_prefix;
+    }
     
+    ctx->host_url = host_url;
     ctx->captcha_js_src = apr_pstrcat(ctx->r->pool, template_host, "/", template_prefix, template_postfix, ".js", NULL);
 
     return block_page_template;

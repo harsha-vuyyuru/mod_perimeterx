@@ -261,7 +261,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
     }
 
     // Redirect captcha
-    if (conf->xhr_path_prefix && strncmp(conf->captcha_path_prefix, r->parsed_uri.path, strlen(conf->captcha_path_prefix)) == 0) {
+    if (conf->captcha_path_prefix && strncmp(conf->captcha_path_prefix, r->parsed_uri.path, strlen(conf->captcha_path_prefix)) == 0) {
         redirect_res = redirect_captcha(r, conf);
         r->status = HTTP_OK;
         redirect_copy_headers_out(r, redirect_res);

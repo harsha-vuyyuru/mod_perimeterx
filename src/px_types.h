@@ -206,6 +206,7 @@ typedef struct request_context_t {
     bool response_application_json;
     const char *action_data_body;
     const char *captcha_js_src;
+    const char *host_url;
 } request_context;
 
 typedef struct redirect_response_t {
