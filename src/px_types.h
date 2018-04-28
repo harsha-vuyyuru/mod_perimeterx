@@ -16,6 +16,7 @@ typedef enum {
 
 typedef struct px_config_t {
     // px module server memory pool
+    const server_rec *server;
     apr_pool_t *pool;
     const char *app_id;
     const char *payload_key;
@@ -93,15 +94,18 @@ typedef struct px_config_t {
     const char *remote_config_url;
     int remote_config_interval_ms;
     char *checksum;
+    int px_debug;
+    int log_level_err;
+    int log_level_debug;
 } px_config;
 
 typedef struct thread_data_t {
     server_rec *server;
-    px_config *config;
+    px_config *conf;
 } thread_data;
 
 typedef struct activity_consumer_data_t {
-    px_config *config;
+    px_config *conf;
     server_rec *server;
 } activity_consumer_data;
 
@@ -187,6 +191,7 @@ typedef struct captcha_response_t {
 } captcha_response;
 
 typedef struct request_context_t {
+    px_config *conf;
     const char *app_id;
     const char *px_payload;
     const char *px_payload1;

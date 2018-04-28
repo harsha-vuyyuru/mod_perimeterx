@@ -77,9 +77,6 @@ static const char *PAGE_REQUESTED_ACTIVITY_TYPE = "page_requested";
 static const char *UPDATE_REASON_REMOTE_CONFIG = "remote_config";
 static const char *UPDATE_REASON_INITIAL_CONFIG = "initial_config";
 
-static const char *LOGGER_DEBUG_FORMAT = "[PerimeterX - DEBUG][%s] - %s";
-static const char *LOGGER_ERROR_FORMAT = "[PerimeterX - ERROR][%s] - %s";
-
 static void set_app_id_helper(apr_pool_t *pool, px_config *conf, const char *app_id);
 
 #ifdef DEBUG
@@ -118,36 +115,35 @@ static void px_ssl_id_callback(CRYPTO_THREADID *id) {
 #endif /* defined(OPENSSL_THREADS) && APR_HAS_THREADS */
 
 
-char *create_response(px_config *conf, request_context *ctx) {
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "create_response: response creation started");
+static char *create_response(px_config *conf, request_context *ctx) {
+    px_log_debug("response creation started");
 
     // support for Access-Control-Allow-Origin headers
     if (conf->origin_wildcard_enabled) {
         apr_table_set(ctx->r->headers_out, ACCESS_CONTROL_ALLOW_ORIGIN_HEADER_NAME,ORIGIN_WILDCARD_VALUE);
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "create_response: header Access-Control-Allow-Origin: * set on response");
+        px_log_debug("header Access-Control-Allow-Origin: * set on response");
     } else if (conf->origin_envvar_name) {
         const char *origin_envvar_value = apr_table_get(ctx->r->subprocess_env, conf->origin_envvar_name);
         if (origin_envvar_value != NULL) {
             apr_uri_t origin_envvar_uri;
             apr_status_t origin_envvar_parse_result = apr_uri_parse(ctx->r->pool, origin_envvar_value, &origin_envvar_uri);
             if (origin_envvar_parse_result != 0) {
-                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "create_response: Origin header was not a valid URI");
+                px_log_debug("Origin header was not a valid URI");
             } else {
                 // Unparse to ensure there is a real URI
                 const char *unparsed_uri = apr_uri_unparse(ctx->r->pool, &origin_envvar_uri, APR_URI_UNP_OMITPATHINFO);
                 if (unparsed_uri != NULL) {
                     if (strlen(unparsed_uri) > 0) {
-                        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id, apr_pstrcat(ctx->r->pool, "create_response: unparsed uri ", unparsed_uri, NULL));
+                        px_log_debug_fmt("unparsed uri %s", unparsed_uri);
                         apr_table_set(ctx->r->headers_out, ACCESS_CONTROL_ALLOW_ORIGIN_HEADER_NAME, unparsed_uri);
-                        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id, apr_pstrcat(ctx->r->pool, "create_response: header Access-Control-Allow-Origin: ", origin_envvar_value, " set on response", NULL));
-
+                        px_log_debug_fmt("header Access-Control-Allow-Origin: %s set on response", origin_envvar_value);
                     } else {
-                        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "create_response: invalid URI set in envvar");
+                        px_log_debug("invalid URI set in envvar");
                     }
                 }
             }
         } else {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "create_response: envvar NULL skipped setting Access-Control-Allow-Origin header");
+            px_log_debug("envvar NULL skipped setting Access-Control-Allow-Origin header");
         }
     }
 
@@ -195,12 +191,13 @@ char *create_response(px_config *conf, request_context *ctx) {
     return html;
 }
 
-void post_verification(request_context *ctx, px_config *conf, bool request_valid) {
+static void post_verification(request_context *ctx, bool request_valid) {
+    px_config *conf = ctx->conf;
     if (!request_valid || conf->send_page_activities) {
         const char *activity_type = request_valid ? PAGE_REQUESTED_ACTIVITY_TYPE : BLOCKED_ACTIVITY_TYPE;
         char *activity = create_activity(activity_type, conf, ctx);
         if (!activity) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "post_verification: ", activity_type, " create activity failed", NULL));
+            px_log_debug_fmt("%s create activity failed", activity_type);
             return;
         }
         if (conf->background_activity_send) {
@@ -227,7 +224,7 @@ static void redirect_copy_headers_out(request_rec *r, const redirect_response *r
     }
 }
 
-int px_handle_request(request_rec *r, px_config *conf) {
+static int px_handle_request(request_rec *r, px_config *conf) {
     // Decline if module is disabled or not properly configured
     if (!conf || !conf->module_enabled || !conf->app_id) {
         return DECLINED;
@@ -240,7 +237,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
 
     // Decline internal redirects and subrequests
     if (r->prev) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Request declined - interal redirect or subrequest");
+        px_log_debug("Request declined - internal redirect or subrequest");
         return DECLINED;
     }
 
@@ -270,25 +267,25 @@ int px_handle_request(request_rec *r, px_config *conf) {
     if (conf->skip_mod_by_envvar) {
         const char *skip_px = apr_table_get(r->subprocess_env, "PX_SKIP_MODULE");
         if  (skip_px != NULL) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Request will not be verified, module is disabled by EnvIf");
+            px_log_debug("Request will not be verified, module is disabled by EnvIf");
             return DECLINED;
         }
     }
 
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Starting request verification");
+    px_log_debug("Starting request verification");
 
     request_context *ctx = create_context(r, conf);
     if (ctx) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Request context created successfully");
-        bool request_valid = px_verify_request(ctx, conf);
+        px_log_debug("Request context created successfully");
+        bool request_valid = px_verify_request(ctx);
 
         // if request is not valid, and monitor mode is on, toggle request_valid and set pass_reason
         if (conf->monitor_mode && !request_valid) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Request marked for simulated block");
+            px_log_debug("Request marked for simulated block");
             ctx->pass_reason = PASS_REASON_MONITOR_MODE;
             request_valid = true;
         }
-        post_verification(ctx, conf, request_valid);
+        post_verification(ctx, request_valid);
 #if DEBUG
         const char *PX_AUT_HEADER_KEY = getenv("PX_AUT_HEADER_KEY");
         const char *PX_AUT_HEADER_VALUE = getenv("PX_AUT_HEADER_VALUE");
@@ -332,7 +329,7 @@ int px_handle_request(request_rec *r, px_config *conf) {
                 return DONE;
             }
             // failed to create response
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Could not create block page with template, passing request");
+            px_log_debug("Could not create block page with template, passing request");
         }
     }
     r->status = HTTP_OK;
@@ -342,9 +339,18 @@ int px_handle_request(request_rec *r, px_config *conf) {
 // Background thread that wakes up after reacing X timeoutes in interval length Y and checks when service is available again
 static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
     thread_data *hc = (thread_data*) data;
-    px_config *conf = hc->config;
+    px_config *conf = hc->conf;
+    apr_pool_t *pool;
+    apr_status_t rv;
 
-    const char *health_check_url = apr_pstrcat(hc->server->process->pool, hc->config->base_url, HEALTH_CHECK_API, NULL);
+    // thread-owned pool
+    rv = apr_pool_create(&pool, NULL);
+    if (rv != APR_SUCCESS) {
+        px_log_error("error while trying to initialize apr_pool");
+        return NULL;
+    }
+
+    const char *health_check_url = apr_pstrcat(pool, hc->conf->base_url, HEALTH_CHECK_API, NULL);
     CURL *curl = curl_easy_init();
     CURLcode res;
     while (!conf->should_exit_thread) {
@@ -358,7 +364,7 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
 
         apr_thread_mutex_unlock(conf->health_check_cond_mutex);
         if (conf->should_exit_thread) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, LOGGER_DEBUG_FORMAT, conf->app_id, "health_check: marked to exit");
+            px_log_debug_thd("marked to exit");
             break;
         }
 
@@ -375,34 +381,65 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
         apr_atomic_set32(&conf->px_errors_count, 0);
     }
 
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, hc->server, LOGGER_DEBUG_FORMAT, conf->app_id, "health_check: thread exiting");
+    px_log_debug_thd("thread exiting");
 
     curl_easy_cleanup(curl);
     apr_thread_exit(thd, 0);
     return NULL;
 }
 
-static void telemetry_activity_send(CURL *telemetry_curl, server_rec *s, px_config *cfg, const char *update_reason) {
-    char *activity = config_to_json_string(cfg, update_reason);
+static void telemetry_activity_send(CURL *telemetry_curl, server_rec *s, px_config *conf, const char *update_reason) {
+    char *activity = config_to_json_string(conf, update_reason);
     if (!activity) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, s, "[%s]: telemetry_activity_send: create telemetry activity failed", cfg->app_id);
+        px_log_error("create telemetry activity failed");
         return;
     }
-    post_request_helper(telemetry_curl, cfg->telemetry_api_url, activity, cfg->api_timeout_ms, cfg, s, NULL);
+    post_request_helper(telemetry_curl, conf->telemetry_api_url, activity, conf->api_timeout_ms, conf, s, NULL);
     free(activity);
+}
+
+static void update_debug_mode(px_config *conf, int px_debug) {
+
+    // disabling previously enabled debugMode
+    if (conf->px_debug && !px_debug) {
+        px_log_debug("disabling debug logging");
+        conf->px_debug = px_debug;
+        conf->log_level_debug = APLOG_DEBUG;
+        return;
+    }
+
+    // update log_level_debug
+    if (px_debug) {
+        if (conf->server && !APLOGdebug(conf->server)) {
+            conf->log_level_debug = conf->log_level_err;
+        } else {
+            conf->log_level_debug = APLOG_DEBUG;
+        }
+    } else {
+        conf->log_level_debug = APLOG_DEBUG;
+    }
+
+    // no changes
+    if (conf->px_debug == px_debug) {
+        return;
+    }
+
+    // enabling debugMode
+    conf->px_debug = px_debug;
+    px_log_debug("enabling debug logging");
 }
 
 // periodically check for remote configuration changes
 static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
     thread_data *th_data = (thread_data*) data;
-    px_config *conf = th_data->config;
+    px_config *conf = th_data->conf;
     bool startup = true;
 
     apr_pool_t *pool;
     apr_status_t rv;
     rv = apr_pool_create(&pool, conf->pool);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, th_data->server, LOGGER_ERROR_FORMAT, conf->app_id, "remote configuration: error while trying to initialize apr_pool");
+        px_log_error("error while trying to initialize apr_pool");
         return NULL;
     }
 
@@ -451,26 +488,25 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
 
         res = curl_easy_perform(curl);
         if (res != CURLE_OK) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server, "[%s]: remote configuration request failed: %s (%d)", conf->app_id, errbuf, res);
+            px_log_error_thd_fmt("request failed: %s (%d)", errbuf, res);
             continue;
         }
 
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
         if (status_code == 204) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server, LOGGER_DEBUG_FORMAT, conf->app_id, "Configuration was not changed");
+            // px_log_debug_thd("Configuration was not changed");
             continue;
         }
 
         if (status_code != HTTP_OK) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server, "[%s]: remote configuration request failed: %s (%ld)", conf->app_id, errbuf, status_code);
+            px_log_error_thd_fmt("request failed: %s (%ld)", errbuf, status_code);
             continue;
         }
 
         json_error_t j_error;
         json_t *j = json_loads(response.data, 0, &j_error);
         if (!j) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server,
-                "[%s]: remote configuration request: failed to parse json: %s", conf->app_id, j_error.text);
+            px_log_error_thd_fmt("failed to parse json: %s", j_error.text);
             continue;
         }
 
@@ -500,16 +536,15 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
                 "checksum", &checksum_tmp,
                 "firstPartyEnabled", &first_party_enabled,
                 "firstPartyXhrEnabled", &reverse_xhr_enabled)) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server,
-                "[%s]: remote configuration request: failed to parse json response: %s\n", conf->app_id, j_error.text);
+            px_log_error_thd_fmt("failed to parse json response: %s\n", j_error.text);
             json_decref(j);
             continue;
         }
 
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server,
-                "[%s]: applying new configuration (module_enabled: %d)", conf->app_id, px_enabled);
+        px_log_debug_thd_fmt("applying new configuration (module_enabled: %d)", px_enabled);
 
         // all good, acquire rw lock and update configuration data
+        // NOTE: do not call px_log functions while in locked state
         apr_thread_rwlock_wrlock(conf->remote_config_lock);
 
         conf->module_enabled = px_enabled;
@@ -522,7 +557,6 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
         // it comes in milliseconds
         conf->api_timeout_ms = client_timeout;
         // TODO: s2s_timeout
-        // TODO: px_debug
 
         conf->checksum = apr_pstrdup(pool, checksum_tmp);
 
@@ -570,12 +604,16 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
         // release the lock
         apr_thread_rwlock_unlock(conf->remote_config_lock);
 
+        if (conf->px_debug != px_debug) {
+            update_debug_mode(conf, px_debug);
+        }
+
         json_decref(j);
 
         telemetry_activity_send(telemetry_curl, th_data->server, conf, UPDATE_REASON_REMOTE_CONFIG);
     }
 
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, th_data->server, LOGGER_DEBUG_FORMAT, conf->app_id, "remote_config: thread exiting");
+    px_log_debug_thd("thread exiting");
 
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
@@ -586,12 +624,12 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
 
 static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, void *data) {
     activity_consumer_data *consumer_data = (activity_consumer_data*)data;
-    px_config *conf = consumer_data->config;
+    px_config *conf = consumer_data->conf;
     CURL *curl = curl_easy_init();
 
     void *v;
     if (!curl) {
-        ap_log_error(APLOG_MARK, APLOG_ERR, 0, consumer_data->server, LOGGER_DEBUG_FORMAT, conf->app_id, "could not create curl handle, thread will not run to consume messages");
+        px_log_error("could not create curl handle, thread will not run to consume messages");
         return NULL;
     }
 
@@ -611,91 +649,91 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
     }
 
     curl_easy_cleanup(curl);
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, consumer_data->server, LOGGER_DEBUG_FORMAT, conf->app_id, "activity consumer thread exited");
+    px_log_debug("activity consumer thread exited");
     return NULL;
 }
 
 // --------------------------------------------------------------------------------
 //
 
-static apr_status_t create_health_check(apr_pool_t *p, server_rec *s, px_config *cfg) {
+static apr_status_t create_health_check(apr_pool_t *p, server_rec *s, px_config *conf) {
     apr_status_t rv;
 
     thread_data *hc_data= (thread_data*)apr_palloc(p, sizeof(thread_data));
-    cfg->px_errors_count = 0;
+    conf->px_errors_count = 0;
     hc_data->server = s;
-    hc_data->config = cfg;
+    hc_data->conf = conf;
 
-    rv = apr_thread_cond_create(&cfg->health_check_cond, p);
+    rv = apr_thread_cond_create(&conf->health_check_cond, p);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "error while init health_check thread cond");
+        px_log_error("error while init health_check thread cond");
         return rv;
     }
 
-    rv = apr_thread_mutex_create(&cfg->health_check_cond_mutex, 0, p);
+    rv = apr_thread_mutex_create(&conf->health_check_cond_mutex, 0, p);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "error while creating health_check thread mutex");
+        px_log_error("error while creating health_check thread mutex");
         return rv;
     }
 
-    rv = apr_thread_create(&cfg->health_check_thread, NULL, health_check, (void*) hc_data, p);
+    rv = apr_thread_create(&conf->health_check_thread, NULL, health_check, (void*) hc_data, p);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "error while init health_check thread create");
+        px_log_error("error while init health_check thread create");
         return rv;
     }
 
     return rv;
 }
 
-static apr_status_t create_remote_config(apr_pool_t *p, server_rec *s, px_config *cfg) {
+static apr_status_t create_remote_config(apr_pool_t *p, server_rec *s, px_config *conf) {
     apr_status_t rv;
     thread_data *th_data= (thread_data*)apr_palloc(p, sizeof(thread_data));
     th_data->server = s;
-    th_data->config = cfg;
+    th_data->conf = conf;
 
-    rv = apr_thread_rwlock_create(&cfg->remote_config_lock, p);
+    rv = apr_thread_rwlock_create(&conf->remote_config_lock, p);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "error while creating remote config rwlocks");
+        px_log_error("error while creating remote config rwlocks");
         return rv;
     }
 
-    rv = apr_thread_create(&cfg->remote_config_thread, NULL, remote_config, (void*)th_data, p);
+    rv = apr_thread_create(&conf->remote_config_thread, NULL, remote_config, (void*)th_data, p);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "error while init remote config thread");
+        px_log_error("error while init remote config thread");
         return rv;
     }
 
     return rv;
 }
 
-static apr_status_t background_activity_send_init(apr_pool_t *pool, server_rec *s, px_config *cfg) {
+static apr_status_t background_activity_send_init(apr_pool_t *pool, server_rec *s, px_config *conf) {
     apr_status_t rv;
 
-    rv = apr_queue_create(&cfg->activity_queue, cfg->background_activity_queue_size, pool);
+    rv = apr_queue_create(&conf->activity_queue, conf->background_activity_queue_size, pool);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "failed to initialize background activity queue");
+        px_log_error("failed to initialize background activity queue");
         return rv;
     }
 
     activity_consumer_data *consumer_data = apr_palloc(s->process->pool, sizeof(activity_consumer_data));
     consumer_data->server = s;
-    consumer_data->config = cfg;
+    consumer_data->conf = conf;
 
-    rv = apr_thread_pool_create(&cfg->activity_thread_pool, 0, cfg->background_activity_workers, pool);
+    rv = apr_thread_pool_create(&conf->activity_thread_pool, 0, conf->background_activity_workers, pool);
     if (rv != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "failed to initialize background activity thread pool");
+        px_log_error("failed to initialize background activity thread pool");
         return rv;
     }
 
-    for (unsigned int i = 0; i < cfg->background_activity_workers; ++i) {
-        rv = apr_thread_pool_push(cfg->activity_thread_pool, background_activity_consumer, consumer_data, 0, NULL);
+    for (unsigned int i = 0; i < conf->background_activity_workers; ++i) {
+        rv = apr_thread_pool_push(conf->activity_thread_pool, background_activity_consumer, consumer_data, 0, NULL);
         if (rv != APR_SUCCESS) {
-            ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "failed to push background activity consumer");
+            px_log_error("failed to push background activity consumer");
             return rv;
         }
     }
 
-    ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "finished init background activities");
+    px_log_debug("finished init background activities");
     return rv;
 }
 
@@ -705,41 +743,38 @@ static apr_status_t px_child_exit(void *data) {
     apr_status_t rv = APR_SUCCESS;
 
     for (server_rec *vs = s; vs; vs = vs->next) {
-        px_config *cfg = ap_get_module_config(vs->module_config, &perimeterx_module);
+        px_config *conf = ap_get_module_config(vs->module_config, &perimeterx_module);
 
-        cfg->should_exit_thread = true;
+        conf->should_exit_thread = true;
 
         // signaling health check thread to exit
-        if (cfg->px_health_check) {
-            apr_thread_cond_signal(cfg->health_check_cond);
+        if (conf->px_health_check) {
+            apr_thread_cond_signal(conf->health_check_cond);
             apr_status_t status;
-            apr_thread_join(&status, cfg->health_check_thread);
+            apr_thread_join(&status, conf->health_check_thread);
         }
 
         // wait for remote config thread to exit
-        if (cfg->remote_config_thread) {
+        if (conf->remote_config_thread) {
             apr_status_t status;
-            apr_thread_join(&status, cfg->remote_config_thread);
+            apr_thread_join(&status, conf->remote_config_thread);
         }
 
         // terminate the queue and wake up all idle threads
-        if (cfg->activity_queue) {
-            rv = apr_queue_term(cfg->activity_queue);
+        if (conf->activity_queue) {
+            rv = apr_queue_term(conf->activity_queue);
             if (rv != APR_SUCCESS) {
                 char buf[ERR_BUF_SIZE];
                 char *err = apr_strerror(rv, buf, sizeof(buf));
-                ap_log_error(APLOG_MARK, LOG_ERR, 0, s, "px_child_exit: could not terminate the queue - %s", err);
+                px_log_error_fmt("could not terminate the queue - %s", err);
             }
         }
 
-        if (cfg->activity_thread_pool) {
-            apr_thread_pool_destroy(cfg->activity_thread_pool);
+        if (conf->activity_thread_pool) {
+            apr_thread_pool_destroy(conf->activity_thread_pool);
         }
 
-        if (cfg->app_id)
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg->app_id, "px_child_exit: cleanup finished");
-        else
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, "px_child_exit: cleanup finished");
+        px_log_debug("cleanup finished");
     }
 
     return rv;
@@ -750,54 +785,60 @@ static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
     // init each virtual host
     for (server_rec *vs = s; vs; vs = vs->next) {
 
-        px_config *cfg = ap_get_module_config(vs->module_config, &perimeterx_module);
-        if (!cfg || !cfg->module_enabled) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg ? cfg->app_id : 0, "Request will not be verified, module is disabled or not properly configured");
+        px_config *conf = ap_get_module_config(vs->module_config, &perimeterx_module);
+        if (!conf || !conf->module_enabled) {
+            px_log_debug("Request will not be verified, module is disabled or not properly configured");
             continue;
         }
-        // initialize the PerimeterX needed pools and background workers if the PerimeterX module is enabled
 
-        rv = apr_pool_create(&cfg->pool, vs->process->pool);
+        conf->server = vs;
+
+        // update debugMode for each vhost
+        // TODO: move to merge_svr_conf() func
+        update_debug_mode(conf, conf->px_debug);
+
+        // initialize the PerimeterX needed pools and background workers if the PerimeterX module is enabled
+        rv = apr_pool_create(&conf->pool, vs->process->pool);
         if (rv != APR_SUCCESS) {
-            ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "px_child_setup: error while trying to initialize apr_pool for configuration");
+            px_log_error("error while trying to initialize apr_pool for configuration");
             return rv;
         }
 
-        cfg->curl_pool = curl_pool_create(cfg->pool, cfg->curl_pool_size, false);
-        cfg->redirect_curl_pool = curl_pool_create(cfg->pool, cfg->redirect_curl_pool_size, true);
-        if (cfg->background_activity_send) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg->app_id, "px_child_setup: start init for background_activity_send");
+        conf->curl_pool = curl_pool_create(conf->pool, conf->curl_pool_size, false);
+        conf->redirect_curl_pool = curl_pool_create(conf->pool, conf->redirect_curl_pool_size, true);
+        if (conf->background_activity_send) {
+            px_log_debug("start init for background_activity_send");
 
-            rv = background_activity_send_init(cfg->pool, vs, cfg);
+            rv = background_activity_send_init(conf->pool, vs, conf);
             if (rv != APR_SUCCESS) {
-                ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "px_child_setup: error while trying to init background_activity_consumer");
+                px_log_error("error while trying to init background_activity_consumer");
                 return rv;
             }
         }
 
-        if (cfg->px_health_check) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg->app_id, "px_child_setup: setting up health_check thread");
+        if (conf->px_health_check) {
+            px_log_debug("setting up health_check thread");
 
-            rv = create_health_check(cfg->pool, vs, cfg);
+            rv = create_health_check(conf->pool, vs, conf);
             if (rv != APR_SUCCESS) {
-                ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "px_child_setup: error while trying to init health_check_thread");
+                px_log_error("error while trying to init health_check_thread");
                 return rv;
             }
         }
 
         // send the initial telemetry request
         CURL *telemetry_curl = curl_easy_init();
-        telemetry_activity_send(telemetry_curl, s, cfg, UPDATE_REASON_INITIAL_CONFIG);
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg->app_id, "px_child_setup: start init for telemetry_activity_send");
+        telemetry_activity_send(telemetry_curl, s, conf, UPDATE_REASON_INITIAL_CONFIG);
+        px_log_debug("start init for telemetry_activity_send");
         curl_easy_cleanup(telemetry_curl);
 
         // launch remote_config thread
-        if (cfg->remote_config_enabled && !cfg->remote_config_thread) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, s, LOGGER_DEBUG_FORMAT, cfg->app_id, "px_child_setup: setting up remote_config thread");
+        if (conf->remote_config_enabled && !conf->remote_config_thread) {
+            px_log_debug("setting up remote_config thread");
 
-            rv = create_remote_config(cfg->pool, vs, cfg);
+            rv = create_remote_config(conf->pool, vs, conf);
             if (rv != APR_SUCCESS) {
-                ap_log_error(APLOG_MARK, APLOG_CRIT, rv, s, LOGGER_ERROR_FORMAT, cfg->app_id, "px_child_setup: error while trying to init remote_config_thread");
+                px_log_error("error while trying to init remote_config_thread");
                 return rv;
             }
         }
@@ -1405,7 +1446,6 @@ static const char *set_remote_configuration(cmd_parms *cmd, void *config, int ar
 
     px_config *conf = get_config(cmd, config);
     if (!conf) {
-
         return ERROR_CONFIG_MISSING;
     }
     conf->remote_config_enabled = arg ? true : false;
@@ -1441,6 +1481,17 @@ static const char *set_sensitive_headers(cmd_parms *cmd, void *config, const cha
     return NULL;
 }
 
+static const char *set_debug_mode(cmd_parms *cmd, void *config, int arg) {
+
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    update_debug_mode(conf, arg);
+    return NULL;
+}
+
+
 static int px_hook_post_request(request_rec *r) {
     px_config *conf = ap_get_module_config(r->server->module_config, &perimeterx_module);
 
@@ -1470,16 +1521,17 @@ static int px_hook_post_request(request_rec *r) {
 #ifdef DEBUG
     apr_time_t finish = apr_time_now();
     if (finish > start) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: Request processing time: %ld ms (result: %d)", conf->app_id, apr_time_as_msec(finish) - apr_time_as_msec(start), res);
+        px_log_debug_fmt("Request processing time: %ld ms (result: %d)", apr_time_as_msec(finish) - apr_time_as_msec(start), res);
     }
 #endif
 
     return res;
 }
 
-static void *create_config(apr_pool_t *p) {
+static void *create_config(apr_pool_t *p, server_rec *s) {
     px_config *conf = apr_pcalloc(p, sizeof(px_config));
     if (conf) {
+        conf->server = s;
         conf->module_enabled = false;
         conf->api_timeout_ms = 1000L;
         conf->captcha_timeout = 1000L;
@@ -1536,6 +1588,9 @@ static void *create_config(apr_pool_t *p) {
         conf->activity_thread_pool = NULL;
         conf->telemetry_api_url = apr_pstrcat(p, conf->base_url, TELEMETRY_API, NULL);
         conf->checksum = NULL;
+        conf->px_debug = FALSE;
+        conf->log_level_err = APLOG_ERR;
+        conf->log_level_debug = APLOG_DEBUG;
     }
     return conf;
 }
@@ -1812,6 +1867,11 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Set a value for a sensitive header which will be filtered and not be reported back"),
+    AP_INIT_FLAG("EnableDebugMode",
+            set_debug_mode,
+            NULL,
+            OR_ALL,
+            "Toggle debug logging mode"),
     { NULL }
 };
 
@@ -1824,7 +1884,7 @@ static void perimeterx_register_hooks(apr_pool_t *pool) {
 }
 
 static void *create_server_config(apr_pool_t *pool, server_rec *s) {
-    return create_config(pool);
+    return create_config(pool, s);
 }
 
 module AP_MODULE_DECLARE_DATA perimeterx_module =  {
