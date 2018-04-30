@@ -19,6 +19,8 @@ Table of Contents
 	- [Dependencies](#dependencies)
 	- [Installation](#installation)
 	- [Basic Usage Example](#basic-usage)
+- [Upgrade](#upgrade)
+	- [Upgrade to v4.x](#upgrade-v4)
 - [Directives](DIRECTIVES.md)
 - [Custom Block page](BLOCKPAGE.md)
 - [Logging and Troubleshooting](#troubleshoot)
@@ -112,6 +114,15 @@ Loaded Modules:
         </IfModule>
 </VirtualHost>
 ```
+
+### <a name="upgrade"></a> Upgrade ###
+#### <a name="upgrade-v4"></a> Upgrade to v4.x ####
+
+#### Custom Block Page upgrade ####
+Upgrading to version 4.x will requrie additional changes if CustomBlockPage is enabled.
+From v4.x, the enforcer will not handle captcah validations, instead all captcha solving requests will be send direactly to the PerimeterX service from the Javascript handler
+
+Please refer to [Custom Block Page](BLOCK.md) implementaion for more information
 
 <a name="troubleshoot"></a>Logging and Troubleshooting
 ----------------------------------------
