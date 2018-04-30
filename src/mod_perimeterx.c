@@ -1463,7 +1463,7 @@ static void *create_config(apr_pool_t *p) {
         conf->module_enabled = false;
         conf->api_timeout_ms = 1000L;
         conf->send_page_activities = true;
-        conf->blocking_score = 101;
+        conf->blocking_score = 100;
         conf->captcha_enabled = true;
         conf->module_version = PERIMETERX_MODULE_VERSION;
         conf->skip_mod_by_envvar = false;
@@ -1501,7 +1501,7 @@ static void *create_config(apr_pool_t *p) {
         conf->origin_envvar_name  = NULL;
         conf->origin_wildcard_enabled = false;
         conf->captcha_type = CAPTCHA_TYPE_RECAPTCHA;
-        conf->monitor_mode = false;
+        conf->monitor_mode = true;
         conf->enable_token_via_header = true;
         conf->first_party_enabled = true;
         conf->first_party_xhr_enabled = true;

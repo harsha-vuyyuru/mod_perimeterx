@@ -117,6 +117,30 @@ Loaded Modules:
 
 ### <a name="upgrade"></a> Upgrade ###
 #### <a name="upgrade-v4"></a> Upgrade to v4.x ####
+#### Default Configurations ####
+From v4.x, mod_perimeterx is shipped out in Monitor Mode turned on and BlockingScore set to 100.  
+For users who wish to set the module to active blocking mode, additonal changes will be required to the module configurations.  
+
+Basic example v4.x - Blocking Mode
+```
+        <IfModule mod_perimeterx.c>
+                PXEnabled On
+		AppID [APPID PLACEHOLDER]
+		AuthToken [AUTHTOKEN PLACEHOLDER]
+		CookieKey [COOKIE KEY PLACEHOLDER]
+		MonitorMode Off
+        </IfModule>
+```
+
+Basic example v4.x - Monitor Mode 
+```
+        <IfModule mod_perimeterx.c>
+                PXEnabled On
+		AppID [APPID PLACEHOLDER]
+		AuthToken [AUTHTOKEN PLACEHOLDER]
+		CookieKey [COOKIE KEY PLACEHOLDER]
+        </IfModule>
+```
 
 #### Custom Block Page upgrade ####
 Upgrading to version 4.x will requrie additional changes if CustomBlockPage is enabled.
