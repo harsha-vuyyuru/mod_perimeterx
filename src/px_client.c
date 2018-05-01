@@ -16,7 +16,7 @@ static const char *CLIENT_URI = "/%s/main.min.js";
 static const char EMPTY_GIF[] = { 0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00,
 	0x00, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00,
 	0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b };
-static const redirect_response DEFAULT_CLIENT_RESPONSE = {
+static const redirect_response DEFAULT_JS_RESPONSE = {
     .predefined = true,
     .content = "",
     .content_size = 0,
@@ -65,7 +65,7 @@ static CURLcode forward_to_perimeterx(request_rec *r, px_config *conf, redirect_
 }
 
 const redirect_response *redirect_client(request_rec *r, px_config *conf) {
-    const redirect_response *default_res = &DEFAULT_CLIENT_RESPONSE;
+    const redirect_response *default_res = &DEFAULT_JS_RESPONSE;
     if (!conf->first_party_enabled) {
         px_log_debug("first party is disabled");
         return default_res;
@@ -114,3 +114,26 @@ const redirect_response *redirect_xhr(request_rec *r, px_config *conf) {
     }
     return redirect_res;
 };
+
+const redirect_response *redirect_captcha(request_rec *r, px_config *conf) {
+    const redirect_response *default_res = &DEFAULT_JS_RESPONSE;
+    if (!conf->first_party_enabled) {
+        px_log_debug("first party is disabled");
+        return default_res;
+    }
+
+    redirect_response *redirect_res = apr_pcalloc(r->pool, sizeof(redirect_response));
+    // Get the template without the final '/'
+    const char *block_uri = &r->unparsed_uri[strlen(conf->captcha_path_prefix)];
+
+    const char *block_base_url = apr_pstrcat(r->pool, "https:", conf->captcha_exteral_path, NULL);
+    px_log_debug_fmt("forwarding request from %s to %s%s", r->parsed_uri.path, block_base_url, block_uri);
+
+    CURLcode status = forward_to_perimeterx(r, conf, redirect_res, block_base_url, block_uri, NULL);
+    redirect_res->response_content_type = default_res->response_content_type;
+    if (status != CURLE_OK) {
+        px_log_debug_fmt("response returned none 200 response, CURLcode[%d]", status);
+        return default_res;
+    }
+    return redirect_res;
+}

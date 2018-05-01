@@ -42,7 +42,6 @@ APLOG_USE_MODULE(perimeterx);
 
 static const char *DEFAULT_BASE_URL = "https://sapi-%s.perimeterx.net";
 static const char *RISK_API = "/api/v2/risk";
-static const char *CAPTCHA_API = "/api/v2/risk/captcha";
 static const char *ACTIVITIES_API = "/api/v1/collector/s2s";
 static const char *HEALTH_CHECK_API = "/api/v1/kpi/status";
 static const char *CONFIGURATION_SERVER_URL = "https://px-conf.perimeterx.net";
@@ -166,12 +165,10 @@ static char *create_response(px_config *conf, request_context *ctx) {
         apr_table_set(ctx->r->headers_out, conf->uuid_header_name, ctx->uuid);
     }
 
-    const char *template = select_template(conf, ctx);
-
     // render html page with the relevant template
     size_t html_size;
     char *html = NULL;
-    int res = render_template(template, &html, ctx, conf, &html_size);
+    int res = render_template(&html, ctx, conf, &html_size);
     if (res) {
         // failed to render
         return NULL;
@@ -254,6 +251,15 @@ static int px_handle_request(request_rec *r, px_config *conf) {
     // Redirect XHR
     if (conf->xhr_path_prefix && strncmp(conf->xhr_path_prefix, r->parsed_uri.path, strlen(conf->xhr_path_prefix)) == 0) {
         redirect_res = redirect_xhr(r, conf);
+        r->status = HTTP_OK;
+        redirect_copy_headers_out(r, redirect_res);
+        ap_rwrite(redirect_res->content, redirect_res->content_size, r);
+        return DONE;
+    }
+
+    // Redirect captcha
+    if (conf->captcha_path_prefix && strncmp(conf->captcha_path_prefix, r->parsed_uri.path, strlen(conf->captcha_path_prefix)) == 0) {
+        redirect_res = redirect_captcha(r, conf);
         r->status = HTTP_OK;
         redirect_copy_headers_out(r, redirect_res);
         ap_rwrite(redirect_res->content, redirect_res->content_size, r);
@@ -950,10 +956,10 @@ static void set_app_id_helper(apr_pool_t *pool, px_config *conf, const char *app
     conf->app_id = app_id;
     conf->base_url = apr_psprintf(pool, DEFAULT_BASE_URL, app_id, NULL);
     conf->risk_api_url = apr_pstrcat(pool, conf->base_url, RISK_API, NULL);
-    conf->captcha_api_url = apr_pstrcat(pool, conf->base_url, CAPTCHA_API, NULL);
     conf->activities_api_url = apr_pstrcat(pool, conf->base_url, ACTIVITIES_API, NULL);
     const char *reverse_prefix =  &app_id[2];
     conf->xhr_path_prefix = apr_psprintf(pool, "/%s/xhr", reverse_prefix);
+    conf->captcha_path_prefix = apr_psprintf(pool, "/%s/captcha", reverse_prefix);
     conf->client_path_prefix = apr_psprintf(pool, "/%s/init.js", reverse_prefix);
     conf->client_exteral_path = apr_psprintf(pool, "//client.perimeterx.net/%s/main.min.js", app_id);
     conf->collector_base_uri = apr_psprintf(pool, "https://collector-%s.perimeterx.net", app_id);
@@ -1028,9 +1034,6 @@ static const char *set_api_timeout(cmd_parms *cmd, void *config, const char *api
     }
     long timeout = atoi(api_timeout) * 1000;
     conf->api_timeout_ms = timeout;
-    if (!conf->is_captcha_timeout_set) {
-        conf->captcha_timeout = timeout;
-    }
     return NULL;
 }
 
@@ -1041,9 +1044,6 @@ static const char *set_api_timeout_ms(cmd_parms *cmd, void *config, const char *
     }
     long timeout = atoi(api_timeout_ms);
     conf->api_timeout_ms = timeout;
-    if (!conf->is_captcha_timeout_set) {
-        conf->captcha_timeout = timeout;
-    }
     return NULL;
 }
 
@@ -1092,7 +1092,6 @@ static const char *set_base_url(cmd_parms *cmd, void *config, const char *base_u
     conf->base_url_is_set = true;
     conf->base_url = base_url;
     conf->risk_api_url = apr_pstrcat(cmd->pool, conf->base_url, RISK_API, NULL);
-    conf->captcha_api_url = apr_pstrcat(cmd->pool, conf->base_url, CAPTCHA_API, NULL);
     conf->activities_api_url = apr_pstrcat(cmd->pool, conf->base_url, ACTIVITIES_API, NULL);
     return NULL;
 }
@@ -1274,16 +1273,6 @@ static const char* set_proxy_url(cmd_parms *cmd, void *config, const char *proxy
     return NULL;
 }
 
-static const char* set_captcha_timeout(cmd_parms *cmd, void *config, const char *captcha_timeout) {
-    px_config *conf = get_config(cmd, config);
-    if (!conf) {
-        return ERROR_CONFIG_MISSING;
-    }
-    conf->captcha_timeout = atoi(captcha_timeout);
-    conf->is_captcha_timeout_set = true;
-    return NULL;
-}
-
 static const char* set_score_header(cmd_parms *cmd, void *config, int arg) {
     px_config *conf = get_config(cmd, config);
     if (!conf) {
@@ -1395,15 +1384,6 @@ static const char *set_monitor_mode(cmd_parms *cmd, void *config, int arg) {
         return ERROR_CONFIG_MISSING;
     }
     conf->monitor_mode = arg ? true : false;
-    return NULL;
-}
-
-static const char *enable_captcha_subdomain(cmd_parms *cmd, void *config, int arg) {
-    px_config *conf = get_config(cmd, config);
-    if (!conf) {
-        return ERROR_CONFIG_MISSING;
-    }
-    conf->captcha_subdomain = arg ? true : false;
     return NULL;
 }
 
@@ -1537,9 +1517,8 @@ static void *create_config(apr_pool_t *p, server_rec *s) {
         conf->server = s;
         conf->module_enabled = false;
         conf->api_timeout_ms = 1000L;
-        conf->captcha_timeout = 1000L;
         conf->send_page_activities = true;
-        conf->blocking_score = 101;
+        conf->blocking_score = 100;
         conf->captcha_enabled = true;
         conf->module_version = PERIMETERX_MODULE_VERSION;
         conf->skip_mod_by_envvar = false;
@@ -1547,7 +1526,6 @@ static void *create_config(apr_pool_t *p, server_rec *s) {
         conf->redirect_curl_pool_size = 40;
         conf->base_url = DEFAULT_BASE_URL;
         conf->risk_api_url = apr_pstrcat(p, conf->base_url, RISK_API, NULL);
-        conf->captcha_api_url = apr_pstrcat(p, conf->base_url, CAPTCHA_API, NULL);
         conf->activities_api_url = apr_pstrcat(p, conf->base_url, ACTIVITIES_API, NULL);
         conf->app_id = NULL;
         conf->payload_key = NULL;
@@ -1578,9 +1556,8 @@ static void *create_config(apr_pool_t *p, server_rec *s) {
         conf->origin_envvar_name  = NULL;
         conf->origin_wildcard_enabled = false;
         conf->captcha_type = CAPTCHA_TYPE_RECAPTCHA;
-        conf->monitor_mode = false;
+        conf->monitor_mode = true;
         conf->enable_token_via_header = true;
-        conf->captcha_subdomain = false;
         conf->first_party_enabled = true;
         conf->first_party_xhr_enabled = true;
         conf->client_base_uri = "https://client.perimeterx.net";
@@ -1594,6 +1571,7 @@ static void *create_config(apr_pool_t *p, server_rec *s) {
         conf->px_debug = FALSE;
         conf->log_level_err = APLOG_ERR;
         conf->log_level_debug = APLOG_DEBUG;
+        conf->captcha_exteral_path = "//captcha.px-cdn.net";
     }
     return conf;
 }
@@ -1654,11 +1632,6 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Set timeout for risk API request in milliseconds"),
-    AP_INIT_TAKE1("CaptchaTimeout",
-            set_captcha_timeout,
-            NULL,
-            OR_ALL,
-            "Set timeout for captcha API request in milliseconds"),
     AP_INIT_FLAG("ReportPageRequest",
             set_pagerequest_enabled,
             NULL,
@@ -1825,11 +1798,6 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Toggle monitor mode, requests will be inspected but not be blocked"),
-    AP_INIT_FLAG("CaptchaSubdomain",
-            enable_captcha_subdomain,
-            NULL,
-            OR_ALL,
-            "Flags that _pxCaptcha can be signed is a subdomain"),
     AP_INIT_FLAG("FirstPartyEnabled",
             enable_first_party,
             NULL,
