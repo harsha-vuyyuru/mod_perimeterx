@@ -347,7 +347,7 @@ risk_payload *decode_payload(const char *px_payload, const char *payload_key, re
 
     int dpayload_len = len;
     if (EVP_DecryptFinal_ex(ctx, dpayload + len, &len) != 1) {
-        ERR_print_errors_fp(stderr);
+        //ERR_print_errors_fp(stderr);
         px_log_debug("decryption failed in: Final");
         EVP_CIPHER_CTX_free(ctx);
         return NULL;
