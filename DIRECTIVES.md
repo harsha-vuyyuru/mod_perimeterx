@@ -15,7 +15,7 @@ Directives
 | AppId  | PX custom application id in the format of PX______	  | NULL | String  |
 | CookieKey  | Key used for cookie signing - Can be found \ generated in PX portal - Policy page. | NULL  |   |   |
 | AuthToken | JWT token used for REST API - Can be found \ generated in PX portal - Application page.  | NULL  | String |
-| BlockingScore | When requests with a score equal to or higher value they will be blocked.  | 101  | 0 - 100  |
+| BlockingScore | When requests with a score equal to or higher value they will be blocked.  | 100  | 0 - 100  |
 | Captcha | Enable reCaptcha on the blocking page  | On  | On / Off  | When using a custom block page with captcha abilities implementation, this option must be `On`.
 | ReportPageRequest | Boolean flag to enable or disable sending activities and metrics to PerimeterX on each page request. Enabling this feature will provide data that populates the PerimeterX portal with valuable information	  |  On | On / Off  |
 | APITimeoutMS |  REST API timeout in milliseconds | 1000  | Integer  | In case APITimeoutMS and APITimeout (deprecated but supported for backward compatibility) are both set in the module configuration - the one that is set later in the file will be the one that will be used. Any other value set prior of it will be discarded.
@@ -38,7 +38,7 @@ Directives
 | BackgroundActivitySend | Toggles on/off asyncrounus activity reporting | On | bool | On / Off |
 | BackgroundActivityWorkers | Number of background workers to send activities | 10 | Number | Integer |
 | BackgroundActivityQueueSize | Queue size for background activity send | 1000 | Number | Integer |
-| MonitorMode | Toggles the module monitor | False | bool | On / Off |
+| MonitorMode | Toggles the module monitor | On | bool | On / Off |
 | CaptchaSubdomain | Toggles captcha on subdomain making the module remove pxCaptcha cookie from all domains under main domain (using `.<domain>.<ext>` instead of `www.<domain>.<ext>`)| Off | bool | On / Off |
 | FirstPartyEnabled | Toggles first party mode | On | bool | On / Off |
 | FirstPartyXhrEnabled | Toggles sending xhr requests through first party | On | bool | On / Off |

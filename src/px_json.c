@@ -20,8 +20,6 @@ static const char *PASS_REASON_STR[] = {
     [PASS_REASON_TIMEOUT] = "timeout",
     [PASS_REASON_S2S] = "s2s",
     [PASS_REASON_S2S_TIMEOUT] = "s2s_timeout",
-    [PASS_REASON_CAPTCHA] = "captcha",
-    [PASS_REASON_CAPTCHA_TIMEOUT] = "captcha_timeout",
     [PASS_REASON_ERROR] = "error",
     [PASS_REASON_MONITOR_MODE] = "monitor_mode",
 };
@@ -34,7 +32,6 @@ static const char *CALL_REASON_STR[] = {
     [CALL_REASON_PAYLOAD_DECRYPTION_FAILED] = "cookie_decryption_failed",
     [CALL_REASON_PAYLOAD_VALIDATION_FAILED] = "cookie_validation_failed",
     [CALL_REASON_SENSITIVE_ROUTE] = "sensitive_route",
-    [CALL_REASON_CAPTCHA_FAILED] = "captcha_failed",
     [CALL_REASON_MOBILE_SDK_CONNECTION_ERROR] = "mobile_sdk_connection_error",
     [CALL_REASON_MOBILE_SDK_PINNING_ERROR] = "mobile_sdk_pinning_error"
 };
@@ -57,8 +54,8 @@ static const char *ACTION_STR[] = {
 };
 
 static const char *CAPTCHA_TYPE_STR[] = {
-    [CAPTCHA_TYPE_RECAPTCHA] = "reCaptcha",
-    [CAPTCHA_TYPE_FUNCAPTCHA] = "funCaptcha",
+    [CAPTCHA_TYPE_RECAPTCHA] = "recaptcha",
+    [CAPTCHA_TYPE_FUNCAPTCHA] = "funcaptcha",
 };
 
 const char *captcha_type_str(captcha_type_t captcha_type) {
@@ -206,80 +203,6 @@ const char *get_call_reason_string(call_reason_t call_reason) {
     return CALL_REASON_STR[call_reason];
 }
 
-char *create_captcha_payload(const request_context *ctx, const px_config *conf) {
-    // headers array
-    const apr_array_header_t *header_arr = apr_table_elts(ctx->headers);
-    json_t *j_headers = headers_to_json_helper(header_arr);
-
-    // request object
-    json_t *j_request = json_pack("{s:s,s:s,s:s,s:s,s:O}",
-            "ip", ctx->ip,
-            "uri", ctx->uri,
-            "url", ctx->full_url,
-            "captchaType", CAPTCHA_TYPE_STR[conf->captcha_type],
-            "headers", j_headers);
-    json_decref(j_headers);
-
-    // captcha object
-    json_t *j_captcha = json_object();
-    json_object_set_new(j_captcha, "request", j_request);
-
-    if (ctx->px_captcha) {
-        json_object_set_new(j_captcha, "pxCaptcha", json_string(ctx->px_captcha));
-    }
-    if (ctx->hostname) {
-        json_object_set_new(j_captcha, "hostname", json_string(ctx->hostname));
-    }
-    if (ctx->api_rtt) {
-        json_object_set_new(j_captcha, "risk_rtt", json_integer(ctx->api_rtt));
-    }
-
-    json_t *j_additional = json_pack("{s:s}",
-            "module_version", conf->module_version);
-
-    json_object_set_new(j_captcha, "additional", j_additional);
-
-    // dump as string
-    char *request_str = json_dumps(j_captcha, JSON_COMPACT);
-    json_decref(j_captcha);
-    return request_str;
-}
-
-captcha_response *parse_captcha_response(const char* captcha_response_str, const request_context *ctx) {
-    json_error_t j_error;
-    json_t *j_response = json_loads(captcha_response_str, 0, &j_error);
-    if (!j_response) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
-                "[%s]: parse_captcha_response: failed to parse. error (%s), response (%s)", ctx->app_id, j_error.text, captcha_response_str);
-        return NULL;
-    }
-
-    int status = -1;
-    const char *uuid = NULL;
-    const char *vid = NULL;
-    const char *cid = NULL;
-    if (json_unpack(j_response, "{s:i,s?s,s?s,s?s}",
-                "status", &status,
-                "uuid", &uuid,
-                "cid", &cid,
-                "vid", &vid)) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
-                "[%s]: parse_captcha_response: failed to unpack. response (%s)", ctx->app_id, captcha_response_str);
-        json_decref(j_response);
-        return NULL;
-    }
-
-    captcha_response *parsed_response = (captcha_response*)apr_palloc(ctx->r->pool, sizeof(captcha_response));
-    if (parsed_response) {
-        parsed_response->status = status;
-        parsed_response->uuid = apr_pstrdup(ctx->r->pool, uuid);
-        parsed_response->vid = apr_pstrdup(ctx->r->pool, vid ? vid : "");
-        parsed_response->cid = apr_pstrdup(ctx->r->pool, cid);
-    }
-    json_decref(j_response);
-    return parsed_response;
-}
-
 risk_response* parse_risk_response(const char* risk_response_str, const request_context *ctx) {
     json_error_t j_error;
     json_t *j_response = json_loads(risk_response_str, 0, &j_error);
@@ -385,7 +308,6 @@ char* config_to_json_string(px_config *cfg, const char *update_reason) {
     json_object_set_new(config_json, "app_id", json_string(cfg->app_id));
     json_object_set_new(config_json, "module_enabled", json_boolean(cfg->module_enabled));
     json_object_set_new(config_json, "api_timeout_ms", json_integer(cfg->api_timeout_ms));
-    json_object_set_new(config_json, "captcha_timeout", json_integer(cfg->captcha_timeout));
     json_object_set_new(config_json, "send_page_activities", json_boolean(cfg->send_page_activities));
     json_object_set_new(config_json, "blocking_score", json_integer(cfg->blocking_score));
     json_object_set_new(config_json, "captcha_enabled", json_boolean(cfg->captcha_enabled));
@@ -394,7 +316,6 @@ char* config_to_json_string(px_config *cfg, const char *update_reason) {
     json_object_set_new(config_json, "curl_pool_size", json_integer(cfg->curl_pool_size));
     json_object_set_new(config_json, "base_url", json_string(cfg->base_url));
     json_object_set_new(config_json, "risk_api_url", json_string(cfg->risk_api_url));
-    json_object_set_new(config_json, "captcha_api_url", json_string(cfg->captcha_api_url));
     json_object_set_new(config_json, "activities_api_url", json_string(cfg->activities_api_url));
     json_object_set_new(config_json, "auth_header", json_string(cfg->auth_header));
     json_object_set_new(config_json, "routes_whitelist", config_array_to_json_array(cfg->routes_whitelist));
@@ -418,7 +339,6 @@ char* config_to_json_string(px_config *cfg, const char *update_reason) {
     json_object_set_new(config_json, "vid_header_name", json_string(cfg->vid_header_name));
     json_object_set_new(config_json, "json_response_enabled", json_boolean(cfg->json_response_enabled));
     json_object_set_new(config_json, "cors_headers_enabled", json_boolean(cfg->cors_headers_enabled));
-    json_object_set_new(config_json, "captcha_type", json_integer(cfg->captcha_type));
     json_object_set_new(config_json, "monitor_mode", json_boolean(cfg->monitor_mode));
     json_object_set_new(config_json, "enable_token_via_header", json_boolean(cfg->enable_token_via_header));
     json_object_set_new(config_json, "remote_config_enabled", json_boolean(cfg->remote_config_enabled));
@@ -508,9 +428,6 @@ const char* context_to_json_string(request_context *ctx) {
     }
     if (ctx->px_payload_decrypted) {
         json_object_set_new(ctx_json, "decoded_px_cookie", json_string(ctx->px_payload_decrypted));
-    }
-    if (ctx->px_captcha) {
-        json_object_set_new(ctx_json, "px_captcha", json_string(ctx->px_captcha));
     }
 
     const char *context_str = json_dumps(ctx_json, JSON_ENCODE_ANY);
