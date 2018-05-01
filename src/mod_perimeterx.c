@@ -346,7 +346,7 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
     // thread-owned pool
     rv = apr_pool_create(&pool, NULL);
     if (rv != APR_SUCCESS) {
-        px_log_error("error while trying to initialize apr_pool");
+        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, hc->server, "error while trying to initialize apr_pool");
         return NULL;
     }
 
@@ -439,7 +439,7 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
     apr_status_t rv;
     rv = apr_pool_create(&pool, conf->pool);
     if (rv != APR_SUCCESS) {
-        px_log_error("error while trying to initialize apr_pool");
+        ap_log_error(APLOG_MARK, APLOG_CRIT, rv, th_data->server, "error while trying to initialize apr_pool");
         return NULL;
     }
 
@@ -786,7 +786,10 @@ static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
     for (server_rec *vs = s; vs; vs = vs->next) {
 
         px_config *conf = ap_get_module_config(vs->module_config, &perimeterx_module);
-        if (!conf || !conf->module_enabled) {
+        if (!conf) {
+            continue;
+        }
+        if (!conf->module_enabled) {
             px_log_debug("Request will not be verified, module is disabled or not properly configured");
             continue;
         }

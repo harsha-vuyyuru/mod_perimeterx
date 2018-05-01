@@ -450,3 +450,22 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
     free(response.data);
     return status;
 }
+
+void px_log(const px_config *conf, apr_pool_t *pool, bool log_debug, int level, const char *fmt, ...) {
+    // do not log debug messages if debugMode is disabled
+    if (!conf || !pool || (!conf->px_debug && log_debug)) {
+        return;
+    }
+
+    va_list ap;
+    char *text;
+
+    va_start(ap, fmt);
+    text = apr_pvsprintf(pool, fmt, ap);
+    va_end(ap);
+    ap_log_error(APLOG_MARK,
+        conf->px_debug ? level : conf->log_level_err,
+        0, conf->server,
+        log_debug ? LOGGER_DEBUG_HDR: LOGGER_ERROR_HDR,
+        conf->app_id, __FUNCTION__, text);
+}

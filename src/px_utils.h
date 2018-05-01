@@ -25,38 +25,34 @@ size_t write_response_cb(void* contents, size_t size, size_t nmemb, void *stream
 size_t write_response_pool_cb(void* contents, size_t size, size_t nmemb, void *stream);
 
 /* Logging */
-#define LOGGER_ERROR_HDR "[PerimeterX - ERROR][%s] - %s: "
-#define LOGGER_DEBUG_HDR "[PerimeterX - DEBUG][%s] - %s: "
+#define LOGGER_ERROR_HDR "[PerimeterX - ERROR][%s] - %s: %s"
+#define LOGGER_DEBUG_HDR "[PerimeterX - DEBUG][%s] - %s: %s"
 
+void px_log(const px_config *conf, apr_pool_t *pool, bool log_debug, int level, const char *fmt, ...);
 
 // logging macros (not thread-safe !)
-#define px_log(log_debug, level, fmt, ...) \
-    do { \
-        if (!conf->px_debug && log_debug) { \
-            break; \
-        } \
-        ap_log_error(APLOG_MARK, conf->px_debug ? level : conf->log_level_err, 0, conf->server, \
-            log_debug ? LOGGER_DEBUG_HDR # fmt : LOGGER_ERROR_HDR # fmt, conf->app_id, __FUNCTION__, __VA_ARGS__); \
-    } while(0)
-#define px_log_error(...) px_log(0, conf->log_level_err, "%s", __VA_ARGS__)
-#define px_log_error_fmt(fmt, ...) px_log(0, conf->log_level_err, fmt, __VA_ARGS__)
-#define px_log_debug(...) px_log(1, conf->log_level_debug, "%s", __VA_ARGS__)
-#define px_log_debug_fmt(fmt, ...) px_log(1, conf->log_level_debug, fmt, __VA_ARGS__)
+#define px_log_error(...) px_log(conf, conf->pool, 0, conf->log_level_err, "%s", __VA_ARGS__)
+#define px_log_error_fmt(fmt, ...) px_log(conf, conf->pool, 0, conf->log_level_err, fmt, __VA_ARGS__)
+#define px_log_debug(...) px_log(conf, conf->pool, 1, conf->log_level_debug, "%s", __VA_ARGS__)
+#define px_log_debug_fmt(fmt, ...) px_log(conf, conf->pool, 1, conf->log_level_debug, fmt, __VA_ARGS__)
 
 // logging macros (thread-safe)
-#define px_log_thd(log_debug, level, fmt, ...) \
+#define px_log_thd(conf,  pool, log_debug, level, fmt, ...) \
     do { \
-        if (conf && conf->remote_config_lock) {  \
+        if (!conf) { \
+            break; \
+        } \
+        if (conf->remote_config_lock) {  \
             apr_thread_rwlock_rdlock(conf->remote_config_lock); \
         } \
-        px_log(log_debug, level, fmt, __VA_ARGS__); \
-        if (conf && conf->remote_config_lock) {  \
+        px_log(conf, pool, log_debug, level, fmt, __VA_ARGS__); \
+        if (conf->remote_config_lock) {  \
             apr_thread_rwlock_unlock(conf->remote_config_lock); \
         } \
     } while(0)
-#define px_log_error_thd(...) px_log_thd(0, conf->log_level_err, "%s", __VA_ARGS__)
-#define px_log_error_thd_fmt(fmt, ...) px_log_thd(0, conf->log_level_err, fmt, __VA_ARGS__)
-#define px_log_debug_thd(...) px_log_thd(1, conf->log_level_debug, "%s", __VA_ARGS__)
-#define px_log_debug_thd_fmt(fmt, ...) px_log_thd(1, conf->log_level_debug, fmt, __VA_ARGS__)
+#define px_log_error_thd(...) px_log_thd(conf,  pool, 0, conf->log_level_err, "%s", __VA_ARGS__)
+#define px_log_error_thd_fmt(fmt, ...) px_log_thd(conf,  pool, 0, conf->log_level_err, fmt, __VA_ARGS__)
+#define px_log_debug_thd(...) px_log_thd(conf,  pool, 1, conf->log_level_debug, "%s", __VA_ARGS__)
+#define px_log_debug_thd_fmt(fmt, ...) px_log_thd(conf,  pool, 1, conf->log_level_debug, fmt, __VA_ARGS__)
 
 #endif
