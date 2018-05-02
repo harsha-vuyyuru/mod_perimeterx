@@ -160,7 +160,7 @@ risk_response* risk_api_get(request_context *ctx, px_config *conf) {
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "risk payload: ", risk_payload, NULL));
 
     char *risk_response_str;
-    CURLcode status = post_request(conf->risk_api_url, risk_payload, conf->api_timeout_ms, conf, ctx, &risk_response_str, &ctx->api_rtt);
+    CURLcode status = post_request(conf->risk_api_url, risk_payload, conf->connect_timeout_ms, conf->api_timeout_ms, conf, ctx, &risk_response_str, &ctx->api_rtt);
     ctx->made_api_call = true;
     free(risk_payload);
     if (status == CURLE_OK) {

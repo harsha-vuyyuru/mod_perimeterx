@@ -36,13 +36,13 @@ static const redirect_response DEFAULT_GIF_RESPONSE = {
     .response_content_type = "image/gif",
 };
 
-CURLcode post_request(const char *url, const char *payload, long timeout, px_config *conf, const request_context *ctx, char **response_data, double *request_rtt) {
+CURLcode post_request(const char *url, const char *payload, long connect_timeout, long timeout, px_config *conf, const request_context *ctx, char **response_data, double *request_rtt) {
     CURL *curl = curl_pool_get_wait(conf->curl_pool);
     if (curl == NULL) {
         ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s]: post_req_request: could not obtain curl handle", ctx->app_id);
         return CURLE_FAILED_INIT;
     }
-    CURLcode status = post_request_helper(curl, url, payload, timeout, conf, ctx->r->server, response_data);
+    CURLcode status = post_request_helper(curl, url, payload, connect_timeout, timeout, conf, ctx->r->server, response_data);
     if (request_rtt && (CURLE_OK != curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME, request_rtt))) {
         *request_rtt = 0;
     }
@@ -69,7 +69,7 @@ const redirect_response *redirect_client(request_rec *r, px_config *conf) {
     const redirect_response *default_res = &DEFAULT_JS_RESPONSE;
     if (!conf->first_party_enabled) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: redirect_client: first party is disabled", conf->app_id);
-        return default_res;    
+        return default_res;
     }
 
     redirect_response *redirect_res = apr_pcalloc(r->pool, sizeof(redirect_response));
@@ -79,16 +79,16 @@ const redirect_response *redirect_client(request_rec *r, px_config *conf) {
     redirect_res->response_content_type = default_res->response_content_type;
     if (status != CURLE_OK) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: redirect_client: response returned none 200 response, CURLcode[%d]", conf->app_id, status);
-        return default_res;    
+        return default_res;
     }
-    return redirect_res;    
+    return redirect_res;
 };
 
 const redirect_response *redirect_xhr(request_rec *r, px_config *conf) {
     const redirect_response *default_res = &DEFAULT_XHR_RESPONSE;
     const char *file_ending = strrchr(r->uri, '.');
     if (file_ending && strcmp(file_ending, ".gif") == 0) {
-        default_res = &DEFAULT_GIF_RESPONSE; 
+        default_res = &DEFAULT_GIF_RESPONSE;
     }
     // Handle xhr/client feature turned off
     if (!conf->first_party_enabled || !conf->first_party_xhr_enabled) {
@@ -96,7 +96,7 @@ const redirect_response *redirect_xhr(request_rec *r, px_config *conf) {
     }
 
     int cut_prefix_size = strlen(conf->xhr_path_prefix);
-    const char *xhr_url = &r->unparsed_uri[cut_prefix_size]; 
+    const char *xhr_url = &r->unparsed_uri[cut_prefix_size];
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s] redirect_xhr: forwarding request from %s to %s%s", conf->app_id, r->unparsed_uri, conf->collector_base_uri,xhr_url);
 
     // Copy VID
@@ -120,13 +120,13 @@ const redirect_response *redirect_captcha(request_rec *r, px_config *conf) {
     const redirect_response *default_res = &DEFAULT_JS_RESPONSE;
     if (!conf->first_party_enabled) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: redirect_client: first party is disabled", conf->app_id);
-        return default_res;    
+        return default_res;
     }
 
     redirect_response *redirect_res = apr_pcalloc(r->pool, sizeof(redirect_response));
     // Get the template without the final '/'
-    const char *block_uri = &r->unparsed_uri[strlen(conf->captcha_path_prefix)]; 
-    
+    const char *block_uri = &r->unparsed_uri[strlen(conf->captcha_path_prefix)];
+
     const char *block_base_url = apr_pstrcat(r->pool, "https:", conf->captcha_exteral_path, NULL);
     ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]:  redirect_client: forwarding request from %s to %s%s", conf->app_id, r->parsed_uri.path, block_base_url, block_uri);
 
@@ -134,7 +134,7 @@ const redirect_response *redirect_captcha(request_rec *r, px_config *conf) {
     redirect_res->response_content_type = default_res->response_content_type;
     if (status != CURLE_OK) {
         ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: redirect_client: response returned none 200 response, CURLcode[%d]", conf->app_id, status);
-        return default_res;    
+        return default_res;
     }
-    return redirect_res;    
+    return redirect_res;
 }
