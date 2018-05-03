@@ -179,7 +179,7 @@ const char *get_request_ip(const request_rec *r, const px_config *conf) {
     return socket_ip;
 }
 
-CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, long timeout, px_config *conf, server_rec *server, char **response_data) {
+CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, long connect_timeout, long timeout, px_config *conf, server_rec *server, char **response_data) {
     struct response_t response;
     struct curl_slist *headers = NULL;
     long status_code;
@@ -198,6 +198,7 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, l
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, connect_timeout);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_response_cb);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*) &response);
@@ -415,6 +416,7 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body);
     }
 
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, conf->connect_timeout_ms);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, conf->api_timeout_ms);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_response_cb);
     curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
