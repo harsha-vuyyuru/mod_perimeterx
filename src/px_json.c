@@ -4,6 +4,7 @@
 #include <apr_pools.h>
 #include <http_log.h>
 #include <apr_strings.h>
+#include "px_utils.h"
 
 #ifdef APLOG_USE_MODULE
 APLOG_USE_MODULE(perimeterx);
@@ -130,7 +131,7 @@ char *create_activity(const char *activity_type, const px_config *conf, const re
     return request_str;
 }
 
-json_t *headers_to_json_helper(const apr_array_header_t *arr) {
+static json_t *headers_to_json_helper(const apr_array_header_t *arr) {
     json_t *j_headers = json_array();
     // Extract all headers and jsonfy it
     if (arr) {
@@ -204,11 +205,11 @@ const char *get_call_reason_string(call_reason_t call_reason) {
 }
 
 risk_response* parse_risk_response(const char* risk_response_str, const request_context *ctx) {
+    px_config *conf = ctx->conf;
     json_error_t j_error;
     json_t *j_response = json_loads(risk_response_str, 0, &j_error);
     if (!j_response) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
-                "[%s]: parse_risk_response: failed to parse risk response (%s)", ctx->app_id, risk_response_str);
+        px_log_debug_fmt("failed to parse risk response (%s)", risk_response_str);
         return NULL;
     }
 
@@ -223,8 +224,7 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
                 "score", &score,
                 "action", &action
                 )) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
-                "[%s]: parse_risk_response: failed to unpack risk response (%s)", ctx->app_id, risk_response_str);
+        px_log_debug_fmt("failed to unpack risk response (%s)", risk_response_str);
         json_decref(j_response);
         return NULL;
     }
@@ -233,11 +233,11 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
         json_t *action_data = json_object_get(j_response, "action_data");
         if (json_unpack(action_data, "{s:s}",
                     "body", &action_data_body)) {
-           ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s]: parse_risk_response: failed to unpack risk api action_data", ctx->app_id);
+           px_log_debug("failed to unpack risk api action_data");
            json_decref(j_response);
            return NULL;
         }
-        ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, ctx->r->server, "[%s]: parse_risk_response: succsefully got aciton_data_body (%s)", ctx->app_id, action_data_body);
+        px_log_debug_fmt("successfully got aciton_data_body (%s)", action_data_body);
     }
 
     risk_response *parsed_response = (risk_response*)apr_palloc(ctx->r->pool, sizeof(risk_response));
@@ -252,12 +252,12 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
     return parsed_response;
 }
 
-char *create_mobile_response(px_config *cfg, request_context *ctx, const char *compiled_html) {
+char *create_mobile_response(px_config *conf, request_context *ctx, const char *compiled_html) {
     json_t *j_mobile_response = json_pack("{s:s,s:s,s:s,s:s}",
             "action", ACTION_STR[ctx->action],
             "appId", ctx->app_id,
             "page", compiled_html,
-            "collectorUrl", cfg->base_url);
+            "collectorUrl", conf->base_url);
 
     if (ctx->vid) {
         json_object_set_new(j_mobile_response, "vid", json_string(ctx->vid));
@@ -272,7 +272,7 @@ char *create_mobile_response(px_config *cfg, request_context *ctx, const char *c
     return request_str;
 }
 
-char *create_json_response(px_config *cfg, request_context *ctx) {
+char *create_json_response(px_config *conf, request_context *ctx) {
     json_t *j_response = json_pack("{}");
 
     if (ctx->vid) {
@@ -288,7 +288,7 @@ char *create_json_response(px_config *cfg, request_context *ctx) {
     return request_str;
 }
 
-json_t *config_array_to_json_array(const apr_array_header_t *arr) {
+static json_t *config_array_to_json_array(const apr_array_header_t *arr) {
     json_t *j_headers = json_array();
     // Extract all headers and jsonfy it
     if (arr) {
@@ -300,58 +300,58 @@ json_t *config_array_to_json_array(const apr_array_header_t *arr) {
     return j_headers;
 }
 
-char* config_to_json_string(px_config *cfg, const char *update_reason) {
+char* config_to_json_string(px_config *conf, const char *update_reason) {
     json_t *ctx_json = json_object();
     json_t *details_json = json_object();
     json_t *config_json = json_object();
 
-    json_object_set_new(config_json, "app_id", json_string(cfg->app_id));
-    json_object_set_new(config_json, "module_enabled", json_boolean(cfg->module_enabled));
-    json_object_set_new(config_json, "api_timeout_ms", json_integer(cfg->api_timeout_ms));
-    json_object_set_new(config_json, "send_page_activities", json_boolean(cfg->send_page_activities));
-    json_object_set_new(config_json, "blocking_score", json_integer(cfg->blocking_score));
-    json_object_set_new(config_json, "captcha_enabled", json_boolean(cfg->captcha_enabled));
-    json_object_set_new(config_json, "module_version", json_string(cfg->module_version));
-    json_object_set_new(config_json, "skip_mod_by_envvar", json_boolean(cfg->skip_mod_by_envvar));
-    json_object_set_new(config_json, "curl_pool_size", json_integer(cfg->curl_pool_size));
-    json_object_set_new(config_json, "base_url", json_string(cfg->base_url));
-    json_object_set_new(config_json, "risk_api_url", json_string(cfg->risk_api_url));
-    json_object_set_new(config_json, "activities_api_url", json_string(cfg->activities_api_url));
-    json_object_set_new(config_json, "auth_header", json_string(cfg->auth_header));
-    json_object_set_new(config_json, "routes_whitelist", config_array_to_json_array(cfg->routes_whitelist));
-    json_object_set_new(config_json, "useragents_whitelist", config_array_to_json_array(cfg->useragents_whitelist));
-    json_object_set_new(config_json, "custom_file_ext_whitelist", config_array_to_json_array(cfg->custom_file_ext_whitelist));
-    json_object_set_new(config_json, "ip_header_keys", config_array_to_json_array(cfg->ip_header_keys));
-    json_object_set_new(config_json, "sensitive_header_keys", config_array_to_json_array(cfg->sensitive_header_keys));
-    json_object_set_new(config_json, "sensitive_routes", config_array_to_json_array(cfg->sensitive_routes));
-    json_object_set_new(config_json, "enabled_hostnames", config_array_to_json_array(cfg->enabled_hostnames));
-    json_object_set_new(config_json, "sensitive_routes_prefix", config_array_to_json_array(cfg->sensitive_routes_prefix));
-    json_object_set_new(config_json, "background_activity_send", json_boolean(cfg->background_activity_send));
-    json_object_set_new(config_json, "background_activity_workers", json_integer(cfg->background_activity_workers));
-    json_object_set_new(config_json, "background_activity_queue_size", json_integer(cfg->background_activity_queue_size));
-    json_object_set_new(config_json, "px_errors_threshold", json_integer(cfg->px_errors_threshold));
-    json_object_set_new(config_json, "health_check_interval", json_integer(cfg->health_check_interval));
-    json_object_set_new(config_json, "px_health_check", json_boolean(cfg->px_health_check));
-    json_object_set_new(config_json, "score_header_name", json_string(cfg->score_header_name));
-    json_object_set_new(config_json, "vid_header_enabled", json_boolean(cfg->vid_header_enabled));
-    json_object_set_new(config_json, "uuid_header_enabled", json_boolean(cfg->uuid_header_enabled));
-    json_object_set_new(config_json, "uuid_header_name", json_string(cfg->uuid_header_name));
-    json_object_set_new(config_json, "vid_header_name", json_string(cfg->vid_header_name));
-    json_object_set_new(config_json, "json_response_enabled", json_boolean(cfg->json_response_enabled));
-    json_object_set_new(config_json, "cors_headers_enabled", json_boolean(cfg->cors_headers_enabled));
-    json_object_set_new(config_json, "monitor_mode", json_boolean(cfg->monitor_mode));
-    json_object_set_new(config_json, "enable_token_via_header", json_boolean(cfg->enable_token_via_header));
-    json_object_set_new(config_json, "remote_config_enabled", json_boolean(cfg->remote_config_enabled));
-    json_object_set_new(config_json, "remote_config_url", json_string(cfg->remote_config_url));
-    json_object_set_new(config_json, "remote_config_interval_ms", json_integer(cfg->remote_config_interval_ms));
-    json_object_set_new(config_json, "custom_logo", json_string(cfg->custom_logo));
-    json_object_set_new(config_json, "css_ref", json_string(cfg->css_ref));
-    json_object_set_new(config_json, "js_ref", json_string(cfg->js_ref));
-    json_object_set_new(config_json, "block_page_url", json_string(cfg->block_page_url));
-    json_object_set_new(config_json, "proxy_url", json_string(cfg->proxy_url));
-    json_object_set_new(config_json, "score_header_enabled", json_boolean(cfg->score_header_enabled));
+    json_object_set_new(config_json, "app_id", json_string(conf->app_id));
+    json_object_set_new(config_json, "module_enabled", json_boolean(conf->module_enabled));
+    json_object_set_new(config_json, "api_timeout_ms", json_integer(conf->api_timeout_ms));
+    json_object_set_new(config_json, "send_page_activities", json_boolean(conf->send_page_activities));
+    json_object_set_new(config_json, "blocking_score", json_integer(conf->blocking_score));
+    json_object_set_new(config_json, "captcha_enabled", json_boolean(conf->captcha_enabled));
+    json_object_set_new(config_json, "module_version", json_string(conf->module_version));
+    json_object_set_new(config_json, "skip_mod_by_envvar", json_boolean(conf->skip_mod_by_envvar));
+    json_object_set_new(config_json, "curl_pool_size", json_integer(conf->curl_pool_size));
+    json_object_set_new(config_json, "base_url", json_string(conf->base_url));
+    json_object_set_new(config_json, "risk_api_url", json_string(conf->risk_api_url));
+    json_object_set_new(config_json, "activities_api_url", json_string(conf->activities_api_url));
+    json_object_set_new(config_json, "auth_header", json_string(conf->auth_header));
+    json_object_set_new(config_json, "routes_whitelist", config_array_to_json_array(conf->routes_whitelist));
+    json_object_set_new(config_json, "useragents_whitelist", config_array_to_json_array(conf->useragents_whitelist));
+    json_object_set_new(config_json, "custom_file_ext_whitelist", config_array_to_json_array(conf->custom_file_ext_whitelist));
+    json_object_set_new(config_json, "ip_header_keys", config_array_to_json_array(conf->ip_header_keys));
+    json_object_set_new(config_json, "sensitive_header_keys", config_array_to_json_array(conf->sensitive_header_keys));
+    json_object_set_new(config_json, "sensitive_routes", config_array_to_json_array(conf->sensitive_routes));
+    json_object_set_new(config_json, "enabled_hostnames", config_array_to_json_array(conf->enabled_hostnames));
+    json_object_set_new(config_json, "sensitive_routes_prefix", config_array_to_json_array(conf->sensitive_routes_prefix));
+    json_object_set_new(config_json, "background_activity_send", json_boolean(conf->background_activity_send));
+    json_object_set_new(config_json, "background_activity_workers", json_integer(conf->background_activity_workers));
+    json_object_set_new(config_json, "background_activity_queue_size", json_integer(conf->background_activity_queue_size));
+    json_object_set_new(config_json, "px_errors_threshold", json_integer(conf->px_errors_threshold));
+    json_object_set_new(config_json, "health_check_interval", json_integer(conf->health_check_interval));
+    json_object_set_new(config_json, "px_health_check", json_boolean(conf->px_health_check));
+    json_object_set_new(config_json, "score_header_name", json_string(conf->score_header_name));
+    json_object_set_new(config_json, "vid_header_enabled", json_boolean(conf->vid_header_enabled));
+    json_object_set_new(config_json, "uuid_header_enabled", json_boolean(conf->uuid_header_enabled));
+    json_object_set_new(config_json, "uuid_header_name", json_string(conf->uuid_header_name));
+    json_object_set_new(config_json, "vid_header_name", json_string(conf->vid_header_name));
+    json_object_set_new(config_json, "json_response_enabled", json_boolean(conf->json_response_enabled));
+    json_object_set_new(config_json, "cors_headers_enabled", json_boolean(conf->cors_headers_enabled));
+    json_object_set_new(config_json, "monitor_mode", json_boolean(conf->monitor_mode));
+    json_object_set_new(config_json, "enable_token_via_header", json_boolean(conf->enable_token_via_header));
+    json_object_set_new(config_json, "remote_config_enabled", json_boolean(conf->remote_config_enabled));
+    json_object_set_new(config_json, "remote_config_url", json_string(conf->remote_config_url));
+    json_object_set_new(config_json, "remote_config_interval_ms", json_integer(conf->remote_config_interval_ms));
+    json_object_set_new(config_json, "custom_logo", json_string(conf->custom_logo));
+    json_object_set_new(config_json, "css_ref", json_string(conf->css_ref));
+    json_object_set_new(config_json, "js_ref", json_string(conf->js_ref));
+    json_object_set_new(config_json, "block_page_url", json_string(conf->block_page_url));
+    json_object_set_new(config_json, "proxy_url", json_string(conf->proxy_url));
+    json_object_set_new(config_json, "score_header_enabled", json_boolean(conf->score_header_enabled));
 
-    json_object_set_new(details_json, "module_version", json_string(cfg->module_version));
+    json_object_set_new(details_json, "module_version", json_string(conf->module_version));
     json_object_set_new(details_json, "update_reason", json_string(update_reason));
     json_object_set_new(details_json, "enforcer_configs", config_json);
 
@@ -361,7 +361,7 @@ char* config_to_json_string(px_config *cfg, const char *update_reason) {
 
     json_object_set_new(ctx_json, "type", json_string("enforcer_telemetry"));
     json_object_set_new(ctx_json, "timestamp", json_string(tztimems));
-    json_object_set_new(ctx_json, "app_id", json_string(cfg->app_id));
+    json_object_set_new(ctx_json, "app_id", json_string(conf->app_id));
     json_object_set_new(ctx_json, "details", details_json);
 
     char *config_str = json_dumps(ctx_json, JSON_ENCODE_ANY);
@@ -372,6 +372,7 @@ char* config_to_json_string(px_config *cfg, const char *update_reason) {
 
 #ifdef DEBUG
 const char* context_to_json_string(request_context *ctx) {
+    px_config *conf = ctx->conf;
     json_error_t error;
     json_t *px_payloads = NULL, *headers, *ctx_json;
 
@@ -404,8 +405,7 @@ const char* context_to_json_string(request_context *ctx) {
     json_decref(headers);
 
     if (!ctx_json) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
-                "[%s]: context_to_json_string error: %s", ctx->app_id, error.text);
+        px_log_debug_fmt("error: %s", error.text);
         return NULL;
     }
 

@@ -1,6 +1,5 @@
 #include "px_enforcer.h"
 #include <apr_strings.h>
-#include <http_log.h>
 #include <util_cookies.h>
 #include <regex.h>
 
@@ -25,9 +24,6 @@ static const char* FILE_EXT_WHITELIST[] = {
     ".eps", ".woff", ".xls", ".jpeg", ".doc", ".ejs", ".otf", ".pptx", ".gif", ".pdf", ".swf", ".svg", ".ps",
     ".ico", ".pls", ".midi", ".svgz", ".class", ".png", ".ppt", ".mid", "webp", ".jar"
 };
-
-static const char *LOGGER_DEBUG_FORMAT = "[PerimeterX - DEBUG][%s] - %s";
-static const char *LOGGER_ERROR_FORMAT = "[PerimeterX - ERROR][%s] - %s";
 
 static action_t parseBlockAction(const char* act) {
     if (act && act[0] == 'j') {
@@ -98,7 +94,6 @@ static bool enable_block_for_hostname(request_rec *r, apr_array_header_t *domain
     return false;
 }
 
-
 bool px_should_verify_request(request_rec *r, px_config *conf) {
     if (conf->block_page_url && strcmp(r->uri, conf->block_page_url) == 0) {
         return false;
@@ -149,15 +144,17 @@ bool px_should_verify_request(request_rec *r, px_config *conf) {
     return true;
 }
 
-risk_response* risk_api_get(request_context *ctx, px_config *conf) {
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Evaluating Risk API request, call reason: ", get_call_reason_string(ctx->call_reason), NULL));
+static risk_response* risk_api_get(request_context *ctx) {
+    px_config *conf = ctx->conf;
+    px_log_debug_fmt("Evaluating Risk API request, call reason: %s", get_call_reason_string(ctx->call_reason));
+
     char *risk_payload = create_risk_payload(ctx, conf);
     if (!risk_payload) {
         ctx->pass_reason = PASS_REASON_ERROR;
         return NULL;
     }
 
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "risk payload: ", risk_payload, NULL));
+    px_log_debug_fmt("risk payload: %s", risk_payload);
 
     char *risk_response_str;
     CURLcode status = post_request(conf->risk_api_url, risk_payload, conf->connect_timeout_ms, conf->api_timeout_ms, conf, ctx, &risk_response_str, &ctx->api_rtt);
@@ -165,28 +162,29 @@ risk_response* risk_api_get(request_context *ctx, px_config *conf) {
     free(risk_payload);
     if (status == CURLE_OK) {
         risk_response *risk_response = parse_risk_response(risk_response_str, ctx);
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Risk API response returned successfully, risk score: ", apr_itoa(ctx->r->pool, risk_response->score), NULL));
+        px_log_debug_fmt("Risk API response returned successfully, risk score: %d", risk_response->score);
         free(risk_response_str);
         return risk_response;
     }
 
     if (status == CURLE_OPERATION_TIMEDOUT) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Risk API timed out");
+        px_log_debug("Risk API timed out");
         ctx->pass_reason = PASS_REASON_S2S_TIMEOUT;
     } else {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Unexpected exception in Risk API call.");
+        px_log_debug("Unexpected exception in Risk API call");
         ctx->pass_reason = PASS_REASON_ERROR;
     }
 
     return NULL;
 }
 
-request_context* create_context(request_rec *r, const px_config *conf) {
+request_context* create_context(request_rec *r, px_config *conf) {
     request_context *ctx = (request_context*) apr_pcalloc(r->pool, sizeof(request_context));
 
     ctx->r = r;
     ctx->app_id = conf->app_id;
     ctx->response_application_json = false;
+    ctx->conf = conf;
 
     const char *px_payload1 = NULL;
     const char *px_payload3 = NULL;
@@ -194,7 +192,7 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     if (conf->enable_token_via_header) {
         int payload_prefix = extract_payload_from_header(r->pool, r->headers_in, &px_payload3, &px_payload1);
         if (payload_prefix > -1) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id , "Mobile SDK token detected");
+            px_log_debug("Mobile SDK token detected");
             ctx->token_origin = TOKEN_ORIGIN_HEADER;
         }
     }
@@ -205,7 +203,7 @@ request_context* create_context(request_rec *r, const px_config *conf) {
 
     ctx->ip = get_request_ip(r, conf);
     if (!ctx->ip) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id , "create_context: request IP is NULL");
+        px_log_debug("request IP is NULL");
     }
 
     ctx->px_payload1 = apr_pstrdup(r->pool, px_payload1);
@@ -213,11 +211,11 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     if (px_payload3) {
         ctx->px_payload = px_payload3;
         ctx->px_payload_version = 3;
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id , "Cookie V3 found, Evaluating");
+        px_log_debug("Cookie V3 found, Evaluating");
     } else if (px_payload1) {
         ctx->px_payload = px_payload1;
         ctx->px_payload_version = 1;
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id , "Cookie V1 found, Evaluating");
+        px_log_debug("Cookie V1 found, Evaluating");
     }
     ctx->uri = r->unparsed_uri;
     ctx->hostname = r->hostname;
@@ -244,26 +242,26 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     return ctx;
 }
 
-bool px_verify_request(request_context *ctx, px_config *conf) {
+bool px_verify_request(request_context *ctx) {
+    px_config *conf = ctx->conf;
     bool request_valid = true;
 
     risk_response *risk_response;
-
     validation_result_t vr;
 
     if (ctx->px_payload == NULL || (ctx->token_origin == TOKEN_ORIGIN_HEADER && strcmp(ctx->px_payload, NO_TOKEN) == 0)) {
         vr = VALIDATION_RESULT_NULL_PAYLOAD;
         if (ctx->token_origin == TOKEN_ORIGIN_HEADER) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Mobile special token - no token");
+            px_log_debug("Mobile special token - no token");
         } else {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Cookie is missing");
+            px_log_debug("Cookie is missing");
         }
     } else if (ctx->token_origin == TOKEN_ORIGIN_HEADER && strcmp(ctx->px_payload, MOBILE_SDK_CONNECTION_ERROR) == 0) {
         vr = VALIDATION_RESULT_MOBILE_SDK_CONNECTION_ERROR;
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Mobile special token - connection error");
+        px_log_debug("Mobile special token - connection error");
     } else if (ctx->token_origin == TOKEN_ORIGIN_HEADER && strcmp(ctx->px_payload, MOBILE_SDK_PINNING_ERROR) == 0) {
         vr = VALIDATION_RESULT_MOBILE_SDK_PINNING_ERROR;
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Mobile special token - pinning issue");
+        px_log_debug("Mobile special token - pinning issue");
     } else {
         vr = VALIDATION_RESULT_DECRYPTION_FAILED;
         risk_payload *c = decode_payload(ctx->px_payload, conf->payload_key, ctx);
@@ -274,7 +272,7 @@ bool px_verify_request(request_context *ctx, px_config *conf) {
             ctx->action = parseBlockAction(c->action);
             vr = validate_payload(c, ctx, conf->payload_key);
         } else {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool,"Cookie decryption failed, value: ", ctx->px_payload, NULL));
+            px_log_debug_fmt("Cookie decryption failed, value: %s", ctx->px_payload);
             ctx->px_payload_orig = ctx->px_payload;
         }
     }
@@ -284,9 +282,9 @@ bool px_verify_request(request_context *ctx, px_config *conf) {
             if (!request_valid) {
                 ctx->block_reason = BLOCK_REASON_PAYLOAD;
             } else if (is_sensitive_route_prefix(ctx->r, conf) || is_sensitive_route(ctx->r, conf)) {
-                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Sensitive route match, sending Risk API. path: ", ctx->uri, NULL));
+                px_log_debug_fmt("Sensitive route match, sending Risk API. path: %s", ctx->uri);
                 ctx->call_reason = CALL_REASON_SENSITIVE_ROUTE;
-                risk_response = risk_api_get(ctx, conf);
+                risk_response = risk_api_get(ctx);
                 goto handle_response;
             } else {
                 ctx->pass_reason = PASS_REASON_PAYLOAD;
@@ -299,7 +297,7 @@ bool px_verify_request(request_context *ctx, px_config *conf) {
         case VALIDATION_RESULT_MOBILE_SDK_CONNECTION_ERROR:
         case VALIDATION_RESULT_MOBILE_SDK_PINNING_ERROR:
             set_call_reason(ctx, vr);
-            risk_response = risk_api_get(ctx, conf);
+            risk_response = risk_api_get(ctx);
 handle_response:
             if (risk_response) {
                 ctx->score = risk_response->score;
@@ -313,25 +311,25 @@ handle_response:
                 }
 
                 if (risk_response->action) {
-                    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s] px_verify_request: parsing action (%s)", ctx->app_id, risk_response->action);
+                    px_log_debug_fmt("parsing action (%s)", risk_response->action);
                     ctx->action = parseBlockAction(risk_response->action);
                 }
 
                 request_valid = ctx->score < conf->blocking_score;
                 if (!request_valid) {
-                    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Risk score is higher or equal to blocking score. score: ", apr_itoa(ctx->r->pool, ctx->score), " blocking score: ",  apr_itoa(ctx->r->pool, conf->blocking_score), NULL));
+                    px_log_debug_fmt("Risk score is higher or equal to blocking score. score: %d blocking score: %d", ctx->score , conf->blocking_score);
                     ctx->block_reason = BLOCK_REASON_SERVER;
                 } else {
-                    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Risk score is lower than blocking score. score: ", apr_itoa(ctx->r->pool, ctx->score), " blocking score: ", apr_itoa(ctx->r->pool, conf->blocking_score), NULL));
+                    px_log_debug_fmt("Risk score is lower than blocking score. score: %d blocking score: %d", ctx->score, conf->blocking_score);
                     ctx->pass_reason = PASS_REASON_S2S;
                 }
             } else {
-                ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, LOGGER_ERROR_FORMAT, ctx->app_id, "Unexpected exception while evaluating risk.");
+                px_log_debug("Unexpected exception while evaluating risk");
                 return true;
             }
             break;
         default:
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "px_verify_request: cookie decode failed returning valid result");
+            px_log_debug("cookie decode failed returning valid result");
             return true;
     }
 

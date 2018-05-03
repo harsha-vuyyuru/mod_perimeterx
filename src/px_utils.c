@@ -217,15 +217,15 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, l
             }
             return status;
         }
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server, "[%s]: post_request: status: %lu, url: %s", conf->app_id, status_code, url);
+        px_log_debug_fmt("status: %lu, url: %s", status_code, url);
         status = CURLE_HTTP_RETURNED_ERROR;
     } else {
         update_and_notify_health_check(conf);
         size_t len = strlen(errbuf);
         if (len) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server, "[%s]: post_request failed for %s: %s", conf->app_id, url, errbuf);
+            px_log_debug_fmt("failed for %s: %s", url, errbuf);
         } else {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server, "[%s]: post_request failed for %s: %s", conf->app_id, url, curl_easy_strerror(status));
+            px_log_debug_fmt("failed for %s: %s", url, curl_easy_strerror(status));
         }
     }
     free(response.data);
@@ -280,7 +280,7 @@ static unsigned char *c2x(unsigned what, unsigned char prefix, unsigned char *wh
 
 // Functions escape_urlencoded & pescape_urlencoded were copied from APR v1.6
 // http://svn.apache.org/repos/asf/apr/apr/branches/1.6.x/include/apr_escape.h
-int escape_urlencoded(char *escaped, const char *str, apr_size_t *len) {
+static int escape_urlencoded(char *escaped, const char *str, apr_size_t *len) {
     apr_size_t size = 1;
     int found = 0;
     const unsigned char *s = (const unsigned char *) str;
@@ -396,7 +396,7 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
 
     // append vid cookie
     if (vid) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: redirect_helper: attaching vid header 'Cookie: pxvid=%s'", conf->app_id, vid);
+        px_log_debug_fmt("attaching vid header 'Cookie: pxvid=%s'", vid);
         headers = curl_slist_append(headers, apr_psprintf(r->pool, "Cookie: pxvid=%s;", vid));
     }
 
@@ -430,7 +430,7 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
 
     if (status == CURLE_OK) {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: redirect_helper: status: %lu, url: %s", conf->app_id, status_code, url);
+        px_log_debug_fmt("status: %lu, url: %s", status_code, url);
         if (status_code == HTTP_OK) {
             if (response_data != NULL) {
                 *response_headers = response.headers;
@@ -444,11 +444,30 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
         update_and_notify_health_check(conf);
         size_t len = strlen(errbuf);
         if (len) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: redirect_helper failed: %s", conf->app_id, errbuf);
+            px_log_debug_fmt("failed: %s", errbuf);
         } else {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: redirect_helper failed: %s", conf->app_id, curl_easy_strerror(status));
+            px_log_debug_fmt("failed: %s", curl_easy_strerror(status));
         }
     }
     free(response.data);
     return status;
+}
+
+void px_log(const px_config *conf, apr_pool_t *pool, bool log_debug, int level, const char *fmt, ...) {
+    // do not log debug messages if debugMode is disabled
+    if (!conf || !pool || (!conf->px_debug && log_debug)) {
+        return;
+    }
+
+    va_list ap;
+    char *text;
+
+    va_start(ap, fmt);
+    text = apr_pvsprintf(pool, fmt, ap);
+    va_end(ap);
+    ap_log_error(APLOG_MARK,
+        conf->px_debug ? level : conf->log_level_err,
+        0, conf->server,
+        log_debug ? LOGGER_DEBUG_HDR: LOGGER_ERROR_HDR,
+        conf->app_id, __FUNCTION__, text);
 }
