@@ -401,7 +401,7 @@ static void telemetry_activity_send(CURL *telemetry_curl, server_rec *s, px_conf
         px_log_error("create telemetry activity failed");
         return;
     }
-    post_request_helper(telemetry_curl, cfg->telemetry_api_url, activity, conf->api_timeout_ms, conf->api_timeout_ms, conf, s, NULL);
+    post_request_helper(telemetry_curl, conf->telemetry_api_url, activity, conf->api_timeout_ms, conf->api_timeout_ms, conf, s, NULL);
     free(activity);
 }
 
@@ -564,7 +564,7 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
         }
         // it comes in milliseconds
         conf->connect_timeout_ms = connect_timeout;
-        conf->api_timeout_ms = client_timeout;
+        conf->api_timeout_ms = api_timeout;
 
         conf->checksum = apr_pstrdup(pool, checksum_tmp);
 
