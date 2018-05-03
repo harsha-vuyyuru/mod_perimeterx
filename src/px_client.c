@@ -35,13 +35,13 @@ static const redirect_response DEFAULT_GIF_RESPONSE = {
     .response_content_type = "image/gif",
 };
 
-CURLcode post_request(const char *url, const char *payload, long timeout, px_config *conf, const request_context *ctx, char **response_data, double *request_rtt) {
+CURLcode post_request(const char *url, const char *payload, long connect_timeout, long timeout, px_config *conf, const request_context *ctx, char **response_data, double *request_rtt) {
     CURL *curl = curl_pool_get_wait(conf->curl_pool);
     if (curl == NULL) {
         px_log_error("could not obtain curl handle");
         return CURLE_FAILED_INIT;
     }
-    CURLcode status = post_request_helper(curl, url, payload, timeout, conf, ctx->r->server, response_data);
+    CURLcode status = post_request_helper(curl, url, payload, connect_timeout, timeout, conf, ctx->r->server, response_data);
     if (request_rtt && (CURLE_OK != curl_easy_getinfo(curl, CURLINFO_TOTAL_TIME, request_rtt))) {
         *request_rtt = 0;
     }

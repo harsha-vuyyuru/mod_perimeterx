@@ -157,7 +157,7 @@ static risk_response* risk_api_get(request_context *ctx) {
     px_log_debug_fmt("risk payload: %s", risk_payload);
 
     char *risk_response_str;
-    CURLcode status = post_request(conf->risk_api_url, risk_payload, conf->api_timeout_ms, conf, ctx, &risk_response_str, &ctx->api_rtt);
+    CURLcode status = post_request(conf->risk_api_url, risk_payload, conf->connect_timeout_ms, conf->api_timeout_ms, conf, ctx, &risk_response_str, &ctx->api_rtt);
     ctx->made_api_call = true;
     free(risk_payload);
     if (status == CURLE_OK) {

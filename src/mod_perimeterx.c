@@ -200,7 +200,7 @@ static void post_verification(request_context *ctx, bool request_valid) {
         if (conf->background_activity_send) {
             apr_queue_push(conf->activity_queue, activity);
         } else {
-            post_request(conf->activities_api_url, activity, conf->api_timeout_ms, conf, ctx, NULL, NULL);
+            post_request(conf->activities_api_url, activity, conf->connect_timeout_ms, conf->api_timeout_ms, conf, ctx, NULL, NULL);
             free(activity);
         }
     }
@@ -378,6 +378,7 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
         res = CURLE_AGAIN;
         while (!conf->should_exit_thread && res != CURLE_OK) {
             curl_easy_setopt(curl, CURLOPT_URL, health_check_url);
+            curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, conf->connect_timeout_ms);
             curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, conf->api_timeout_ms);
             res = curl_easy_perform(curl);
             if (res != CURLE_OK && res != CURLE_OPERATION_TIMEDOUT) {
@@ -400,7 +401,7 @@ static void telemetry_activity_send(CURL *telemetry_curl, server_rec *s, px_conf
         px_log_error("create telemetry activity failed");
         return;
     }
-    post_request_helper(telemetry_curl, conf->telemetry_api_url, activity, conf->api_timeout_ms, conf, s, NULL);
+    post_request_helper(telemetry_curl, cfg->telemetry_api_url, activity, conf->api_timeout_ms, conf->api_timeout_ms, conf, s, NULL);
     free(activity);
 }
 
@@ -482,6 +483,7 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
         }
 
         curl_easy_setopt(curl, CURLOPT_URL, url);
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, conf->connect_timeout_ms);
         curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, conf->api_timeout_ms);
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
         curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
@@ -524,8 +526,8 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
         int blocking_score = 0;
         int px_debug = 0;
         const char *module_mode = NULL;
-        int client_timeout = 0;
-        const char *s2s_timeout = NULL;
+        int connect_timeout = 0;
+        int api_timeout = 0;
         int first_party_enabled = 0;
         int reverse_xhr_enabled = 0;
         if (json_unpack_ex(j, &j_error, 0, "{s:b, s:s, s:i, s:s, s:s, s:i, s:i, s:b, s:s, s:b, s:b}",
@@ -535,8 +537,8 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
                 "appId", &px_appId,
                 "moduleMode", &module_mode,
 
-                "connectTimeout", &client_timeout,
-                "riskTimeout", &s2s_timeout,
+                "connectTimeout", &connect_timeout,
+                "riskTimeout", &api_timeout,
 
                 "debugMode", &px_debug,
                 "checksum", &checksum_tmp,
@@ -561,8 +563,8 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
             conf->monitor_mode = strcmp(module_mode, "monitoring") == 0;
         }
         // it comes in milliseconds
+        conf->connect_timeout_ms = connect_timeout;
         conf->api_timeout_ms = client_timeout;
-        // TODO: s2s_timeout
 
         conf->checksum = apr_pstrdup(pool, checksum_tmp);
 
@@ -649,7 +651,7 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
         }
         if (rv == APR_SUCCESS && v) {
             char *activity = (char *)v;
-            post_request_helper(curl, conf->activities_api_url, activity, conf->api_timeout_ms, conf, consumer_data->server, NULL);
+            post_request_helper(curl, conf->activities_api_url, activity, conf->connect_timeout_ms, conf->api_timeout_ms, conf, consumer_data->server, NULL);
             free(activity);
         }
     }
@@ -1046,6 +1048,27 @@ static const char *set_api_timeout_ms(cmd_parms *cmd, void *config, const char *
     conf->api_timeout_ms = timeout;
     return NULL;
 }
+
+static const char *set_connect_timeout(cmd_parms *cmd, void *config, const char *connect_timeout) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    long timeout = atoi(connect_timeout) * 1000;
+    conf->connect_timeout_ms = timeout;
+    return NULL;
+}
+
+static const char *set_connect_timeout_ms(cmd_parms *cmd, void *config, const char *connect_timeout_ms) {
+    px_config *conf = get_config(cmd, config);
+    if (!conf) {
+        return ERROR_CONFIG_MISSING;
+    }
+    long timeout = atoi(connect_timeout_ms);
+    conf->connect_timeout_ms = timeout;
+    return NULL;
+}
+
 
 static const char *set_ip_headers(cmd_parms *cmd, void *config, const char *ip_header) {
     px_config *conf = get_config(cmd, config);
@@ -1517,6 +1540,7 @@ static void *create_config(apr_pool_t *p, server_rec *s) {
         conf->server = s;
         conf->module_enabled = false;
         conf->api_timeout_ms = 1000L;
+        conf->connect_timeout_ms = 1000L;
         conf->send_page_activities = true;
         conf->blocking_score = 100;
         conf->captcha_enabled = true;
@@ -1632,6 +1656,11 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Set timeout for risk API request in milliseconds"),
+    AP_INIT_TAKE1("ConnectTimeoutMS",
+            set_connect_timeout_ms,
+            NULL,
+            OR_ALL,
+            "Set timeout for the connect phase in milliseconds"),
     AP_INIT_FLAG("ReportPageRequest",
             set_pagerequest_enabled,
             NULL,
@@ -1832,7 +1861,7 @@ static const command_rec px_directives[] = {
             set_remote_config_interval_ms,
             NULL,
             OR_ALL,
-            "Set timeout for risk API request in milliseconds"),
+            "Set remote configuration re-check time in milliseconds"),
       AP_INIT_ITERATE("SensitiveHeader",
             set_sensitive_headers,
             NULL,
