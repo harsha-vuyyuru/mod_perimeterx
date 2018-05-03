@@ -1049,16 +1049,6 @@ static const char *set_api_timeout_ms(cmd_parms *cmd, void *config, const char *
     return NULL;
 }
 
-static const char *set_connect_timeout(cmd_parms *cmd, void *config, const char *connect_timeout) {
-    px_config *conf = get_config(cmd, config);
-    if (!conf) {
-        return ERROR_CONFIG_MISSING;
-    }
-    long timeout = atoi(connect_timeout) * 1000;
-    conf->connect_timeout_ms = timeout;
-    return NULL;
-}
-
 static const char *set_connect_timeout_ms(cmd_parms *cmd, void *config, const char *connect_timeout_ms) {
     px_config *conf = get_config(cmd, config);
     if (!conf) {
