@@ -5,6 +5,7 @@
 #include "px_types.h"
 #include "mustach.h"
 #include "px_json.h"
+#include "px_utils.h"
 
 #ifdef APLOG_USE_MODULE
 APLOG_USE_MODULE(perimeterx);
@@ -15,7 +16,6 @@ static const char *block_page_template = "<!DOCTYPE html> <html lang=\"en\"> <he
 static const char *visible = "visible";
 static const char *hidden = "hidden";
 static const char *collector_url = "https://collector-%s.perimeterx.net";
-static const char *LOGGER_DEBUG_FORMAT = "[PerimeterX - DEBUG][%s] - %s"; 
 
 typedef struct px_props_t {
     int depth;
@@ -166,7 +166,7 @@ int render_template(char **html, request_context *ctx, const px_config *conf, si
 
 const char* select_template(const px_config *conf, request_context *ctx) {
     if (ctx->action == ACTION_CHALLENGE) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Enforcing action: challenge page is served");
+        px_log_debug("Enforcing action: challenge page is served");
         return ctx->action_data_body;
     }
 
@@ -176,7 +176,7 @@ const char* select_template(const px_config *conf, request_context *ctx) {
 
     // template selection
     const char *template_prefix = ctx->action == ACTION_BLOCK ? "block" : captcha_type_str(conf->captcha_type); // template name according to action
-    const char *template_postfix = ctx->token_origin == TOKEN_ORIGIN_COOKIE ? "" : ".mobile"; // for mobile captcha 
+    const char *template_postfix = ctx->token_origin == TOKEN_ORIGIN_COOKIE ? "" : ".mobile"; // for mobile captcha
 
     // modify hosts according to first party
     const char *jsClientSrc = conf->client_exteral_path;
@@ -184,7 +184,7 @@ const char* select_template(const px_config *conf, request_context *ctx) {
         template_host = conf->captcha_path_prefix;
         host_url = conf->xhr_path_prefix;
     }
-    
+
     ctx->host_url = host_url;
     ctx->captcha_js_src = apr_pstrcat(ctx->r->pool, template_host, "/", template_prefix, template_postfix, ".js", NULL);
 
