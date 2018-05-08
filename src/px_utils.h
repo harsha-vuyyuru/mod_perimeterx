@@ -28,16 +28,16 @@ size_t write_response_pool_cb(void* contents, size_t size, size_t nmemb, void *s
 #define LOGGER_ERROR_HDR "[PerimeterX - ERROR][%s] - %s: %s"
 #define LOGGER_DEBUG_HDR "[PerimeterX - DEBUG][%s] - %s: %s"
 
-void px_log(const px_config *conf, apr_pool_t *pool, bool log_debug, int level, const char *fmt, ...);
+void px_log(const px_config *conf, apr_pool_t *pool, bool log_debug, int level, const char *func, const char *fmt, ...);
 
 // logging macros (not thread-safe !)
-#define px_log_error(...) px_log(conf, conf->pool, 0, conf->log_level_err, "%s", __VA_ARGS__)
-#define px_log_error_fmt(fmt, ...) px_log(conf, conf->pool, 0, conf->log_level_err, fmt, __VA_ARGS__)
-#define px_log_debug(...) px_log(conf, conf->pool, 1, conf->log_level_debug, "%s", __VA_ARGS__)
-#define px_log_debug_fmt(fmt, ...) px_log(conf, conf->pool, 1, conf->log_level_debug, fmt, __VA_ARGS__)
+#define px_log_error(...) px_log(conf, conf->pool, 0, conf->log_level_err, __FUNCTION__, "%s", __VA_ARGS__)
+#define px_log_error_fmt(fmt, ...) px_log(conf, conf->pool, 0, conf->log_level_err, __FUNCTION__, fmt, __VA_ARGS__)
+#define px_log_debug(...) px_log(conf, conf->pool, 1, conf->log_level_debug, __FUNCTION__, "%s", __VA_ARGS__)
+#define px_log_debug_fmt(fmt, ...) px_log(conf, conf->pool, 1, conf->log_level_debug, __FUNCTION__, fmt, __VA_ARGS__)
 
 // logging macros (thread-safe)
-#define px_log_thd(conf,  pool, log_debug, level, fmt, ...) \
+#define px_log_thd(conf,  pool, log_debug, level, func, fmt, ...) \
     do { \
         if (!conf) { \
             break; \
@@ -45,14 +45,14 @@ void px_log(const px_config *conf, apr_pool_t *pool, bool log_debug, int level, 
         if (conf->remote_config_lock) {  \
             apr_thread_rwlock_rdlock(conf->remote_config_lock); \
         } \
-        px_log(conf, pool, log_debug, level, fmt, __VA_ARGS__); \
+        px_log(conf, pool, log_debug, level, func, fmt, __VA_ARGS__); \
         if (conf->remote_config_lock) {  \
             apr_thread_rwlock_unlock(conf->remote_config_lock); \
         } \
     } while(0)
-#define px_log_error_thd(...) px_log_thd(conf,  pool, 0, conf->log_level_err, "%s", __VA_ARGS__)
-#define px_log_error_thd_fmt(fmt, ...) px_log_thd(conf,  pool, 0, conf->log_level_err, fmt, __VA_ARGS__)
-#define px_log_debug_thd(...) px_log_thd(conf,  pool, 1, conf->log_level_debug, "%s", __VA_ARGS__)
-#define px_log_debug_thd_fmt(fmt, ...) px_log_thd(conf,  pool, 1, conf->log_level_debug, fmt, __VA_ARGS__)
+#define px_log_error_thd(...) px_log_thd(conf,  pool, 0, conf->log_level_err, __FUNCTION__, "%s", __VA_ARGS__)
+#define px_log_error_thd_fmt(fmt, ...) px_log_thd(conf,  pool, 0, conf->log_level_err, __FUNCTION__, fmt, __VA_ARGS__)
+#define px_log_debug_thd(...) px_log_thd(conf,  pool, 1, conf->log_level_debug, __FUNCTION__, "%s", __VA_ARGS__)
+#define px_log_debug_thd_fmt(fmt, ...) px_log_thd(conf,  pool, 1, conf->log_level_debug, __FUNCTION__, fmt, __VA_ARGS__)
 
 #endif
