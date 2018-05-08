@@ -242,7 +242,7 @@ static int px_handle_request(request_rec *r, px_config *conf) {
     // Redirect client
     if (conf->client_path_prefix && strncmp(conf->client_path_prefix, r->parsed_uri.path, strlen(conf->client_path_prefix)) == 0) {
         redirect_res = redirect_client(r, conf);
-        r->status = HTTP_OK;
+        r->status = redirect_res->http_code;
         redirect_copy_headers_out(r, redirect_res);
         ap_rwrite(redirect_res->content, redirect_res->content_size, r);
         return DONE;
@@ -251,7 +251,7 @@ static int px_handle_request(request_rec *r, px_config *conf) {
     // Redirect XHR
     if (conf->xhr_path_prefix && strncmp(conf->xhr_path_prefix, r->parsed_uri.path, strlen(conf->xhr_path_prefix)) == 0) {
         redirect_res = redirect_xhr(r, conf);
-        r->status = HTTP_OK;
+        r->status = redirect_res->http_code;
         redirect_copy_headers_out(r, redirect_res);
         ap_rwrite(redirect_res->content, redirect_res->content_size, r);
         return DONE;
@@ -260,7 +260,7 @@ static int px_handle_request(request_rec *r, px_config *conf) {
     // Redirect captcha
     if (conf->captcha_path_prefix && strncmp(conf->captcha_path_prefix, r->parsed_uri.path, strlen(conf->captcha_path_prefix)) == 0) {
         redirect_res = redirect_captcha(r, conf);
-        r->status = HTTP_OK;
+        r->status = redirect_res->http_code;
         redirect_copy_headers_out(r, redirect_res);
         ap_rwrite(redirect_res->content, redirect_res->content_size, r);
         return DONE;

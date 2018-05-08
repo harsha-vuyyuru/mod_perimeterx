@@ -222,6 +222,7 @@ typedef struct redirect_response_t {
     int content_size;
     apr_array_header_t *response_headers;
     bool predefined;
+    long http_code; // HTTP code of proxy response
 } redirect_response;
 
 #endif
