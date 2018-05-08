@@ -87,11 +87,6 @@ const redirect_response *redirect_client(request_rec *r, px_config *conf) {
         ((redirect_response *)default_res)->http_code = HTTP_INTERNAL_SERVER_ERROR;
         return default_res;
     }
-    if (redirect_res->http_code >= HTTP_BAD_REQUEST) {
-        px_log_debug_fmt("response returned none 200 response[%d]", redirect_res->http_code);
-        ((redirect_response *)default_res)->http_code = redirect_res->http_code;
-        return default_res;
-    }
 
     return redirect_res;
 };
@@ -154,11 +149,6 @@ const redirect_response *redirect_captcha(request_rec *r, px_config *conf) {
     if (status != CURLE_OK) {
         px_log_debug_fmt("cURL internal error, CURLcode[%d]", status);
         ((redirect_response *)default_res)->http_code = HTTP_INTERNAL_SERVER_ERROR;
-        return default_res;
-    }
-    if (redirect_res->http_code >= HTTP_BAD_REQUEST) {
-        px_log_debug_fmt("response returned none 200 response[%d]", redirect_res->http_code);
-        ((redirect_response *)default_res)->http_code = redirect_res->http_code;
         return default_res;
     }
 
