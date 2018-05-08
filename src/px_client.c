@@ -14,25 +14,28 @@ static const char *VID_OPT1 = "_pxvid";
 static const char *VID_OPT2 = "pxvid";
 static const char *CLIENT_URI = "/%s/main.min.js";
 static const char EMPTY_GIF[] = { 0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00,
-	0x00, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00,
-	0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b };
+    0x00, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00,
+    0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b };
 static const redirect_response DEFAULT_JS_RESPONSE = {
     .predefined = true,
     .content = "",
     .content_size = 0,
     .response_content_type = "application/javascript",
+    .http_code = HTTP_OK,
 };
 static const redirect_response DEFAULT_XHR_RESPONSE = {
     .predefined = true,
     .content = "{}",
     .content_size = 2,
     .response_content_type =  "application/json",
+    .http_code = HTTP_OK,
 };
 static const redirect_response DEFAULT_GIF_RESPONSE = {
     .predefined = true,
     .content = EMPTY_GIF,
     .content_size = sizeof(EMPTY_GIF)/sizeof(*EMPTY_GIF),
     .response_content_type = "image/gif",
+    .http_code = HTTP_OK,
 };
 
 CURLcode post_request(const char *url, const char *payload, long connect_timeout, long timeout, px_config *conf, const request_context *ctx, char **response_data, double *request_rtt) {
@@ -59,6 +62,9 @@ static CURLcode forward_to_perimeterx(request_rec *r, px_config *conf, redirect_
     }
     px_log_debug("redirecting request");
     CURLcode status = redirect_helper(curl, base_url, uri, vid, conf, r, &res->content, &res->response_headers, &res->content_size);
+    if (status == CURLE_OK) {
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &res->http_code);
+    }
      // Return curl to pool
     curl_pool_put(conf->redirect_curl_pool, curl);
     return status;
@@ -77,7 +83,8 @@ const redirect_response *redirect_client(request_rec *r, px_config *conf) {
     CURLcode status = forward_to_perimeterx(r, conf, redirect_res, conf->client_base_uri, client_uri, NULL);
     redirect_res->response_content_type = default_res->response_content_type;
     if (status != CURLE_OK) {
-        px_log_debug_fmt("response returned none 200 response, CURLcode[%d]", status);
+        px_log_debug_fmt("cURL internal error, CURLcode[%d]", status);
+        ((redirect_response *)default_res)->http_code = HTTP_INTERNAL_SERVER_ERROR;
         return default_res;
     }
     return redirect_res;
@@ -109,7 +116,8 @@ const redirect_response *redirect_xhr(request_rec *r, px_config *conf) {
     // Attach VID to request as cookie
     CURLcode status = forward_to_perimeterx(r, conf, redirect_res, conf->collector_base_uri, xhr_url, vid);
     if (status != CURLE_OK) {
-        px_log_debug_fmt("response returned none 200 response, CURLcode[%d]", status);
+        px_log_debug_fmt("cURL internal error, CURLcode[%d]", status);
+        ((redirect_response *)default_res)->http_code = HTTP_INTERNAL_SERVER_ERROR;
         return default_res;
     }
     return redirect_res;
@@ -132,7 +140,8 @@ const redirect_response *redirect_captcha(request_rec *r, px_config *conf) {
     CURLcode status = forward_to_perimeterx(r, conf, redirect_res, block_base_url, block_uri, NULL);
     redirect_res->response_content_type = default_res->response_content_type;
     if (status != CURLE_OK) {
-        px_log_debug_fmt("response returned none 200 response, CURLcode[%d]", status);
+        px_log_debug_fmt("cURL internal error, CURLcode[%d]", status);
+        ((redirect_response *)default_res)->http_code = HTTP_INTERNAL_SERVER_ERROR;
         return default_res;
     }
     return redirect_res;
