@@ -16,21 +16,21 @@ static const char *CLIENT_URI = "/%s/main.min.js";
 static const char EMPTY_GIF[] = { 0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00,
     0x00, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00,
     0x01, 0x00, 0x01, 0x00, 0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3b };
-static const redirect_response DEFAULT_JS_RESPONSE = {
+static redirect_response DEFAULT_JS_RESPONSE = {
     .predefined = true,
     .content = "",
     .content_size = 0,
     .response_content_type = "application/javascript",
     .http_code = HTTP_OK,
 };
-static const redirect_response DEFAULT_XHR_RESPONSE = {
+static redirect_response DEFAULT_XHR_RESPONSE = {
     .predefined = true,
     .content = "{}",
     .content_size = 2,
     .response_content_type =  "application/json",
     .http_code = HTTP_OK,
 };
-static const redirect_response DEFAULT_GIF_RESPONSE = {
+static redirect_response DEFAULT_GIF_RESPONSE = {
     .predefined = true,
     .content = EMPTY_GIF,
     .content_size = sizeof(EMPTY_GIF)/sizeof(*EMPTY_GIF),
@@ -71,7 +71,7 @@ static CURLcode forward_to_perimeterx(request_rec *r, px_config *conf, redirect_
 }
 
 const redirect_response *redirect_client(request_rec *r, px_config *conf) {
-    const redirect_response *default_res = &DEFAULT_JS_RESPONSE;
+    redirect_response *default_res = &DEFAULT_JS_RESPONSE;
     if (!conf->first_party_enabled) {
         px_log_debug("first party is disabled");
         return default_res;
@@ -84,7 +84,7 @@ const redirect_response *redirect_client(request_rec *r, px_config *conf) {
     redirect_res->response_content_type = default_res->response_content_type;
     if (status != CURLE_OK) {
         px_log_debug_fmt("cURL internal error, CURLcode[%d]", status);
-        ((redirect_response *)default_res)->http_code = HTTP_INTERNAL_SERVER_ERROR;
+        default_res->http_code = HTTP_INTERNAL_SERVER_ERROR;
         return default_res;
     }
 
@@ -92,7 +92,7 @@ const redirect_response *redirect_client(request_rec *r, px_config *conf) {
 };
 
 const redirect_response *redirect_xhr(request_rec *r, px_config *conf) {
-    const redirect_response *default_res = &DEFAULT_XHR_RESPONSE;
+    redirect_response *default_res = &DEFAULT_XHR_RESPONSE;
     const char *file_ending = strrchr(r->uri, '.');
     if (file_ending && strcmp(file_ending, ".gif") == 0) {
         default_res = &DEFAULT_GIF_RESPONSE;
@@ -118,12 +118,12 @@ const redirect_response *redirect_xhr(request_rec *r, px_config *conf) {
     CURLcode status = forward_to_perimeterx(r, conf, redirect_res, conf->collector_base_uri, xhr_url, vid);
     if (status != CURLE_OK) {
         px_log_debug_fmt("cURL internal error, CURLcode[%d]", status);
-        ((redirect_response *)default_res)->http_code = HTTP_INTERNAL_SERVER_ERROR;
+        default_res->http_code = HTTP_INTERNAL_SERVER_ERROR;
         return default_res;
     }
     if (redirect_res->http_code >= HTTP_BAD_REQUEST) {
         px_log_debug_fmt("response returned none 200 response[%d]", redirect_res->http_code);
-        ((redirect_response *)default_res)->http_code = redirect_res->http_code;
+        default_res->http_code = redirect_res->http_code;
         return default_res;
     }
 
@@ -131,7 +131,7 @@ const redirect_response *redirect_xhr(request_rec *r, px_config *conf) {
 };
 
 const redirect_response *redirect_captcha(request_rec *r, px_config *conf) {
-    const redirect_response *default_res = &DEFAULT_JS_RESPONSE;
+    redirect_response *default_res = &DEFAULT_JS_RESPONSE;
     if (!conf->first_party_enabled) {
         px_log_debug("first party is disabled");
         return default_res;
@@ -148,7 +148,7 @@ const redirect_response *redirect_captcha(request_rec *r, px_config *conf) {
     redirect_res->response_content_type = default_res->response_content_type;
     if (status != CURLE_OK) {
         px_log_debug_fmt("cURL internal error, CURLcode[%d]", status);
-        ((redirect_response *)default_res)->http_code = HTTP_INTERNAL_SERVER_ERROR;
+        default_res->http_code = HTTP_INTERNAL_SERVER_ERROR;
         return default_res;
     }
 
