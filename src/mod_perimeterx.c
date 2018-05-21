@@ -361,7 +361,7 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
         return NULL;
     }
 
-    const char *health_check_url = apr_pstrcat(pool, hc->conf->base_url, HEALTH_CHECK_API, NULL);
+    const char *health_check_url = apr_pstrcat(pool, conf->base_url, HEALTH_CHECK_API, NULL);
     CURL *curl = curl_easy_init();
     CURLcode res;
     while (!conf->should_exit_thread) {
