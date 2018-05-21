@@ -403,7 +403,13 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
     // Attach first party logics
     headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", FIRST_PARTY_HEADER, FIRST_PARTY_HEADER_VALUE));
     headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", ENFORCER_TRUE_IP, get_request_ip(r, conf)));
-    headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", "X-Forwarded-For", r->useragent_ip));
+
+    const char *xff = apr_table_get(r->headers_in, "X-Forwarded-For");
+    if (xff) {
+        headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s,%s", "X-Forwarded-For", xff, r->useragent_ip));
+    } else {
+        headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", "X-Forwarded-For", r->useragent_ip));
+    }
     headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", "Host", &base_url[8]));
 
     curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
