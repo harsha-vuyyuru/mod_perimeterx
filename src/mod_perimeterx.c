@@ -667,7 +667,7 @@ static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, voi
 static apr_status_t create_health_check(apr_pool_t *p, server_rec *s, px_config *conf) {
     apr_status_t rv;
 
-    thread_data *hc_data= (thread_data*)apr_palloc(p, sizeof(thread_data));
+    thread_data *hc_data = (thread_data*)apr_palloc(p, sizeof(thread_data));
     conf->px_errors_count = 0;
     hc_data->server = s;
     hc_data->conf = conf;
@@ -909,7 +909,6 @@ static int px_hook_pre_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp
     SSL_library_init();
 
     OpenSSL_add_all_algorithms();
-    ERR_clear_error();
     curl_global_init(CURL_GLOBAL_ALL);
     /*OpenSSL_add_all_digests();*/
 
@@ -1528,6 +1527,9 @@ static void *create_config(apr_pool_t *p, server_rec *s) {
     px_config *conf = apr_pcalloc(p, sizeof(px_config));
     if (conf) {
         conf->server = s;
+        conf->pool = NULL;
+        conf->curl_pool = NULL;
+        conf->redirect_curl_pool = NULL;
         conf->module_enabled = false;
         conf->api_timeout_ms = 1000L;
         conf->connect_timeout_ms = 1000L;
@@ -1576,6 +1578,7 @@ static void *create_config(apr_pool_t *p, server_rec *s) {
         conf->first_party_xhr_enabled = true;
         conf->client_base_uri = "https://client.perimeterx.net";
         conf->remote_config_thread = NULL;
+        conf->health_check_thread = NULL;
         conf->remote_config_enabled = false;
         conf->remote_config_url = apr_pstrcat(p, CONFIGURATION_SERVER_URL, REMOTE_CONFIGURATIONS_PATH, NULL);
         conf->remote_config_interval_ms = apr_time_from_sec(5);
