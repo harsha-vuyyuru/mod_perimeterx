@@ -61,7 +61,7 @@ static risk_payload *parse_risk_payload3(const char *raw_payload, request_contex
     json_error_t error;
     json_t *j_payload = json_loads(raw_payload, 0, &error);
     if (!j_payload) {
-        px_log_debug_fmt("payload data (v3): parse failed with error. raw_payload %s test %s", raw_payload, error.text);
+        px_log_debug_fmt("parse failed with error. raw_payload %s test %s", raw_payload, error.text);
         return NULL;
     }
 
@@ -76,14 +76,14 @@ static risk_payload *parse_risk_payload3(const char *raw_payload, request_contex
                 "s", &score,
                 "t", &ts,
                 "a", &action)) {
-        px_log_debug_fmt("payload data (v3): unpack json failed. raw_payload: %s", raw_payload);
+        px_log_debug_fmt("unpack json failed. raw_payload: %s", raw_payload);
         json_decref(j_payload);
         return NULL;
     }
 
     risk_payload *payload = (risk_payload*)apr_palloc(ctx->r->pool, sizeof(risk_payload));
     if (!payload) {
-        px_log_debug_fmt("payload data (v3): failed to allocate risk payload struct. raw_payload: %s", raw_payload);
+        px_log_debug_fmt("failed to allocate risk payload struct. raw_payload: %s", raw_payload);
         json_decref(j_payload);
         return NULL;
     }
@@ -106,7 +106,7 @@ static risk_payload *parse_risk_payload1(const char *raw_payload, request_contex
     json_error_t error;
     json_t *j_payload = json_loads(raw_payload, 0, &error);
     if (!j_payload) {
-        px_log_debug_fmt("payload data (v1): parse failed with error. raw_payload %s test %s", raw_payload, error.text);
+        px_log_debug_fmt("parse failed with error. raw_payload %s test %s", raw_payload, error.text);
         return NULL;
     }
 
@@ -121,14 +121,14 @@ static risk_payload *parse_risk_payload1(const char *raw_payload, request_contex
                 "b", &b_val,
                 "t", &ts,
                 "h", &hash)) {
-        px_log_debug_fmt("payload data (v1): unpack json failed. raw_payload: %s", raw_payload);
+        px_log_debug_fmt("unpack json failed. raw_payload: %s", raw_payload);
         json_decref(j_payload);
         return NULL;
     }
 
     risk_payload *payload = (risk_payload*)apr_palloc(ctx->r->pool, sizeof(risk_payload));
     if (!payload) {
-        px_log_debug_fmt("payload data (v1): failed to allocate risk payload struct. raw_payload: %s", raw_payload);
+        px_log_debug_fmt("failed to allocate risk payload struct. raw_payload: %s", raw_payload);
         json_decref(j_payload);
         return NULL;
     }
@@ -163,14 +163,16 @@ static risk_payload *parse_risk_payload(const char *raw_payload, request_context
         case 3:
             rp = parse_risk_payload3(raw_payload, ctx);
             break;
+        default: {
+            px_config *conf = ctx->conf;
+            px_log_debug_fmt("unknown payload version: %d", ctx->px_payload_version);
+        }
     }
     return rp;
 }
 
-static int digest_payload1(const risk_payload *payload, request_context *ctx, const char *payload_key, const char **signing_fields, char *buffer, int buffer_len) {
+static int digest_payload1(const risk_payload *payload, UNUSED request_context *ctx, const char *payload_key, const char **signing_fields, char *buffer, int buffer_len) {
     unsigned char hash[32];
-
-    (void)ctx;
 
     HMAC_CTX *hmac = HMAC_CTX_new();
 
@@ -217,14 +219,14 @@ static int digest_payload1(const risk_payload *payload, request_context *ctx, co
     }
     HMAC_CTX_free(hmac);
 
-    for (int i = 0; i < len; i++) {
+    for (unsigned int i = 0; i < len; i++) {
         sprintf(buffer + (i * 2), "%02x", hash[i]);
     }
 
     return 1;
 }
 
-static int digest_payload3(const risk_payload *payload, request_context *ctx, const char *payload_key, const char **signing_fields, char *buffer, int buffer_len) {
+static int digest_payload3(UNUSED const risk_payload *payload, request_context *ctx, const char *payload_key, const char **signing_fields, char *buffer, int buffer_len) {
     unsigned char hash[32];
 
     HMAC_CTX *hmac = HMAC_CTX_new();
@@ -251,7 +253,7 @@ static int digest_payload3(const risk_payload *payload, request_context *ctx, co
     }
     HMAC_CTX_free(hmac);
 
-    for (int i = 0; i < len; i++) {
+    for (unsigned int i = 0; i < len; i++) {
         sprintf(buffer + (i * 2), "%02x", hash[i]);
     }
 

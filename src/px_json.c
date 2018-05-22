@@ -64,7 +64,8 @@ const char *captcha_type_str(captcha_type_t captcha_type) {
 }
 
 // format json requests
-char *create_activity(const char *activity_type, const px_config *conf, const request_context *ctx) {
+char *create_activity(const char *activity_type, const request_context *ctx) {
+    px_config *conf = ctx->conf;
     json_t *j_details = json_pack("{s:i,s:s,s:s,s:s,s:s}",
             "block_score", ctx->score,
             "block_reason", BLOCK_REASON_STR[ctx->block_reason],
@@ -146,7 +147,8 @@ static json_t *headers_to_json_helper(const apr_array_header_t *arr) {
     return j_headers;
 }
 
-char *create_risk_payload(const request_context *ctx, const px_config *conf) {
+char *create_risk_payload(const request_context *ctx) {
+    px_config *conf = ctx->conf;
     // headers array
     const apr_array_header_t *header_arr = apr_table_elts(ctx->headers);
     json_t *j_headers = headers_to_json_helper(header_arr);
@@ -252,7 +254,8 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
     return parsed_response;
 }
 
-char *create_mobile_response(px_config *conf, request_context *ctx, const char *compiled_html) {
+char *create_mobile_response(request_context *ctx, const char *compiled_html) {
+    px_config *conf = ctx->conf;
     json_t *j_mobile_response = json_pack("{s:s,s:s,s:s,s:s}",
             "action", ACTION_STR[ctx->action],
             "appId", ctx->app_id,
@@ -272,7 +275,7 @@ char *create_mobile_response(px_config *conf, request_context *ctx, const char *
     return request_str;
 }
 
-char *create_json_response(px_config *conf, request_context *ctx) {
+char *create_json_response(request_context *ctx) {
     json_t *j_response = json_pack("{}");
 
     if (ctx->vid) {
@@ -423,7 +426,7 @@ const char* context_to_json_string(request_context *ctx) {
         json_object_set_new(ctx_json, "uuid", json_string(ctx->uuid));
     }
     if (ctx->px_payload) {
-        json_t *px_payloads = json_pack("{ ss }", "v1", ctx->px_payload);
+        px_payloads = json_pack("{ ss }", "v1", ctx->px_payload);
         json_object_set_new(ctx_json, "px_cookies", px_payloads);
     }
     if (ctx->px_payload_decrypted) {
