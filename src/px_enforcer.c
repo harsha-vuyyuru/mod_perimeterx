@@ -112,7 +112,7 @@ bool px_should_verify_request(request_rec *r, px_config *conf) {
             }
         } else {
             // using default whitelist
-            for (int i = 0; i < sizeof(FILE_EXT_WHITELIST)/sizeof(*FILE_EXT_WHITELIST); i++ ) {
+            for (unsigned int i = 0; i < sizeof(FILE_EXT_WHITELIST)/sizeof(*FILE_EXT_WHITELIST); i++ ) {
                 if (strcmp(file_ending, FILE_EXT_WHITELIST[i]) == 0) {
                     return false;
                 }
@@ -148,23 +148,23 @@ static risk_response* risk_api_get(request_context *ctx) {
     px_config *conf = ctx->conf;
     px_log_debug_fmt("Evaluating Risk API request, call reason: %s", get_call_reason_string(ctx->call_reason));
 
-    char *risk_payload = create_risk_payload(ctx, conf);
-    if (!risk_payload) {
+    char *rpayload = create_risk_payload(ctx);
+    if (!rpayload) {
         ctx->pass_reason = PASS_REASON_ERROR;
         return NULL;
     }
 
-    px_log_debug_fmt("risk payload: %s", risk_payload);
+    px_log_debug_fmt("risk payload: %s", rpayload);
 
     char *risk_response_str = NULL;
-    CURLcode status = post_request(conf->risk_api_url, risk_payload, conf->connect_timeout_ms, conf->api_timeout_ms, conf, ctx, &risk_response_str, &ctx->api_rtt);
+    CURLcode status = post_request(conf->risk_api_url, rpayload, conf->connect_timeout_ms, conf->api_timeout_ms, conf, ctx, &risk_response_str, &ctx->api_rtt);
     ctx->made_api_call = true;
-    free(risk_payload);
+    free(rpayload);
     if (status == CURLE_OK) {
-        risk_response *risk_response = parse_risk_response(risk_response_str, ctx);
-        px_log_debug_fmt("Risk API response returned successfully, risk score: %d", risk_response->score);
+        risk_response *rresponse = parse_risk_response(risk_response_str, ctx);
+        px_log_debug_fmt("Risk API response returned successfully, risk score: %d", rresponse->score);
         free(risk_response_str);
-        return risk_response;
+        return rresponse;
     }
     free(risk_response_str);
 
@@ -247,7 +247,7 @@ bool px_verify_request(request_context *ctx) {
     px_config *conf = ctx->conf;
     bool request_valid = true;
 
-    risk_response *risk_response;
+    risk_response *rresponse;
     validation_result_t vr;
 
     if (ctx->px_payload == NULL || (ctx->token_origin == TOKEN_ORIGIN_HEADER && strcmp(ctx->px_payload, NO_TOKEN) == 0)) {
@@ -285,7 +285,7 @@ bool px_verify_request(request_context *ctx) {
             } else if (is_sensitive_route_prefix(ctx->r, conf) || is_sensitive_route(ctx->r, conf)) {
                 px_log_debug_fmt("Sensitive route match, sending Risk API. path: %s", ctx->uri);
                 ctx->call_reason = CALL_REASON_SENSITIVE_ROUTE;
-                risk_response = risk_api_get(ctx);
+                rresponse = risk_api_get(ctx);
                 goto handle_response;
             } else {
                 ctx->pass_reason = PASS_REASON_PAYLOAD;
@@ -298,22 +298,22 @@ bool px_verify_request(request_context *ctx) {
         case VALIDATION_RESULT_MOBILE_SDK_CONNECTION_ERROR:
         case VALIDATION_RESULT_MOBILE_SDK_PINNING_ERROR:
             set_call_reason(ctx, vr);
-            risk_response = risk_api_get(ctx);
+            rresponse = risk_api_get(ctx);
 handle_response:
-            if (risk_response) {
-                ctx->score = risk_response->score;
+            if (rresponse) {
+                ctx->score = rresponse->score;
 
-                if (risk_response->action_data_body){
-                    ctx->action_data_body = risk_response->action_data_body;
+                if (rresponse->action_data_body){
+                    ctx->action_data_body = rresponse->action_data_body;
                 }
 
-                if (!ctx->uuid && risk_response->uuid) {
-                    ctx->uuid = risk_response->uuid;
+                if (!ctx->uuid && rresponse->uuid) {
+                    ctx->uuid = rresponse->uuid;
                 }
 
-                if (risk_response->action) {
-                    px_log_debug_fmt("parsing action (%s)", risk_response->action);
-                    ctx->action = parseBlockAction(risk_response->action);
+                if (rresponse->action) {
+                    px_log_debug_fmt("parsing action (%s)", rresponse->action);
+                    ctx->action = parseBlockAction(rresponse->action);
                 }
 
                 request_valid = ctx->score < conf->blocking_score;

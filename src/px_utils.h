@@ -6,6 +6,12 @@
 #include <http_log.h>
 #include "px_types.h"
 
+#if defined(__GNUC__)
+#  define UNUSED __attribute__((__unused__))
+#else
+#  define UNUSED
+#endif
+
 struct response_t {
     char* data;
     size_t size;

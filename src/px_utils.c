@@ -263,6 +263,8 @@ int extract_payload_from_header(apr_pool_t *pool, apr_table_t *headers, const ch
             case 3:
                 *payload3 = postfix;
                 break;
+            default:
+                return -1;
         }
         return version;
     }

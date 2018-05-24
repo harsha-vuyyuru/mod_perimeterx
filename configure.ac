@@ -82,7 +82,7 @@ AC_ARG_ENABLE(debug,
     AS_HELP_STRING([--enable-debug], [enable debug build]),
     [], [enable_debug=no])
 if test "x$enable_debug" = "xyes" ; then
-    CFLAGS="$CFLAGS -DDEBUG=1"
+    CFLAGS="$CFLAGS -DDEBUG=1 -Wall -Werror -Wextra -Waddress -Warray-bounds -Werror=array-bounds -Wmissing-noreturn -Wshadow -Wpointer-arith -Wcast-align -Wwrite-strings -Winline -Wformat-security -Wswitch-default -Winit-self -Wmissing-include-dirs -Wundef -Waggregate-return -Wmissing-format-attribute -Wnested-externs -Wformat=2 -Wunreachable-code -Wno-missing-field-initializers -Wno-format-nonliteral"
     AC_DEFINE([DEBUG], [1], [enable debug build])
 fi
 

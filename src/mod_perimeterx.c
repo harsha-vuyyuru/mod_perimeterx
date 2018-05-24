@@ -91,7 +91,7 @@ extern const char *CALL_REASON_STR[];
 static apr_thread_mutex_t **ssl_locks;
 static int ssl_num_locks;
 
-static void px_ssl_locking_callback(int mode, int type, const char *file, int line) {
+static void px_ssl_locking_callback(int mode, int type, UNUSED const char *file, UNUSED int line) {
     if (type < ssl_num_locks) {
         if (mode & CRYPTO_LOCK) {
             apr_thread_mutex_lock(ssl_locks[type]);
@@ -153,7 +153,7 @@ static char *create_response(px_config *conf, request_context *ctx) {
         bool match = accept_header && strstr(accept_header, CONTENT_TYPE_JSON);
         if (match) {
             ctx->response_application_json = true;
-            return create_json_response(conf, ctx);
+            return create_json_response(ctx);
         }
     }
 
@@ -183,7 +183,7 @@ static char *create_response(px_config *conf, request_context *ctx) {
         if (!encoded_html) {
             return NULL;
         }
-        return create_mobile_response(conf, ctx, encoded_html);
+        return create_mobile_response(ctx, encoded_html);
     }
     return html;
 }
@@ -192,7 +192,7 @@ static void post_verification(request_context *ctx, bool request_valid) {
     px_config *conf = ctx->conf;
     if (!request_valid || conf->send_page_activities) {
         const char *activity_type = request_valid ? PAGE_REQUESTED_ACTIVITY_TYPE : BLOCKED_ACTIVITY_TYPE;
-        char *activity = create_activity(activity_type, conf, ctx);
+        char *activity = create_activity(activity_type, ctx);
         if (!activity) {
             px_log_debug_fmt("%s create activity failed", activity_type);
             return;
@@ -213,7 +213,7 @@ static void redirect_copy_headers_out(request_rec *r, const redirect_response *r
         for (int i = 0; i < response_headers->nelts; i++) {
             char *header = APR_ARRAY_IDX(response_headers, i, char*);
             char *value = NULL;
-            char *key = apr_strtok (header, HEADER_DELIMETER, &value);
+            char *key = apr_strtok(header, HEADER_DELIMETER, &value);
             apr_table_set(r->headers_out, key, &value[1]);
         }
     } else if (res->predefined && res->response_content_type) {
@@ -630,7 +630,7 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
     return NULL;
 }
 
-static void *APR_THREAD_FUNC background_activity_consumer(apr_thread_t *thd, void *data) {
+static void *APR_THREAD_FUNC background_activity_consumer(UNUSED apr_thread_t *thd, void *data) {
     activity_consumer_data *consumer_data = (activity_consumer_data*)data;
     px_config *conf = consumer_data->conf;
     CURL *curl = curl_easy_init();
@@ -733,7 +733,7 @@ static apr_status_t background_activity_send_init(apr_pool_t *pool, server_rec *
         return rv;
     }
 
-    for (unsigned int i = 0; i < conf->background_activity_workers; ++i) {
+    for (int i = 0; i < conf->background_activity_workers; ++i) {
         rv = apr_thread_pool_push(conf->activity_thread_pool, background_activity_consumer, consumer_data, 0, NULL);
         if (rv != APR_SUCCESS) {
             px_log_error("failed to push background activity consumer");
@@ -865,7 +865,7 @@ static void px_hook_child_init(apr_pool_t *p, server_rec *s) {
     }
 }
 
-static apr_status_t px_cleanup_pre_config(void *data) {
+static apr_status_t px_cleanup_pre_config(UNUSED void *data) {
 #if (defined (OPENSSL_THREADS) && APR_HAS_THREADS) &&  (OPENSSL_VERSION_NUMBER < 0x10100000L)
     if (CRYPTO_get_locking_callback() == px_ssl_locking_callback) {
         CRYPTO_set_locking_callback(NULL);
@@ -898,7 +898,7 @@ static apr_status_t px_cleanup_pre_config(void *data) {
     return APR_SUCCESS;
 }
 
-static int px_hook_pre_config(apr_pool_t *p, apr_pool_t *plog, apr_pool_t *ptemp) {
+static int px_hook_pre_config(apr_pool_t *p, UNUSED apr_pool_t *plog, UNUSED apr_pool_t *ptemp) {
 #if OPENSSL_VERSION_NUMBER < 0x1010000fL
     (void)CRYPTO_malloc_init();
 #else
@@ -1868,7 +1868,7 @@ static const command_rec px_directives[] = {
     { NULL }
 };
 
-static void perimeterx_register_hooks(apr_pool_t *pool) {
+static void perimeterx_register_hooks(UNUSED apr_pool_t *pool) {
     static const char *const asz_pre[] = { "mod_setenvif.c", NULL };
 
     ap_hook_post_read_request(px_hook_post_request, asz_pre, NULL, APR_HOOK_MIDDLE);

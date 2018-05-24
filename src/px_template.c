@@ -179,7 +179,7 @@ const char* select_template(const px_config *conf, request_context *ctx) {
     const char *template_postfix = ctx->token_origin == TOKEN_ORIGIN_COOKIE ? "" : ".mobile"; // for mobile captcha
 
     // modify hosts according to first party
-    const char *jsClientSrc = conf->client_exteral_path;
+    // const char *jsClientSrc = conf->client_exteral_path;
     if (conf->first_party_enabled && ctx->token_origin == TOKEN_ORIGIN_COOKIE) {
         template_host = conf->captcha_path_prefix;
         host_url = conf->xhr_path_prefix;
