@@ -3,6 +3,7 @@
  */
 #include <stdio.h>
 #include <stdbool.h>
+#include <unistd.h>
 
 #include <jansson.h>
 #include <curl/curl.h>
@@ -33,6 +34,7 @@
 #include "px_enforcer.h"
 #include "px_json.h"
 #include "px_client.h"
+#include "background_activity.h"
 
 module AP_MODULE_DECLARE_DATA perimeterx_module;
 
@@ -197,8 +199,11 @@ static void post_verification(request_context *ctx, bool request_valid) {
             px_log_debug_fmt("%s create activity failed", activity_type);
             return;
         }
+
         if (conf->background_activity_send) {
-            apr_queue_push(conf->activity_queue, activity);
+            apr_queue_push(conf->background_activity_queue, activity);
+            // notify background activity thread that we have a new task
+            background_activity_wakeup(conf->background_activity_wakeup_fds);
         } else {
             post_request(conf->activities_api_url, activity, conf->connect_timeout_ms, conf->api_timeout_ms, conf, ctx, NULL, NULL);
             free(activity);
@@ -356,7 +361,7 @@ static void *APR_THREAD_FUNC health_check(apr_thread_t *thd, void *data) {
         return NULL;
     }
 
-    const char *health_check_url = apr_pstrcat(pool, hc->conf->base_url, HEALTH_CHECK_API, NULL);
+    const char *health_check_url = apr_pstrcat(pool, conf->base_url, HEALTH_CHECK_API, NULL);
     CURL *curl = curl_easy_init();
     CURLcode res;
     while (!conf->should_exit_thread) {
@@ -630,37 +635,6 @@ static void *APR_THREAD_FUNC remote_config(apr_thread_t *thd, void *data) {
     return NULL;
 }
 
-static void *APR_THREAD_FUNC background_activity_consumer(UNUSED apr_thread_t *thd, void *data) {
-    activity_consumer_data *consumer_data = (activity_consumer_data*)data;
-    px_config *conf = consumer_data->conf;
-    CURL *curl = curl_easy_init();
-
-    void *v;
-    if (!curl) {
-        px_log_error("could not create curl handle, thread will not run to consume messages");
-        return NULL;
-    }
-
-    while (true) {
-        apr_status_t rv = apr_queue_pop(conf->activity_queue, &v);
-        if (rv == APR_EINTR) {
-            continue;
-        }
-        if (rv == APR_EOF) {
-            break;
-        }
-        if (rv == APR_SUCCESS && v) {
-            char *activity = (char *)v;
-            post_request_helper(curl, conf->activities_api_url, activity, conf->connect_timeout_ms, conf->api_timeout_ms, conf, consumer_data->server, NULL);
-            free(activity);
-        }
-    }
-
-    curl_easy_cleanup(curl);
-    px_log_debug("activity consumer thread exited");
-    return NULL;
-}
-
 // --------------------------------------------------------------------------------
 //
 
@@ -714,37 +688,6 @@ static apr_status_t create_remote_config(apr_pool_t *p, server_rec *s, px_config
     return rv;
 }
 
-static apr_status_t background_activity_send_init(apr_pool_t *pool, server_rec *s, px_config *conf) {
-    apr_status_t rv;
-
-    rv = apr_queue_create(&conf->activity_queue, conf->background_activity_queue_size, pool);
-    if (rv != APR_SUCCESS) {
-        px_log_error("failed to initialize background activity queue");
-        return rv;
-    }
-
-    activity_consumer_data *consumer_data = apr_palloc(s->process->pool, sizeof(activity_consumer_data));
-    consumer_data->server = s;
-    consumer_data->conf = conf;
-
-    rv = apr_thread_pool_create(&conf->activity_thread_pool, 0, conf->background_activity_workers, pool);
-    if (rv != APR_SUCCESS) {
-        px_log_error("failed to initialize background activity thread pool");
-        return rv;
-    }
-
-    for (int i = 0; i < conf->background_activity_workers; ++i) {
-        rv = apr_thread_pool_push(conf->activity_thread_pool, background_activity_consumer, consumer_data, 0, NULL);
-        if (rv != APR_SUCCESS) {
-            px_log_error("failed to push background activity consumer");
-            return rv;
-        }
-    }
-
-    px_log_debug("finished init background activities");
-    return rv;
-}
-
 // free all (apache) unmanaged resources
 static apr_status_t px_child_exit(void *data) {
     server_rec *s = (server_rec*)data;
@@ -769,8 +712,8 @@ static apr_status_t px_child_exit(void *data) {
         }
 
         // terminate the queue and wake up all idle threads
-        if (conf->activity_queue) {
-            rv = apr_queue_term(conf->activity_queue);
+        if (conf->background_activity_queue) {
+            rv = apr_queue_term(conf->background_activity_queue);
             if (rv != APR_SUCCESS) {
                 char buf[ERR_BUF_SIZE];
                 char *err = apr_strerror(rv, buf, sizeof(buf));
@@ -778,14 +721,42 @@ static apr_status_t px_child_exit(void *data) {
             }
         }
 
-        if (conf->activity_thread_pool) {
-            apr_thread_pool_destroy(conf->activity_thread_pool);
+        if (conf->background_activity_thread) {
+            apr_thread_join(&rv, conf->background_activity_thread);
         }
 
         px_log_debug("cleanup finished");
     }
 
     return rv;
+}
+
+static apr_status_t background_activity_init(px_config *conf, server_rec *s) {
+    background_activity_data *thd_data = apr_pcalloc(conf->pool, sizeof(background_activity_data));
+    apr_status_t rv;
+
+    thd_data->conf = conf;
+    thd_data->server = s;
+
+    // setup wakeup pipe
+    if (pipe(conf->background_activity_wakeup_fds)) {
+        px_log_error("error calling pipe()");
+        return APR_EINVAL;
+    }
+
+    rv = apr_queue_create(&conf->background_activity_queue, conf->background_activity_queue_size, conf->pool);
+    if (rv != APR_SUCCESS) {
+        px_log_error_fmt("error calling apr_queue_create(), queue size: %d", conf->background_activity_queue_size);
+        return rv;
+    }
+
+    rv = apr_thread_create(&conf->background_activity_thread, NULL, background_activity, thd_data, conf->pool);
+    if (rv) {
+        px_log_error("error calling apr_thread_create()");
+        return rv;
+    }
+
+    return APR_SUCCESS;
 }
 
 static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
@@ -817,12 +788,13 @@ static apr_status_t px_child_setup(apr_pool_t *p, server_rec *s) {
 
         conf->curl_pool = curl_pool_create(conf->pool, conf->curl_pool_size, false);
         conf->redirect_curl_pool = curl_pool_create(conf->pool, conf->redirect_curl_pool_size, true);
+
         if (conf->background_activity_send) {
             px_log_debug("start init for background_activity_send");
 
-            rv = background_activity_send_init(conf->pool, vs, conf);
+            rv = background_activity_init(conf, s);
             if (rv != APR_SUCCESS) {
-                px_log_error("error while trying to init background_activity_consumer");
+                px_log_error("error while trying to init background_activity");
                 return rv;
             }
         }
@@ -1582,7 +1554,8 @@ static void *create_config(apr_pool_t *p, server_rec *s) {
         conf->remote_config_enabled = false;
         conf->remote_config_url = apr_pstrcat(p, CONFIGURATION_SERVER_URL, REMOTE_CONFIGURATIONS_PATH, NULL);
         conf->remote_config_interval_ms = apr_time_from_sec(5);
-        conf->activity_thread_pool = NULL;
+        conf->background_activity_thread = NULL;
+        conf->background_activity_queue = NULL;
         conf->telemetry_api_url = apr_pstrcat(p, conf->base_url, TELEMETRY_API, NULL);
         conf->checksum = NULL;
         conf->px_debug = FALSE;

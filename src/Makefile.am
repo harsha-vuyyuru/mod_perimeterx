@@ -2,8 +2,8 @@ ACLOCAL_AMFLAGS = -I m4
 
 lib_LTLIBRARIES = mod_perimeterx.la
 
-mod_perimeterx_la_SOURCES = mod_perimeterx.c curl_pool.c px_payload.c px_json.c px_utils.c px_enforcer.c px_template.c mustach.c px_client.c
-include_HEADERS = px_types.h curl_pool.h px_payload.h px_json.h px_utils.h px_enforcer.h px_template.h mustach.h px_client.h
+mod_perimeterx_la_SOURCES = mod_perimeterx.c curl_pool.c px_payload.c px_json.c px_utils.c px_enforcer.c px_template.c mustach.c px_client.c background_activity.c
+include_HEADERS = px_types.h curl_pool.h px_payload.h px_json.h px_utils.h px_enforcer.h px_template.h mustach.h px_client.h background_activity.h
 
 mod_perimeterx_la_CFLAGS = @CFLAGS@ \
 	@APXS_INCLUDES@ @APXS_CFLAGS@ \

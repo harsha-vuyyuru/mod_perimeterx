@@ -38,7 +38,7 @@ static const unsigned char test_char_table[256] = {
     30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30
 };
 
-static void update_and_notify_health_check(px_config *conf) {
+void update_and_notify_health_check(px_config *conf) {
     if (!conf->px_health_check) {
         return;
     }
@@ -440,10 +440,14 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
     if (status == CURLE_OK) {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
         px_log_debug_fmt("status: %lu, url: %s", status_code, url);
-        if (response_data != NULL) {
-            *response_headers = response.headers;
-            *response_data = apr_pstrmemdup(r->pool, response.data, response.size);
-            *content_size = response.size;
+        if (status_code == HTTP_OK) {
+            if (response_data != NULL) {
+                *response_headers = response.headers;
+                *response_data = apr_pstrmemdup(r->pool, response.data, response.size);
+                *content_size = response.size;
+            }
+        } else {
+            status = CURLE_HTTP_RETURNED_ERROR;
         }
     } else {
         update_and_notify_health_check(conf);

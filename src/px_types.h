@@ -57,8 +57,8 @@ typedef struct px_config_t {
     bool background_activity_send;
     int background_activity_workers;
     int background_activity_queue_size;
-    apr_queue_t *activity_queue;
-    apr_thread_pool_t *activity_thread_pool;
+    apr_queue_t *background_activity_queue;
+    apr_thread_t *background_activity_thread;
     bool px_health_check;
     apr_thread_mutex_t *health_check_cond_mutex;
     apr_thread_t *health_check_thread;
@@ -91,6 +91,7 @@ typedef struct px_config_t {
     const char *remote_config_url;
     int remote_config_interval_ms;
     char *checksum;
+    int background_activity_wakeup_fds[2];
     int px_debug;
     int log_level_err;
     int log_level_debug;
