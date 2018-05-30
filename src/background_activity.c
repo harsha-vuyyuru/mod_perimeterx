@@ -165,13 +165,14 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
     bool running = TRUE;
     CURLMcode res;
 
-    px_log_debug_thd("thread init");
 
     rv = apr_pool_create(&pool, NULL);
     if (rv != APR_SUCCESS) {
         px_log_error_thd("failed to call apr_pool_create()");
         return NULL;
     }
+
+    px_log_debug_thd("thread init");
 
     rv = cqueue_create(&q_waiting, pool);
     if (rv != APR_SUCCESS) {
@@ -252,7 +253,7 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
 
             // pop activity, blocking if the queue is already empty
             // TODO: add timer, so we could process un-finished cURL requests
-            apr_status_t rv = apr_queue_trypop(conf->background_activity_queue, (void *)&activity);
+            rv = apr_queue_trypop(conf->background_activity_queue, (void *)&activity);
 
             if (rv == APR_EINTR) {
                 continue;
@@ -356,7 +357,7 @@ void *APR_THREAD_FUNC background_activity(apr_thread_t *thd, void *ctx)
         while ((msg = curl_multi_info_read(multi_curl, &n))) {
 
             // currently CURLMSG_DONE is the only case
-            if (msg && msg->msg == CURLMSG_DONE) {
+            if (msg->msg == CURLMSG_DONE) {
                 curl_h *ch;
                 curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, (void *)&ch);
 

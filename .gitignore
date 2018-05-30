@@ -63,3 +63,4 @@ build/packages/
 contrib/version.sh
 core
 valgrind.out
+compile_commands.json

@@ -263,6 +263,8 @@ int extract_payload_from_header(apr_pool_t *pool, apr_table_t *headers, const ch
             case 3:
                 *payload3 = postfix;
                 break;
+            default:
+                return -1;
         }
         return version;
     }
@@ -403,6 +405,13 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
     // Attach first party logics
     headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", FIRST_PARTY_HEADER, FIRST_PARTY_HEADER_VALUE));
     headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", ENFORCER_TRUE_IP, get_request_ip(r, conf)));
+
+    const char *xff = apr_table_get(r->headers_in, "X-Forwarded-For");
+    if (xff) {
+        headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s,%s", "X-Forwarded-For", xff, r->useragent_ip));
+    } else {
+        headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", "X-Forwarded-For", r->useragent_ip));
+    }
     headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", "Host", &base_url[8]));
 
     curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
@@ -453,7 +462,7 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
     return status;
 }
 
-void px_log(const px_config *conf, apr_pool_t *pool, bool log_debug, int level, const char *fmt, ...) {
+void px_log(const px_config *conf, apr_pool_t *pool, bool log_debug, int level, const char *func, const char *fmt, ...) {
     // do not log debug messages if debugMode is disabled
     if (!conf || !pool || (!conf->px_debug && log_debug)) {
         return;
@@ -469,5 +478,5 @@ void px_log(const px_config *conf, apr_pool_t *pool, bool log_debug, int level, 
         conf->px_debug ? level : conf->log_level_err,
         0, conf->server,
         log_debug ? LOGGER_DEBUG_HDR: LOGGER_ERROR_HDR,
-        conf->app_id, __FUNCTION__, text);
+        conf->app_id, func, text);
 }

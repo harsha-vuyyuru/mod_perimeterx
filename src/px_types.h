@@ -63,7 +63,7 @@ typedef struct px_config_t {
     apr_thread_mutex_t *health_check_cond_mutex;
     apr_thread_t *health_check_thread;
     apr_thread_cond_t *health_check_cond;
-    int px_errors_threshold;
+    apr_uint32_t px_errors_threshold;
     volatile apr_uint32_t px_errors_count;
     long health_check_interval; // in ms
     bool should_exit_thread;
@@ -223,6 +223,7 @@ typedef struct redirect_response_t {
     int content_size;
     apr_array_header_t *response_headers;
     bool predefined;
+    long http_code; // HTTP code of proxy response
 } redirect_response;
 
 #endif
