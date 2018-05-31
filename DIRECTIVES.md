@@ -36,7 +36,7 @@ Directives
 | EnableAccessControlAllowOriginWildcard | Apply **\*** as the value of the response header Access-Control-Allow-Origin. When set this directive will override **PXApplyAccessControlAllowOriginByEnvVar** if it is also defined. | Off | Bool | On / Off|
 | CaptchaType | Sets the type of which captcha provider to use | reCaptcha  | String | reCaptcha/funCaptcha |
 | EnableTokenViaHeader | Toggles on/off using mobile sdk| On | bool | On / Off |
-| BackgroundActivitySend | Toggles on/off asyncrounus activity reporting | On | bool | On / Off |
+| BackgroundActivitySend | Toggles on/off asyncrounus activity reporting | Off | bool | On / Off |
 | BackgroundActivityWorkers | Number of background workers to send activities | 10 | Number | Integer |
 | BackgroundActivityQueueSize | Queue size for background activity send | 1000 | Number | Integer |
 | MonitorMode | Toggles the module monitor | On | bool | On / Off |
