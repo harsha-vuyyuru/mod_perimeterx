@@ -31,7 +31,7 @@ typedef struct px_props_t {
     const char *jsClientSrc;
     const char *firstPartyEnabled;
     const char *captchaType;
-    const char *blockScript;
+    const char *captchaScriptSrc;
 } px_props;
 
 static const char *get_px_props_value(const px_props *props, const char *key) {
@@ -71,8 +71,8 @@ static const char *get_px_props_value(const px_props *props, const char *key) {
     if (!strcmp(key, "captchaType")) {
         return props->captchaType;
     }
-    if (!strcmp(key, "blockScript")) {
-        return props->blockScript;
+    if (!strcmp(key, "captchaScriptSrc")) {
+        return props->captchaScriptSrc;
     }
 
     return NULL;
@@ -141,8 +141,7 @@ static struct mustach_itf itf = {
     .leave = leave
 };
 
-int render_template(char **html, request_context *ctx, const px_config *conf, size_t *size) {
-    const char *template = select_template(conf, ctx);
+int render_template(const char *tpl, char **html, const request_context *ctx, const px_config *conf, size_t *size) {
 
     px_props props = {
         .appId = conf->app_id,
@@ -153,40 +152,27 @@ int render_template(char **html, request_context *ctx, const px_config *conf, si
         .cssRef = conf->css_ref,
         .jsRef = conf->js_ref,
         .jsClientSrc = conf->first_party_enabled ? conf->client_path_prefix : conf->client_exteral_path,
-        .firstPartyEnabled = conf->first_party_enabled ? "true" : "false",
+        .firstPartyEnabled = conf->first_party_enabled ? "1" : NULL,
         .logoVisibility = conf->custom_logo ? visible : hidden,
         .captchaType = captcha_type_str(conf->captcha_type),
-        .hostUrl = ctx->host_url,
-        .blockScript = ctx->captcha_js_src
+        .hostUrl =  apr_psprintf(ctx->r->pool, collector_url, conf->app_id, NULL),
+        .captchaScriptSrc = tpl
     };
 
-    int res = mustach(template, &itf, &props, html, size);
+    int res = mustach(block_page_template, &itf, &props, html, size);
     return res;
 }
 
-const char* select_template(const px_config *conf, request_context *ctx) {
+const char* select_template(const px_config *conf, const request_context *ctx) {
     if (ctx->action == ACTION_CHALLENGE) {
         px_log_debug("Enforcing action: challenge page is served");
         return ctx->action_data_body;
     }
 
-    // default hosts
-    const char *template_host = conf->captcha_exteral_path; // src according to first party mode
-    const char *host_url = apr_psprintf(ctx->r->pool, collector_url, conf->app_id, NULL);
+    const char *template_host = conf->first_party_enabled ? conf->captcha_path_prefix : conf->captcha_exteral_path;
+    const char *template_prefix = ctx->action == ACTION_BLOCK ? "block" : captcha_type_str(conf->captcha_type);
+    const char *template_postfix = ctx->token_origin == TOKEN_ORIGIN_COOKIE ? "" : ".mobile";
 
-    // template selection
-    const char *template_prefix = ctx->action == ACTION_BLOCK ? "block" : captcha_type_str(conf->captcha_type); // template name according to action
-    const char *template_postfix = ctx->token_origin == TOKEN_ORIGIN_COOKIE ? "" : ".mobile"; // for mobile captcha
-
-    // modify hosts according to first party
-    // const char *jsClientSrc = conf->client_exteral_path;
-    if (conf->first_party_enabled && ctx->token_origin == TOKEN_ORIGIN_COOKIE) {
-        template_host = conf->captcha_path_prefix;
-        host_url = conf->xhr_path_prefix;
-    }
-
-    ctx->host_url = host_url;
-    ctx->captcha_js_src = apr_pstrcat(ctx->r->pool, template_host, "/", template_prefix, template_postfix, ".js", NULL);
-
-    return block_page_template;
+    const char *template = apr_pstrcat(ctx->r->pool, template_host, template_prefix, template_postfix, ".js", NULL);
+    return template;
 }
