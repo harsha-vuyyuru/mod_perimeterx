@@ -10,9 +10,6 @@
 #include <apr_base64.h>
 #include <apr_time.h>
 #include <curl/curl.h>
-#include <httpd.h>
-#include <http_config.h>
-#include <http_log.h>
 #include "px_utils.h"
 #include "background_activity.h"
 

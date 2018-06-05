@@ -2,7 +2,6 @@
 
 #include <jansson.h>
 #include <apr_pools.h>
-#include <http_log.h>
 #include <apr_strings.h>
 #include "px_utils.h"
 
