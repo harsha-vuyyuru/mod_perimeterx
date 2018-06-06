@@ -4,7 +4,6 @@
 
 #include <arpa/inet.h>
 #include <apr_strings.h>
-#include <http_log.h>
 
 #ifdef APLOG_USE_MODULE
 APLOG_USE_MODULE(perimeterx);
