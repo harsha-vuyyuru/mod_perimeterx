@@ -28,4 +28,4 @@ addons:
       description: PerimeterX Apache Module
     build_command_prepend: "./autogen.sh && ./configure && make clean"
     build_command: make
-    branch_pattern: master
+    branch_pattern: dev
