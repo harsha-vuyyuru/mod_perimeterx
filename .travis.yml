@@ -17,15 +17,14 @@ script:
 - sudo cp perimeterx.conf /etc/apache2/mods-available/perimeterx.conf
 - sudo ln -s /etc/apache2/mods-available/perimeterx.conf /etc/apache2/mods-enabled/
 - sudo apachectl -f /etc/apache2/apache2.conf -e debug -DFOREGROUND -t
-env:
-  global:
-  # COVERITY_SCAN_TOKEN
-  - secure: J46JRoJtnk/En2FfFVs26VlisjBqsPNSBPiFKd85jOCE9mWh8nj/EByGRavdarT1yAC+QIVwbVSnptX6YJyDUkaj11DrMSxU1AeGaFYTsUMvtq7wdNHdV0GPtpeHlLAKMnbaZkrW2Y+sf+mjdrOj0rhiJm+7ZbDUoomWxF5GQzruaGTqtPDuEWfFDqKkYLu9uiWdkRzn1bWtL7ls+XRnqjSFMQGfgj+GaS+VVE/PxrK9gUKF2ZiM+Bj9azIGtHHUnQyotqAUw6fSYTQbJUuigPQE6M/MLwUxYB7vQE5boceni8km1CSxAJPG9qMSiVPpihsWNuF0ybFQeCQ4X1e0gmQ7UwQ7UdSak18IXrwEIohXF+ZGG45oJ8ejC9bHjb+oO3wLN0rsfHRYDoN5N7VTU2g1zqDgsR2xm1IR6pasxvipC3SwKARWxxU7haVix5HIN7REHfY+o71DY/2ZNKLB+gzd1UL1WIqNVB5czhHwLlVGXp1Cjeakm9EekuAekeAgfXLNThp8Kb8QnYRq+/PKnC/YTtRdb6CNRY05uPbkbRKe619nWluUX/WiZ+SxzO8dC1ta7ximiGgavl2jUfx92aPo+h+6hw7eVK9E42Ejg8MpkrQy0xxHK79Tlevhqf4CpfqqfaZtsYnf1G+cVxisjkse+6LQ9urLBOVbop5+iDw=
 addons:
   coverity_scan:
     project:
-      name: PerimeterX/mod_perimeterx
+      name: mod_perimeterx
       description: PerimeterX Apache Module
     build_command_prepend: "./autogen.sh && ./configure && make clean"
     build_command: make
     branch_pattern: dev
+env:
+  global:
+    secure: LmL3oNe6H0H0GOUkDmQq0/QERnSYGzWRBq5pckt3dKM2ngMouZ0fG8gCNyyClOKQioqWM5WMu2QmuNSOGYCSU2p2mr1GSda20eMEz7pYjxQFhJXtPc8NeQXrn9HoOeMoid4bc4rUH1aSEAVDfCxbLt49WzapKxXUAXZs6ZPtuWEM0cF5H1DPKlHNg5LBIWQsjDL5xU9akFOMEgXzyKmoymboYrVFtAmNQmnTsVzGO7+E+trp4cWuBlQBrvGYHkhU4i1nR+ufVA14wtzT9U9Xp1sI3ajmO7+9DJL+2Kcli+yDZXi2/U78rNmUVCh7RrEMv8dZpfvlEiLW/gLlWVXfWkWbeir2sfcMluN4GZNI2u37u3JdpJqQUL6Nn30QvhIxDss8N9bd/K6nsCLUFKGdARqYjRh0xfVLoNRnWwwXcy99GS6JsUOZVYAbWuRBXOmXNGJC1gKuj8pav7oWZ0+Gsdlg1F+hQfTGJ7tsfFB2WelRay+9PEf5DswUhSI/bGqrHNDH7XkUlKggjkbXT0VFJyvIwDc2lvUPDEidKvE3tTknQ07hz8jVh+Jn6jjIoKuk8jZabTa+hoG/7MxCh3ILKUb1+h9gaG1QKXWzWlypKX+GNVPY/Wev81Tps2GCFqZHOK5Gxr55Kx6TBxpE0DHPoWNYTpovDPh4gYsjgDffM1o=
