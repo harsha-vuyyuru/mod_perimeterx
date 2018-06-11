@@ -1,3 +1,17 @@
+libapache2-mod-perimeterx (3.0.0) jessie; urgency=high
+
+   * Remote configuration support
+   * Enforcer telemetry support
+   * Improved background activity handling, using curl multi instead of threads
+   * Configurable debug mode via config (refer to readme)
+   * Implemented connection timeout (supported by remote configurations)
+   * Fixed First party error handling
+   * Fixed Attaching XFF header to reverse proxy requests
+   * Default blocking score changed: 100
+   * Default monitor mode changed: true
+
+ -- nitzanpx <nitzanpx@github>  Mon, 11 Jun 2018 11:10:00 +0000
+
 libapache2-mod-perimeterx (2.11.1) jessie; urgency=medium
 
     * Fixed Debian packaging 
