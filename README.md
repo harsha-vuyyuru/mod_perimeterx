@@ -19,6 +19,8 @@ Table of Contents
 	- [Dependencies](#dependencies)
 	- [Installation](#installation)
 	- [Basic Usage Example](#basic-usage)
+- [Upgrade](#upgrade)
+	- [Upgrade to v4.x](#upgrade-v4)
 - [Directives](DIRECTIVES.md)
 - [Custom Block page](BLOCKPAGE.md)
 - [Logging and Troubleshooting](#troubleshoot)
@@ -113,16 +115,60 @@ Loaded Modules:
 </VirtualHost>
 ```
 
+### <a name="upgrade"></a> Upgrade ###
+#### <a name="upgrade-v4"></a> Upgrade to v4.x ####
+#### Default Configurations ####
+From v4.x, mod_perimeterx is shipped out in Monitor Mode turned on and BlockingScore set to 100.
+For users who wish to set the module to active blocking mode, additonal changes will be required to the module configurations.
+
+Basic example v4.x - Blocking Mode
+```
+        <IfModule mod_perimeterx.c>
+            PXEnabled On
+		    AppID [APPID PLACEHOLDER]
+		    AuthToken [AUTHTOKEN PLACEHOLDER]
+		    CookieKey [COOKIE KEY PLACEHOLDER]
+		    MonitorMode Off
+        </IfModule>
+```
+
+Basic example v4.x - Monitor Mode
+```
+        <IfModule mod_perimeterx.c>
+            PXEnabled On
+		    AppID [APPID PLACEHOLDER]
+		    AuthToken [AUTHTOKEN PLACEHOLDER]
+		    CookieKey [COOKIE KEY PLACEHOLDER]
+        </IfModule>
+```
+
+#### Custom Block Page upgrade ####
+Upgrading to version 4.x will requrie additional changes if CustomBlockPage is enabled.
+From v4.x, the enforcer will not handle captcah validations, instead all captcha solving requests will be send direactly to the PerimeterX service from the Javascript handler
+
+Please refer to [Custom Block Page](BLOCK.md) implementaion for more information
+
 <a name="troubleshoot"></a>Logging and Troubleshooting
 ----------------------------------------
-### Debug Logs
-mod_perimeterx is writing to apace error log.
-In order to log debug messages to apache error log you should set the `LogLevel` [directive](https://httpd.apache.org/docs/2.4/mod/core.html#loglevel):
+### Module Logging
+mod_perimeterx is capable of writing "Error" and "Debug" type of messages to Apache error log.
 
+In order to log module's messages to Apache error log you should set `LogLevel` [directive](https://httpd.apache.org/docs/2.4/mod/core.html#loglevel) to any value equal or lower than `error` level:
+* If mod_perimeterx's `EnableDebugMode` directive is enabled (`On`), then mod_perimeterx will log both "Error" and "Debug" type of messages.
+* If mod_perimeterx's `EnableDebugMode` directive is disabled (`Off`), then mod_perimeterx will log only "Error" messages.
+
+Example: to see both "Error" and "Debug" mod_perimeterx messages in Apache error log:
 ```
 # apache configuration
-LogLevel debug
+LogLevel error
+<IfModule mod_perimeterx.c>
+    ...
+    EnableDebugMode On
+    ...
+</IfModule>
 ```
+
+By the default, `EnableDebugMode` directive is disabled (`Off`), and only "Error" messages are logged.
 
 According to your apache configurations you should find in the error log mod_perimeters log, for example:
 

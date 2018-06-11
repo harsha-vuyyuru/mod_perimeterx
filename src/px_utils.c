@@ -4,7 +4,6 @@
 
 #include <arpa/inet.h>
 #include <apr_strings.h>
-#include <http_log.h>
 
 #ifdef APLOG_USE_MODULE
 APLOG_USE_MODULE(perimeterx);
@@ -14,14 +13,6 @@ APLOG_USE_MODULE(perimeterx);
 #define T_ESCAPE_URLENCODED    (16)
 #define TEST_CHAR(c, f)        (test_char_table[(unsigned)(c)] & (f))
 
-struct response_t {
-    char* data;
-    size_t size;
-    server_rec *server;
-    request_rec *r;
-    apr_array_header_t *headers;
-    const char *app_id;
-};
 
 
 static const char *JSON_CONTENT_TYPE = "Content-Type: application/json";
@@ -46,7 +37,7 @@ static const unsigned char test_char_table[256] = {
     30,30,30,30,30,30,30,30,30,30,30,30,30,30,30,30
 };
 
-static void update_and_notify_health_check(px_config *conf) {
+void update_and_notify_health_check(px_config *conf) {
     if (!conf->px_health_check) {
         return;
     }
@@ -96,7 +87,21 @@ static int read_body(request_rec *r, char **body) {
     return -1;
 }
 
-static size_t write_response_cb(void* contents, size_t size, size_t nmemb, void *stream) {
+size_t write_response_pool_cb(void* contents, size_t size, size_t nmemb, void *stream) {
+    struct response_t *res = (struct response_t*)stream;
+    size_t realsize = size * nmemb;
+    char *tmp;
+    tmp = apr_pcalloc(res->pool, res->size + realsize + 1);
+    memcpy(tmp, res->data, res->size + 1);
+
+    res->data = tmp;
+    memcpy(&(res->data[res->size]), contents, realsize);
+    res->size += realsize;
+    res->data[res->size] = 0;
+    return realsize;
+}
+
+size_t write_response_cb(void* contents, size_t size, size_t nmemb, void *stream) {
     struct response_t *res = (struct response_t*)stream;
     size_t realsize = size * nmemb;
     char *tmp;
@@ -173,7 +178,7 @@ const char *get_request_ip(const request_rec *r, const px_config *conf) {
     return socket_ip;
 }
 
-CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, long timeout, px_config *conf, server_rec *server, char **response_data) {
+CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, long connect_timeout, long timeout, px_config *conf, server_rec *server, char **response_data) {
     struct response_t response;
     struct curl_slist *headers = NULL;
     long status_code;
@@ -192,6 +197,7 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, l
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, connect_timeout);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, timeout);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_response_cb);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*) &response);
@@ -210,15 +216,15 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, l
             }
             return status;
         }
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server, "[%s]: post_request: status: %lu, url: %s", conf->app_id, status_code, url);
+        px_log_debug_fmt("status: %lu, url: %s", status_code, url);
         status = CURLE_HTTP_RETURNED_ERROR;
     } else {
         update_and_notify_health_check(conf);
         size_t len = strlen(errbuf);
         if (len) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server, "[%s]: post_request failed: %s", conf->app_id, errbuf);
+            px_log_debug_fmt("failed for %s: %s", url, errbuf);
         } else {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, server, "[%s]: post_request failed: %s", conf->app_id, curl_easy_strerror(status));
+            px_log_debug_fmt("failed for %s: %s", url, curl_easy_strerror(status));
         }
     }
     free(response.data);
@@ -256,6 +262,8 @@ int extract_payload_from_header(apr_pool_t *pool, apr_table_t *headers, const ch
             case 3:
                 *payload3 = postfix;
                 break;
+            default:
+                return -1;
         }
         return version;
     }
@@ -273,7 +281,7 @@ static unsigned char *c2x(unsigned what, unsigned char prefix, unsigned char *wh
 
 // Functions escape_urlencoded & pescape_urlencoded were copied from APR v1.6
 // http://svn.apache.org/repos/asf/apr/apr/branches/1.6.x/include/apr_escape.h
-int escape_urlencoded(char *escaped, const char *str, apr_size_t *len) {
+static int escape_urlencoded(char *escaped, const char *str, apr_size_t *len) {
     apr_size_t size = 1;
     int found = 0;
     const unsigned char *s = (const unsigned char *) str;
@@ -363,22 +371,46 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
     if (header_arr) {
         for (int i = 0; i < header_arr->nelts; i++) {
             apr_table_entry_t h = APR_ARRAY_IDX(header_arr, i, apr_table_entry_t);
+
             // Remove sensitive headers
-            if (strcasecmp(h.key, "Host") != 0) {
-                headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", h.key, h.val));
+            if (strcasecmp(h.key, "Host") == 0) {
+                continue;
             }
+
+            bool skip = false;
+            for (int j = 0; j < conf->sensitive_header_keys->nelts; j++) {
+                const char *s = APR_ARRAY_IDX(conf->sensitive_header_keys, j, char*);
+
+                if (strcasecmp(h.key, s) == 0) {
+                    skip = true;
+                    break;
+                }
+            }
+
+            if (skip) {
+                continue;
+            }
+
+            headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", h.key, h.val));
         }
     }
 
     // append vid cookie
     if (vid) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: redirect_helper: attaching vid header 'Cookie: pxvid=%s'", conf->app_id, vid);
+        px_log_debug_fmt("attaching vid header 'Cookie: pxvid=%s'", vid);
         headers = curl_slist_append(headers, apr_psprintf(r->pool, "Cookie: pxvid=%s;", vid));
     }
 
     // Attach first party logics
     headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", FIRST_PARTY_HEADER, FIRST_PARTY_HEADER_VALUE));
     headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", ENFORCER_TRUE_IP, get_request_ip(r, conf)));
+
+    const char *xff = apr_table_get(r->headers_in, "X-Forwarded-For");
+    if (xff) {
+        headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s,%s", "X-Forwarded-For", xff, r->useragent_ip));
+    } else {
+        headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", "X-Forwarded-For", r->useragent_ip));
+    }
     headers = curl_slist_append(headers, apr_psprintf(r->pool, "%s: %s", "Host", &base_url[8]));
 
     curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
@@ -392,6 +424,7 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body);
     }
 
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, conf->connect_timeout_ms);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, conf->api_timeout_ms);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_response_cb);
     curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, header_callback);
@@ -405,6 +438,7 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
 
     if (status == CURLE_OK) {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
+        px_log_debug_fmt("status: %lu, url: %s", status_code, url);
         if (status_code == HTTP_OK) {
             if (response_data != NULL) {
                 *response_headers = response.headers;
@@ -412,18 +446,36 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
                 *content_size = response.size;
             }
         } else {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: post_request: status: %lu, url: %s", conf->app_id, status_code, url);
             status = CURLE_HTTP_RETURNED_ERROR;
         }
     } else {
         update_and_notify_health_check(conf);
         size_t len = strlen(errbuf);
         if (len) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: post_request failed: %s", conf->app_id, errbuf);
+            px_log_debug_fmt("failed: %s", errbuf);
         } else {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, r->server, "[%s]: post_request failed: %s", conf->app_id, curl_easy_strerror(status));
+            px_log_debug_fmt("failed: %s", curl_easy_strerror(status));
         }
     }
     free(response.data);
     return status;
+}
+
+void px_log(const px_config *conf, apr_pool_t *pool, bool log_debug, int level, const char *func, const char *fmt, ...) {
+    // do not log debug messages if debugMode is disabled
+    if (!conf || !pool || (!conf->px_debug && log_debug)) {
+        return;
+    }
+
+    va_list ap;
+    char *text;
+
+    va_start(ap, fmt);
+    text = apr_pvsprintf(pool, fmt, ap);
+    va_end(ap);
+    ap_log_error(APLOG_MARK,
+        conf->px_debug ? level : conf->log_level_err,
+        0, conf->server,
+        log_debug ? LOGGER_DEBUG_HDR: LOGGER_ERROR_HDR,
+        conf->app_id, func, text);
 }

@@ -2,8 +2,8 @@
 
 #include <jansson.h>
 #include <apr_pools.h>
-#include <http_log.h>
 #include <apr_strings.h>
+#include "px_utils.h"
 
 #ifdef APLOG_USE_MODULE
 APLOG_USE_MODULE(perimeterx);
@@ -66,7 +66,8 @@ const char *captcha_type_str(captcha_type_t captcha_type) {
 }
 
 // format json requests
-char *create_activity(const char *activity_type, const px_config *conf, const request_context *ctx) {
+char *create_activity(const char *activity_type, const request_context *ctx) {
+    px_config *conf = ctx->conf;
     json_t *j_details = json_pack("{s:i,s:s,s:s,s:s,s:s}",
             "block_score", ctx->score,
             "block_reason", BLOCK_REASON_STR[ctx->block_reason],
@@ -133,7 +134,7 @@ char *create_activity(const char *activity_type, const px_config *conf, const re
     return request_str;
 }
 
-json_t *headers_to_json_helper(const apr_array_header_t *arr) {
+static json_t *headers_to_json_helper(const apr_array_header_t *arr) {
     json_t *j_headers = json_array();
     // Extract all headers and jsonfy it
     if (arr) {
@@ -148,7 +149,8 @@ json_t *headers_to_json_helper(const apr_array_header_t *arr) {
     return j_headers;
 }
 
-char *create_risk_payload(const request_context *ctx, const px_config *conf) {
+char *create_risk_payload(const request_context *ctx) {
+    px_config *conf = ctx->conf;
     // headers array
     const apr_array_header_t *header_arr = apr_table_elts(ctx->headers);
     json_t *j_headers = headers_to_json_helper(header_arr);
@@ -247,10 +249,10 @@ char *create_captcha_payload(const request_context *ctx, const px_config *conf) 
 
 captcha_response *parse_captcha_response(const char* captcha_response_str, const request_context *ctx) {
     json_error_t j_error;
+    px_config *conf = ctx->conf;
     json_t *j_response = json_loads(captcha_response_str, 0, &j_error);
     if (!j_response) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
-                "[%s]: parse_captcha_response: failed to parse. error (%s), response (%s)", ctx->app_id, j_error.text, captcha_response_str);
+        px_log_debug_fmt("failed to parse. error (%s), response (%s)", j_error.text, captcha_response_str);
         return NULL;
     }
 
@@ -263,8 +265,7 @@ captcha_response *parse_captcha_response(const char* captcha_response_str, const
                 "uuid", &uuid,
                 "cid", &cid,
                 "vid", &vid)) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
-                "[%s]: parse_captcha_response: failed to unpack. response (%s)", ctx->app_id, captcha_response_str);
+        px_log_debug_fmt("failed to unpack. response (%s)", captcha_response_str);
         json_decref(j_response);
         return NULL;
     }
@@ -281,11 +282,11 @@ captcha_response *parse_captcha_response(const char* captcha_response_str, const
 }
 
 risk_response* parse_risk_response(const char* risk_response_str, const request_context *ctx) {
+    px_config *conf = ctx->conf;
     json_error_t j_error;
     json_t *j_response = json_loads(risk_response_str, 0, &j_error);
     if (!j_response) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
-                "[%s]: parse_risk_response: failed to parse risk response (%s)", ctx->app_id, risk_response_str);
+        px_log_debug_fmt("failed to parse risk response (%s)", risk_response_str);
         return NULL;
     }
 
@@ -300,8 +301,7 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
                 "score", &score,
                 "action", &action
                 )) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
-                "[%s]: parse_risk_response: failed to unpack risk response (%s)", ctx->app_id, risk_response_str);
+        px_log_debug_fmt("failed to unpack risk response (%s)", risk_response_str);
         json_decref(j_response);
         return NULL;
     }
@@ -310,11 +310,11 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
         json_t *action_data = json_object_get(j_response, "action_data");
         if (json_unpack(action_data, "{s:s}",
                     "body", &action_data_body)) {
-           ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, "[%s]: parse_risk_response: failed to unpack risk api action_data", ctx->app_id);
+           px_log_debug("failed to unpack risk api action_data");
            json_decref(j_response);
            return NULL;
         }
-        ap_log_error(APLOG_MARK, APLOG_DEBUG, 0, ctx->r->server, "[%s]: parse_risk_response: succsefully got aciton_data_body (%s)", ctx->app_id, action_data_body);
+        px_log_debug_fmt("successfully got aciton_data_body (%s)", action_data_body);
     }
 
     risk_response *parsed_response = (risk_response*)apr_palloc(ctx->r->pool, sizeof(risk_response));
@@ -329,12 +329,13 @@ risk_response* parse_risk_response(const char* risk_response_str, const request_
     return parsed_response;
 }
 
-char *create_mobile_response(px_config *cfg, request_context *ctx, const char *compiled_html) {
+char *create_mobile_response(request_context *ctx, const char *compiled_html) {
+    px_config *conf = ctx->conf;
     json_t *j_mobile_response = json_pack("{s:s,s:s,s:s,s:s}",
             "action", ACTION_STR[ctx->action],
             "appId", ctx->app_id,
             "page", compiled_html,
-            "collectorUrl", cfg->base_url);
+            "collectorUrl", conf->base_url);
 
     if (ctx->vid) {
         json_object_set_new(j_mobile_response, "vid", json_string(ctx->vid));
@@ -349,7 +350,7 @@ char *create_mobile_response(px_config *cfg, request_context *ctx, const char *c
     return request_str;
 }
 
-char *create_json_response(px_config *cfg, request_context *ctx) {
+char *create_json_response(request_context *ctx) {
     json_t *j_response = json_pack("{}");
 
     if (ctx->vid) {
@@ -365,8 +366,94 @@ char *create_json_response(px_config *cfg, request_context *ctx) {
     return request_str;
 }
 
+static json_t *config_array_to_json_array(const apr_array_header_t *arr) {
+    json_t *j_headers = json_array();
+    // Extract all headers and jsonfy it
+    if (arr) {
+        for (int i = 0; i < arr->nelts; i++) {
+            char *h = APR_ARRAY_IDX(arr, i, char*);
+            json_array_append_new(j_headers, json_string(h));
+        }
+    }
+    return j_headers;
+}
+
+char* config_to_json_string(px_config *conf, const char *update_reason) {
+    json_t *ctx_json = json_object();
+    json_t *details_json = json_object();
+    json_t *config_json = json_object();
+
+    json_object_set_new(config_json, "app_id", json_string(conf->app_id));
+    json_object_set_new(config_json, "module_enabled", json_boolean(conf->module_enabled));
+    json_object_set_new(config_json, "api_timeout_ms", json_integer(conf->api_timeout_ms));
+    json_object_set_new(config_json, "captcha_timeout", json_integer(conf->captcha_timeout));
+    json_object_set_new(config_json, "send_page_activities", json_boolean(conf->send_page_activities));
+    json_object_set_new(config_json, "blocking_score", json_integer(conf->blocking_score));
+    json_object_set_new(config_json, "captcha_enabled", json_boolean(conf->captcha_enabled));
+    json_object_set_new(config_json, "module_version", json_string(conf->module_version));
+    json_object_set_new(config_json, "skip_mod_by_envvar", json_boolean(conf->skip_mod_by_envvar));
+    json_object_set_new(config_json, "curl_pool_size", json_integer(conf->curl_pool_size));
+    json_object_set_new(config_json, "base_url", json_string(conf->base_url));
+    json_object_set_new(config_json, "risk_api_url", json_string(conf->risk_api_url));
+    json_object_set_new(config_json, "captcha_api_url", json_string(conf->captcha_api_url));
+    json_object_set_new(config_json, "activities_api_url", json_string(conf->activities_api_url));
+    json_object_set_new(config_json, "auth_header", json_string(conf->auth_header));
+    json_object_set_new(config_json, "routes_whitelist", config_array_to_json_array(conf->routes_whitelist));
+    json_object_set_new(config_json, "useragents_whitelist", config_array_to_json_array(conf->useragents_whitelist));
+    json_object_set_new(config_json, "custom_file_ext_whitelist", config_array_to_json_array(conf->custom_file_ext_whitelist));
+    json_object_set_new(config_json, "ip_header_keys", config_array_to_json_array(conf->ip_header_keys));
+    json_object_set_new(config_json, "sensitive_header_keys", config_array_to_json_array(conf->sensitive_header_keys));
+    json_object_set_new(config_json, "sensitive_routes", config_array_to_json_array(conf->sensitive_routes));
+    json_object_set_new(config_json, "enabled_hostnames", config_array_to_json_array(conf->enabled_hostnames));
+    json_object_set_new(config_json, "sensitive_routes_prefix", config_array_to_json_array(conf->sensitive_routes_prefix));
+    json_object_set_new(config_json, "background_activity_send", json_boolean(conf->background_activity_send));
+    json_object_set_new(config_json, "background_activity_workers", json_integer(conf->background_activity_workers));
+    json_object_set_new(config_json, "background_activity_queue_size", json_integer(conf->background_activity_queue_size));
+    json_object_set_new(config_json, "px_errors_threshold", json_integer(conf->px_errors_threshold));
+    json_object_set_new(config_json, "health_check_interval", json_integer(conf->health_check_interval));
+    json_object_set_new(config_json, "px_health_check", json_boolean(conf->px_health_check));
+    json_object_set_new(config_json, "score_header_name", json_string(conf->score_header_name));
+    json_object_set_new(config_json, "vid_header_enabled", json_boolean(conf->vid_header_enabled));
+    json_object_set_new(config_json, "uuid_header_enabled", json_boolean(conf->uuid_header_enabled));
+    json_object_set_new(config_json, "uuid_header_name", json_string(conf->uuid_header_name));
+    json_object_set_new(config_json, "vid_header_name", json_string(conf->vid_header_name));
+    json_object_set_new(config_json, "json_response_enabled", json_boolean(conf->json_response_enabled));
+    json_object_set_new(config_json, "cors_headers_enabled", json_boolean(conf->cors_headers_enabled));
+    json_object_set_new(config_json, "captcha_type", json_integer(conf->captcha_type));
+    json_object_set_new(config_json, "monitor_mode", json_boolean(conf->monitor_mode));
+    json_object_set_new(config_json, "enable_token_via_header", json_boolean(conf->enable_token_via_header));
+    json_object_set_new(config_json, "remote_config_enabled", json_boolean(conf->remote_config_enabled));
+    json_object_set_new(config_json, "remote_config_url", json_string(conf->remote_config_url));
+    json_object_set_new(config_json, "remote_config_interval_ms", json_integer(conf->remote_config_interval_ms));
+    json_object_set_new(config_json, "custom_logo", json_string(conf->custom_logo));
+    json_object_set_new(config_json, "css_ref", json_string(conf->css_ref));
+    json_object_set_new(config_json, "js_ref", json_string(conf->js_ref));
+    json_object_set_new(config_json, "block_page_url", json_string(conf->block_page_url));
+    json_object_set_new(config_json, "proxy_url", json_string(conf->proxy_url));
+    json_object_set_new(config_json, "score_header_enabled", json_boolean(conf->score_header_enabled));
+
+    json_object_set_new(details_json, "module_version", json_string(conf->module_version));
+    json_object_set_new(details_json, "update_reason", json_string(update_reason));
+    json_object_set_new(details_json, "enforcer_configs", config_json);
+
+    apr_time_t timems = apr_time_now() / 1000;
+    char tztimems[20];
+    snprintf(tztimems, sizeof(tztimems), "%"APR_TIME_T_FMT, timems);
+
+    json_object_set_new(ctx_json, "type", json_string("enforcer_telemetry"));
+    json_object_set_new(ctx_json, "timestamp", json_string(tztimems));
+    json_object_set_new(ctx_json, "app_id", json_string(conf->app_id));
+    json_object_set_new(ctx_json, "details", details_json);
+
+    char *config_str = json_dumps(ctx_json, JSON_ENCODE_ANY);
+    json_decref(ctx_json);
+
+    return config_str;
+}
+
 #ifdef DEBUG
 const char* context_to_json_string(request_context *ctx) {
+    px_config *conf = ctx->conf;
     json_error_t error;
     json_t *px_payloads = NULL, *headers, *ctx_json;
 
@@ -399,8 +486,7 @@ const char* context_to_json_string(request_context *ctx) {
     json_decref(headers);
 
     if (!ctx_json) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server,
-                "[%s]: context_to_json_string error: %s", ctx->app_id, error.text);
+        px_log_debug_fmt("error: %s", error.text);
         return NULL;
     }
 
@@ -418,7 +504,7 @@ const char* context_to_json_string(request_context *ctx) {
         json_object_set_new(ctx_json, "uuid", json_string(ctx->uuid));
     }
     if (ctx->px_payload) {
-        json_t *px_payloads = json_pack("{ ss }", "v1", ctx->px_payload);
+        px_payloads = json_pack("{ ss }", "v1", ctx->px_payload);
         json_object_set_new(ctx_json, "px_cookies", px_payloads);
     }
     if (ctx->px_payload_decrypted) {

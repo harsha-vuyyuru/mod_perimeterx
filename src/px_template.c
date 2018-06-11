@@ -1,10 +1,10 @@
 #include "px_template.h"
-#include <http_log.h>
 #include <apr_strings.h>
 
 #include "px_types.h"
 #include "mustach.h"
 #include "px_json.h"
+#include "px_utils.h"
 
 #ifdef APLOG_USE_MODULE
 APLOG_USE_MODULE(perimeterx);
@@ -20,7 +20,6 @@ static const char *page_template_funcaptcha_mobile = "<!DOCTYPE html> <html lang
 static const char *visible = "visible";
 static const char *hidden = "hidden";
 static const char *collector_url = "https://collector-%s.perimeterx.net";
-static const char *LOGGER_DEBUG_FORMAT = "[PerimeterX - DEBUG][%s] - %s"; 
 
 typedef struct px_props_t {
     int depth;
@@ -143,6 +142,7 @@ static struct mustach_itf itf = {
 };
 
 int render_template(const char *tpl, char **html, const request_context *ctx, const px_config *conf, size_t *size) {
+
     px_props props = {
         .appId = conf->app_id,
         .uuid = ctx->uuid,
@@ -164,10 +164,9 @@ int render_template(const char *tpl, char **html, const request_context *ctx, co
 
 const char* select_template(const px_config *conf, const request_context *ctx) {
     if (ctx->action == ACTION_CHALLENGE) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Enforcing action: challenge page is served");
+        px_log_debug("Enforcing action: challenge page is served");
         return ctx->action_data_body;
     }
-
     int pt_flag = 0;
 
     pt_flag |= ctx->token_origin == TOKEN_ORIGIN_COOKIE ? PT_FLAG_WEB : PT_FLAG_MOBILE;
@@ -182,25 +181,25 @@ const char* select_template(const px_config *conf, const request_context *ctx) {
 
     switch (pt_flag) {
         case PAGE_TEMPLATE_BLOCK_WEB:
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Enforcing action: block page is served");
+            px_log_debug("Enforcing action: block page is served");
             return page_template_block_web;
         case PAGE_TEMPLATE_RECAPTCHA_WEB:
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Enforcing action: captcha page is served");
+            px_log_debug("Enforcing action: captcha page is served");
             return page_template_recaptcha_web;
         case PAGE_TEMPLATE_FUNCAPTCHA_WEB:
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Enforcing action: captcha page is served");
+            px_log_debug("Enforcing action: captcha page is served");
             return page_template_funcaptcha_web;
         case PAGE_TEMPLATE_BLOCK_MOBILE:
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Enforcing action: block page is served");
+            px_log_debug("Enforcing action: block page is served");
             return page_template_block_mobile;
         case PAGE_TEMPLATE_RECAPTCHA_MOBILE:
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Enforcing action: captcha page is served");
+            px_log_debug("Enforcing action: captcha page is served");
             return page_template_recaptcha_mobile;
         case PAGE_TEMPLATE_FUNCAPTCHA_MOBILE:
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Enforcing action: captcha page is served");
+            px_log_debug("Enforcing action: captcha page is served");
             return page_template_funcaptcha_mobile;
         default:
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "select_template: wrong value for template ", apr_itoa(ctx->r->pool, pt_flag), ", rendering default web block", NULL));
+            px_log_debug_fmt("wrong value for template %d, rendering default web block", pt_flag);
             return page_template_block_web;
     }
 }

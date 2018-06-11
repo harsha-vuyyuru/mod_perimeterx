@@ -6,6 +6,7 @@
 #include <http_protocol.h>
 #include <apr_thread_pool.h>
 #include <apr_queue.h>
+#include <apr_thread_rwlock.h>
 
 #include "curl_pool.h"
 typedef enum {
@@ -15,6 +16,7 @@ typedef enum {
 
 typedef struct px_config_t {
     // px module server memory pool
+    const server_rec *server;
     apr_pool_t *pool;
     const char *app_id;
     const char *payload_key;
@@ -25,6 +27,7 @@ typedef struct px_config_t {
     const char *risk_api_url;
     const char *captcha_api_url;
     const char *activities_api_url;
+    const char *telemetry_api_url;
     const char *css_ref;
     const char *js_ref;
     const char *custom_logo;
@@ -38,6 +41,7 @@ typedef struct px_config_t {
     long api_timeout_ms;
     bool is_captcha_timeout_set;
     long captcha_timeout;
+    long connect_timeout_ms;
     bool send_page_activities;
     const char *module_version;
     curl_pool *curl_pool;
@@ -52,19 +56,22 @@ typedef struct px_config_t {
     apr_array_header_t *sensitive_routes;
     apr_array_header_t *sensitive_routes_prefix;
     apr_array_header_t *enabled_hostnames;
+    apr_array_header_t *sensitive_header_keys;
     bool background_activity_send;
     int background_activity_workers;
     int background_activity_queue_size;
-    apr_queue_t *activity_queue;
-    apr_thread_pool_t *activity_thread_pool;
+    apr_queue_t *background_activity_queue;
+    apr_thread_t *background_activity_thread;
     bool px_health_check;
     apr_thread_mutex_t *health_check_cond_mutex;
     apr_thread_t *health_check_thread;
     apr_thread_cond_t *health_check_cond;
-    int px_errors_threshold;
+    apr_uint32_t px_errors_threshold;
     volatile apr_uint32_t px_errors_count;
     long health_check_interval; // in ms
     bool should_exit_thread;
+    apr_thread_t *remote_config_thread;
+    apr_thread_rwlock_t *remote_config_lock;
     bool enable_token_via_header;
     bool uuid_header_enabled;
     bool vid_header_enabled;
@@ -84,15 +91,23 @@ typedef struct px_config_t {
     const char *client_exteral_path;
     const char *collector_base_uri;
     const char *client_base_uri;
+    bool remote_config_enabled;
+    const char *remote_config_url;
+    int remote_config_interval_ms;
+    char *checksum;
+    int background_activity_wakeup_fds[2];
+    int px_debug;
+    int log_level_err;
+    int log_level_debug;
 } px_config;
 
-typedef struct health_check_data_t {
+typedef struct thread_data_t {
     server_rec *server;
-    px_config *config;
-} health_check_data;
+    px_config *conf;
+} thread_data;
 
 typedef struct activity_consumer_data_t {
-    px_config *config;
+    px_config *conf;
     server_rec *server;
 } activity_consumer_data;
 
@@ -178,6 +193,7 @@ typedef struct captcha_response_t {
 } captcha_response;
 
 typedef struct request_context_t {
+    px_config *conf;
     const char *app_id;
     const char *px_payload;
     const char *px_payload1;
@@ -230,9 +246,10 @@ typedef enum {
 typedef struct redirect_response_t {
     const char *content;
     const char *response_content_type;
-    int content_size; 
+    int content_size;
     apr_array_header_t *response_headers;
     bool predefined;
+    long http_code; // HTTP code of proxy response
 } redirect_response;
 
 #endif

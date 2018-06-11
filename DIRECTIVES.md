@@ -7,7 +7,7 @@ Directives
 - [PerimeterX Service monitor](#servicemonitor)
 - [First Party Mode](#first-party)
 
-## <a name="#basic"></a>Basic 
+## <a name="#basic"></a>Basic
 
 |Directive Name| Description   | Default value   | Values  | Note
 |---|---|---|---|---|
@@ -15,10 +15,11 @@ Directives
 | AppId  | PX custom application id in the format of PX______	  | NULL | String  |
 | CookieKey  | Key used for cookie signing - Can be found \ generated in PX portal - Policy page. | NULL  |   |   |
 | AuthToken | JWT token used for REST API - Can be found \ generated in PX portal - Application page.  | NULL  | String |
-| BlockingScore | When requests with a score equal to or higher value they will be blocked.  | 101  | 0 - 100  |
+| BlockingScore | When requests with a score equal to or higher value they will be blocked.  | 100  | 0 - 100  |
 | Captcha | Enable reCaptcha on the blocking page  | On  | On / Off  | When using a custom block page with captcha abilities implementation, this option must be `On`.
 | ReportPageRequest | Boolean flag to enable or disable sending activities and metrics to PerimeterX on each page request. Enabling this feature will provide data that populates the PerimeterX portal with valuable information	  |  On | On / Off  |
 | APITimeoutMS |  REST API timeout in milliseconds | 1000  | Integer  | In case APITimeoutMS and APITimeout (deprecated but supported for backward compatibility) are both set in the module configuration - the one that is set later in the file will be the one that will be used. Any other value set prior of it will be discarded.
+| ConnectTimeoutMS | A timeout in milliseconds to connect to PX Detector | 1000 | Integer |
 | CaptchaTimeout |  Captcha timeout in milliseconds | APITimeoutMS  | Integer  |  If not set - CaptchaTimeout is the same as APITimeoutMS
 | IPHeader | List of HTTP header names that contain the real client IP address. Use this feature when your server is behind a CDN. | NULL | List |  [IPHeader Additional Information](#ipheader)
 | CurlPoolSize | The number of active curl handles for each server  | 100  | Integer 1-1000  | For optimized performance, it is best to use the number of running worker threads in your Apache server as the CurlPoolSize.
@@ -35,16 +36,19 @@ Directives
 | EnableAccessControlAllowOriginWildcard | Apply **\*** as the value of the response header Access-Control-Allow-Origin. When set this directive will override **PXApplyAccessControlAllowOriginByEnvVar** if it is also defined. | Off | Bool | On / Off|
 | CaptchaType | Sets the type of which captcha provider to use | reCaptcha  | String | reCaptcha/funCaptcha |
 | EnableTokenViaHeader | Toggles on/off using mobile sdk| On | bool | On / Off |
-| BackgroundActivitySend | Toggles on/off asyncrounus activity reporting | On | bool | On / Off |
+| BackgroundActivitySend | Toggles on/off asyncrounus activity reporting | Off | bool | On / Off |
 | BackgroundActivityWorkers | Number of background workers to send activities | 10 | Number | Integer |
 | BackgroundActivityQueueSize | Queue size for background activity send | 1000 | Number | Integer |
-| MonitorMode | Toggles the module monitor | Off | bool | On / Off |
+| MonitorMode | Toggles the module monitor | On | bool | On / Off |
 | CaptchaSubdomain | Toggles captcha on subdomain making the module remove pxCaptcha cookie from all domains under main domain (using `.<domain>.<ext>` instead of `www.<domain>.<ext>`)| Off | bool | On / Off |
 | FirstPartyEnabled | Toggles first party mode | On | bool | On / Off |
 | FirstPartyXhrEnabled | Toggles sending xhr requests through first party | On | bool | On / Off |
 | ClientBaseUrl | Set the base url to fetch the client from | https://client.perimeterx.net when first party is enbaled | String | A-Za-z |
 | CollectorBaseUrl | Set the base url to the collector for sending xhr requests when first party is enabled | https://<APP_ID>-collector.perimeterx.com | String | A-Za-z |
-#### <a name="ipheader">IPHeader Additional Information</a>: 
+| SensitiveHeader | Set a value for a sensitive header which will be filtered and not be reported back | NULL | List |
+| EnableDebugMode | Enables debug logging mode | Off | bool | On / Off |
+| EnableRemoteConfiguration | Toggle remote configuration on/off | Off | bool | On / Off |
+#### <a name="ipheader">IPHeader Additional Information</a>:
 
 * The order of headers in the configuration matters. The first header found with a value will be taken as the IP address.
 * If no valid IP address is found in the IP header list, the module will use [`useragent_ip`](https://httpd.apache.org/docs/2.4/developer/new_api_2_4.html) as the request IP.
@@ -59,7 +63,7 @@ Directives
 
 
 
-## <a name="#filters"></a>Filters 
+## <a name="#filters"></a>Filters
 
 |     Directive Name    |                                                                                                Description                                                                                               | Default value |  Values  |          Note           |
 |:---------------------:|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------:|:-------------:|:--------:|:-----------------------:|
@@ -77,7 +81,7 @@ Directives
 By using `mod_setenvif` you can configure a set of rules to set the `PX_SKIP_MODULE` variable on a request.
 
 * Disable the PerimeterX module on either `gif` or `jpg` file extensions:
- 
+
 ```
 SetEnvIf Request_URI "\.gif$" PX_SKIP_MODULE true
 SetEnvIf Request_URI "\.jpg$" PX_SKIP_MODULE true
@@ -108,7 +112,7 @@ Note that the directive `PXApplyAccessControlAllowOriginByEnvVar` must be config
 
 Examples below:
 ```
-SetEnvIfNoCase Origin ^(.*) PX_APPLY_CORS_VALUE=$1 
+SetEnvIfNoCase Origin ^(.*) PX_APPLY_CORS_VALUE=$1
 ```
 
 ```
@@ -116,7 +120,7 @@ SetEnvIf Origin "http(s)?://(www\.)?(google.com|staging.google.com|development.g
 ```
 
 Read more on `mod_setenvif` [here](https://httpd.apache.org/docs/current/mod/mod_setenvif.html).
- 
+
 **`mod_env` is not supported with any directives that use the environmental variables set on a request. Though the syntax is similar to mod_setenvif, mod_env will only run after the PerimeterX module in the Apache fixups phase. You should NOT use the `SetEnv` directive to set the `PX_SKIP_MODULE` or `PX_APPLY_CORS_VALUE` environmental variables.
 
 ## <a name="#filters"></a>PerimeterX Service Monitor
@@ -141,7 +145,7 @@ Customers are advised to use the first party sensor (where the web sensor is ser
 
 The following routes will be used in order to serve the sensor and send activities
 - /<PX_APP_ID without PX prefix>/xhr/*
-- /<PX_APP_ID without PX prefix>/init.js 
+- /<PX_APP_ID without PX prefix>/init.js
 
 First Party may also require additional changes on the sensor snippet (client side). Refer to the portal for more information.
 
@@ -154,4 +158,4 @@ Default: On
    FirstPartyXhrEnabled On
    ...
 </IfModule>
-``` 
+```

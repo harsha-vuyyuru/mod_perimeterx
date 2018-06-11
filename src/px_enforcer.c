@@ -1,6 +1,5 @@
 #include "px_enforcer.h"
 #include <apr_strings.h>
-#include <http_log.h>
 #include <util_cookies.h>
 #include <regex.h>
 
@@ -26,9 +25,6 @@ static const char* FILE_EXT_WHITELIST[] = {
     ".eps", ".woff", ".xls", ".jpeg", ".doc", ".ejs", ".otf", ".pptx", ".gif", ".pdf", ".swf", ".svg", ".ps",
     ".ico", ".pls", ".midi", ".svgz", ".class", ".png", ".ppt", ".mid", "webp", ".jar"
 };
-
-static const char *LOGGER_DEBUG_FORMAT = "[PerimeterX - DEBUG][%s] - %s";
-static const char *LOGGER_ERROR_FORMAT = "[PerimeterX - ERROR][%s] - %s";
 
 static action_t parseBlockAction(const char* act) {
     if (act && act[0] == 'j') {
@@ -99,39 +95,41 @@ static bool enable_block_for_hostname(request_rec *r, apr_array_header_t *domain
     return false;
 }
 
-void get_host_domain(request_context *ctx, const char **domain) {
-    char *regex_string = "([a-zA-Z0-9-]{1,61}[a-zA-Z0-9])\\.([a-zA-Z]{2,5})$";
+static void get_host_domain(request_context *ctx, const char **domain) {
+    const char *regex_string = "([a-zA-Z0-9-]{1,61}[a-zA-Z0-9])\\.([a-zA-Z]{2,5})$";
     size_t max_groups = 1;
+    px_config *conf = ctx->conf;
 
     regex_t regex_compiled;
     regmatch_t group_array[max_groups];
 
     if (regcomp(&regex_compiled, regex_string, REG_EXTENDED)) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Failed to compile regex", NULL));
+        px_log_debug("Failed to compile regex");
         return;
     };
 
     if (regexec(&regex_compiled, ctx->hostname, max_groups, group_array, 0) == 0) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Captcha on subdomain is active, domain match found, on hostname ", ctx->hostname, NULL));
+        px_log_debug_fmt("Captcha on subdomain is active, domain match found, on hostname %s", ctx->hostname);
         unsigned int g = 0;
         for (g = 0; g < max_groups; g++) {
-            if (group_array[g].rm_so == (size_t)-1) {
+            if (group_array[g].rm_so == (regoff_t)-1) {
                 break;  // No more groups
             }
             char source_copy[strlen(ctx->hostname) + 1];
             apr_cpystrn(source_copy, ctx->hostname, sizeof(source_copy));
             source_copy[group_array[g].rm_eo] = 0;
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Setting cookie domain as .", source_copy + group_array[g].rm_so, NULL));
+            px_log_debug_fmt("Setting cookie domain as .%s%s", source_copy, group_array[g].rm_so);
             *domain = apr_pstrcat(ctx->r->pool, "domain=.", source_copy + group_array[g].rm_so, NULL);
         }
     }
     regfree(&regex_compiled);
 }
 
-bool verify_captcha(request_context *ctx, px_config *conf) {
+static bool verify_captcha(request_context *ctx) {
     if (!ctx->px_captcha) {
         return false;
     }
+    px_config *conf = ctx->conf;
 
     const char *domain = "";
     if (conf->captcha_subdomain) {
@@ -141,21 +139,21 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
     // preventing reuse of captcha cookie by deleting it
     apr_status_t res = ap_cookie_remove(ctx->r, CAPTCHA_COOKIE, domain, ctx->r->headers_out, ctx->r->err_headers_out, NULL);
     if (res != APR_SUCCESS) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Could not remove _pxCaptcha from request");
+        px_log_debug("Could not remove _pxCaptcha from request");
     }
 
     char *payload = create_captcha_payload(ctx, conf);
     if (!payload) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "verify_captcha: failed to format captcha payload. url: ", ctx->full_url, NULL));
+        px_log_debug_fmt("failed to format captcha payload. url: %s", ctx->full_url);
         ctx->pass_reason = PASS_REASON_ERROR;
         return true;
     }
 
     char *response_str = NULL;
-    CURLcode status = post_request(conf->captcha_api_url, payload, conf->captcha_timeout, conf, ctx, &response_str, &ctx->api_rtt);
+    CURLcode status = post_request(conf->captcha_api_url, payload, conf->connect_timeout_ms, conf->captcha_timeout, conf, ctx, &response_str, &ctx->api_rtt);
     free(payload);
     if (status == CURLE_OK) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "verify_captcha: server response ", response_str, NULL));
+        px_log_debug_fmt("server response %s", response_str);
         captcha_response *c = parse_captcha_response(response_str, ctx);
         free(response_str);
         bool passed = (c && c->status == 0);
@@ -167,10 +165,10 @@ bool verify_captcha(request_context *ctx, px_config *conf) {
 
     if (status == CURLE_OPERATION_TIMEDOUT) {
         ctx->pass_reason = PASS_REASON_CAPTCHA_TIMEOUT;
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Captcha response timeout - passing request");
+        px_log_debug("Captcha response timeout - passing request");
     } else {
         ctx->pass_reason = PASS_REASON_ERROR;
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "verify_captcha: failed to perform captcha validation request. url: ", ctx->full_url, NULL));
+        px_log_debug_fmt("failed to perform captcha validation request. url: %s", ctx->full_url);
     }
 
     return false;
@@ -194,7 +192,7 @@ bool px_should_verify_request(request_rec *r, px_config *conf) {
             }
         } else {
             // using default whitelist
-            for (int i = 0; i < sizeof(FILE_EXT_WHITELIST)/sizeof(*FILE_EXT_WHITELIST); i++ ) {
+            for (unsigned int i = 0; i < sizeof(FILE_EXT_WHITELIST)/sizeof(*FILE_EXT_WHITELIST); i++ ) {
                 if (strcmp(file_ending, FILE_EXT_WHITELIST[i]) == 0) {
                     return false;
                 }
@@ -226,44 +224,48 @@ bool px_should_verify_request(request_rec *r, px_config *conf) {
     return true;
 }
 
-risk_response* risk_api_get(request_context *ctx, px_config *conf) {
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Evaluating Risk API request, call reason: ", get_call_reason_string(ctx->call_reason), NULL));
-    char *risk_payload = create_risk_payload(ctx, conf);
-    if (!risk_payload) {
+static risk_response* risk_api_get(request_context *ctx) {
+    px_config *conf = ctx->conf;
+    px_log_debug_fmt("Evaluating Risk API request, call reason: %s", get_call_reason_string(ctx->call_reason));
+
+    char *rpayload = create_risk_payload(ctx);
+    if (!rpayload) {
         ctx->pass_reason = PASS_REASON_ERROR;
         return NULL;
     }
 
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "risk payload: ", risk_payload, NULL));
+    px_log_debug_fmt("risk payload: %s", rpayload);
 
-    char *risk_response_str;
-    CURLcode status = post_request(conf->risk_api_url, risk_payload, conf->api_timeout_ms, conf, ctx, &risk_response_str, &ctx->api_rtt);
+    char *risk_response_str = NULL;
+    CURLcode status = post_request(conf->risk_api_url, rpayload, conf->connect_timeout_ms, conf->api_timeout_ms, conf, ctx, &risk_response_str, &ctx->api_rtt);
     ctx->made_api_call = true;
-    free(risk_payload);
+    free(rpayload);
     if (status == CURLE_OK) {
-        risk_response *risk_response = parse_risk_response(risk_response_str, ctx);
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Risk API response returned successfully, risk score: ", apr_itoa(ctx->r->pool, risk_response->score), NULL));
+        risk_response *rresponse = parse_risk_response(risk_response_str, ctx);
+        px_log_debug_fmt("Risk API response returned successfully, risk score: %d", rresponse->score);
         free(risk_response_str);
-        return risk_response;
+        return rresponse;
     }
+    free(risk_response_str);
 
     if (status == CURLE_OPERATION_TIMEDOUT) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Risk API timed out");
+        px_log_debug("Risk API timed out");
         ctx->pass_reason = PASS_REASON_S2S_TIMEOUT;
     } else {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Unexpected exception in Risk API call.");
+        px_log_debug("Unexpected exception in Risk API call");
         ctx->pass_reason = PASS_REASON_ERROR;
     }
 
     return NULL;
 }
 
-request_context* create_context(request_rec *r, const px_config *conf) {
+request_context* create_context(request_rec *r, px_config *conf) {
     request_context *ctx = (request_context*) apr_pcalloc(r->pool, sizeof(request_context));
 
     ctx->r = r;
     ctx->app_id = conf->app_id;
     ctx->response_application_json = false;
+    ctx->conf = conf;
 
     const char *px_payload1 = NULL;
     const char *px_payload3 = NULL;
@@ -271,7 +273,7 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     if (conf->enable_token_via_header) {
         int payload_prefix = extract_payload_from_header(r->pool, r->headers_in, &px_payload3, &px_payload1);
         if (payload_prefix > -1) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id , "Mobile SDK token detected");
+            px_log_debug("Mobile SDK token detected");
             ctx->token_origin = TOKEN_ORIGIN_HEADER;
         }
     }
@@ -284,7 +286,7 @@ request_context* create_context(request_rec *r, const px_config *conf) {
 
     ctx->ip = get_request_ip(r, conf);
     if (!ctx->ip) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id , "create_context: request IP is NULL");
+        px_log_debug("request IP is NULL");
     }
 
     ctx->px_payload1 = apr_pstrdup(r->pool, px_payload1);
@@ -292,11 +294,11 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     if (px_payload3) {
         ctx->px_payload = px_payload3;
         ctx->px_payload_version = 3;
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id , "Cookie V3 found, Evaluating");
+        px_log_debug("Cookie V3 found, Evaluating");
     } else if (px_payload1) {
         ctx->px_payload = px_payload1;
         ctx->px_payload_version = 1;
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, conf->app_id , "Cookie V1 found, Evaluating");
+        px_log_debug("Cookie V1 found, Evaluating");
     }
     ctx->uri = r->unparsed_uri;
     ctx->hostname = r->hostname;
@@ -323,49 +325,51 @@ request_context* create_context(request_rec *r, const px_config *conf) {
     return ctx;
 }
 
-bool px_verify_request(request_context *ctx, px_config *conf) {
+bool px_verify_request(request_context *ctx) {
+    px_config *conf = ctx->conf;
     bool request_valid = true;
 
-    risk_response *risk_response;
+    risk_response *rresponse;
 
     if (conf->captcha_enabled && ctx->px_captcha) {
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Captcha cookie found, evaluating");
-        if (verify_captcha(ctx, conf)) {
+        px_log_debug("Captcha cookie found, evaluating");
+        if (verify_captcha(ctx)) {
             // clean users cookie on captcha verification
             apr_status_t res1 = ap_cookie_remove2(ctx->r, PX_PAYLOAD_COOKIE_V1_PREFIX, NULL, ctx->r->headers_out, ctx->r->err_headers_out, NULL);
             if (res1 != APR_SUCCESS) {
-                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Could not remove _px from request");
+                px_log_debug("Could not remove _px from request");
             }
             apr_status_t res3 = ap_cookie_remove2(ctx->r, PX_PAYLOAD_COOKIE_V3_PREFIX, NULL, ctx->r->headers_out, ctx->r->err_headers_out, NULL);
             if (res3 != APR_SUCCESS) {
-                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Could not remove _px3 from request");
+                px_log_debug("Could not remove _px3 from request");
             }
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Captcha API response validation status: passed");
+            px_log_debug("Captcha API response validation status: passed");
             return request_valid;
         } else {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Captcha API response validation status: failed");
+            px_log_debug("Captcha API response validation status: failed");
             ctx->call_reason = CALL_REASON_CAPTCHA_FAILED;
-            risk_response = risk_api_get(ctx, conf);
+            rresponse = risk_api_get(ctx);
             goto handle_response;
         }
     }
 
-    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "No Captcha cookie present on the request");
+    px_log_debug("No Captcha cookie present on the request");
+
     validation_result_t vr;
 
     if (ctx->px_payload == NULL || (ctx->token_origin == TOKEN_ORIGIN_HEADER && strcmp(ctx->px_payload, NO_TOKEN) == 0)) {
         vr = VALIDATION_RESULT_NULL_PAYLOAD;
         if (ctx->token_origin == TOKEN_ORIGIN_HEADER) {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Mobile special token - no token");
+            px_log_debug("Mobile special token - no token");
         } else {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Cookie is missing");
+            px_log_debug("Cookie is missing");
         }
     } else if (ctx->token_origin == TOKEN_ORIGIN_HEADER && strcmp(ctx->px_payload, MOBILE_SDK_CONNECTION_ERROR) == 0) {
         vr = VALIDATION_RESULT_MOBILE_SDK_CONNECTION_ERROR;
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Mobile special token - connection error");
+        px_log_debug("Mobile special token - connection error");
     } else if (ctx->token_origin == TOKEN_ORIGIN_HEADER && strcmp(ctx->px_payload, MOBILE_SDK_PINNING_ERROR) == 0) {
         vr = VALIDATION_RESULT_MOBILE_SDK_PINNING_ERROR;
-        ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "Mobile special token - pinning issue");
+        px_log_debug("Mobile special token - pinning issue");
     } else {
         vr = VALIDATION_RESULT_DECRYPTION_FAILED;
         risk_payload *c = decode_payload(ctx->px_payload, conf->payload_key, ctx);
@@ -376,7 +380,7 @@ bool px_verify_request(request_context *ctx, px_config *conf) {
             ctx->action = parseBlockAction(c->action);
             vr = validate_payload(c, ctx, conf->payload_key);
         } else {
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool,"Cookie decryption failed, value: ", ctx->px_payload, NULL));
+            px_log_debug_fmt("Cookie decryption failed, value: %s", ctx->px_payload);
             ctx->px_payload_orig = ctx->px_payload;
         }
     }
@@ -386,9 +390,9 @@ bool px_verify_request(request_context *ctx, px_config *conf) {
             if (!request_valid) {
                 ctx->block_reason = BLOCK_REASON_PAYLOAD;
             } else if (is_sensitive_route_prefix(ctx->r, conf) || is_sensitive_route(ctx->r, conf)) {
-                ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Sensitive route match, sending Risk API. path: ", ctx->uri, NULL));
+                px_log_debug_fmt("Sensitive route match, sending Risk API. path: %s", ctx->uri);
                 ctx->call_reason = CALL_REASON_SENSITIVE_ROUTE;
-                risk_response = risk_api_get(ctx, conf);
+                rresponse = risk_api_get(ctx);
                 goto handle_response;
             } else {
                 ctx->pass_reason = PASS_REASON_PAYLOAD;
@@ -401,39 +405,39 @@ bool px_verify_request(request_context *ctx, px_config *conf) {
         case VALIDATION_RESULT_MOBILE_SDK_CONNECTION_ERROR:
         case VALIDATION_RESULT_MOBILE_SDK_PINNING_ERROR:
             set_call_reason(ctx, vr);
-            risk_response = risk_api_get(ctx, conf);
+            rresponse = risk_api_get(ctx);
 handle_response:
-            if (risk_response) {
-                ctx->score = risk_response->score;
+            if (rresponse) {
+                ctx->score = rresponse->score;
 
-                if (risk_response->action_data_body){
-                    ctx->action_data_body = risk_response->action_data_body;
+                if (rresponse->action_data_body){
+                    ctx->action_data_body = rresponse->action_data_body;
                 }
 
-                if (!ctx->uuid && risk_response->uuid) {
-                    ctx->uuid = risk_response->uuid;
+                if (!ctx->uuid && rresponse->uuid) {
+                    ctx->uuid = rresponse->uuid;
                 }
 
-                if (risk_response->action) {
-                    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, "[%s] px_verify_request: parsing action (%s)", ctx->app_id, risk_response->action);
-                    ctx->action = parseBlockAction(risk_response->action);
+                if (rresponse->action) {
+                    px_log_debug_fmt("parsing action (%s)", rresponse->action);
+                    ctx->action = parseBlockAction(rresponse->action);
                 }
 
                 request_valid = ctx->score < conf->blocking_score;
                 if (!request_valid) {
-                    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Risk score is higher or equal to blocking score. score: ", apr_itoa(ctx->r->pool, ctx->score), " blocking score: ",  apr_itoa(ctx->r->pool, conf->blocking_score), NULL));
+                    px_log_debug_fmt("Risk score is higher or equal to blocking score. score: %d blocking score: %d", ctx->score , conf->blocking_score);
                     ctx->block_reason = BLOCK_REASON_SERVER;
                 } else {
-                    ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, apr_pstrcat(ctx->r->pool, "Risk score is lower than blocking score. score: ", apr_itoa(ctx->r->pool, ctx->score), " blocking score: ", apr_itoa(ctx->r->pool, conf->blocking_score), NULL));
+                    px_log_debug_fmt("Risk score is lower than blocking score. score: %d blocking score: %d", ctx->score, conf->blocking_score);
                     ctx->pass_reason = PASS_REASON_S2S;
                 }
             } else {
-                ap_log_error(APLOG_MARK, APLOG_ERR, 0, ctx->r->server, LOGGER_ERROR_FORMAT, ctx->app_id, "Unexpected exception while evaluating risk.");
+                px_log_debug("Unexpected exception while evaluating risk");
                 return true;
             }
             break;
         default:
-            ap_log_error(APLOG_MARK, APLOG_DEBUG | APLOG_NOERRNO, 0, ctx->r->server, LOGGER_DEBUG_FORMAT, ctx->app_id, "px_verify_request: cookie decode failed returning valid result");
+            px_log_debug("cookie decode failed returning valid result");
             return true;
     }
 
