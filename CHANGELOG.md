@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/) 
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+## [3.0.0] - 06-11-2018
+### Added 
+ * Remote configuration support
+ * Enforcer telemetry support
+ * Improved background activity handling, using curl multi instead of threads
+ * Configurable debug mode via config (refer to readme)
+ * Implemented connection timeout (supported by remote configurations)
+
+### Fixed
+ * First party error handling
+ * Attaching XFF header to reverse proxy requests
+
+### Changes
+ * Default values were changed:
+ 	* Blocking score: 100
+	* Monitor Mode: true
+
 ## [2.11.1] - 04-20-2018
 * Fixed Debian packaging  
 
