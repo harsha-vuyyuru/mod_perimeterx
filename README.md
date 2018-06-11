@@ -118,7 +118,7 @@ Loaded Modules:
 ### <a name="upgrade"></a> Upgrade ###
 #### <a name="upgrade-v3"></a> Upgrade to v3.x ####
 #### Default Configurations ####
-From v4.x, mod_perimeterx is shipped out in Monitor Mode turned on and BlockingScore set to 100.
+From v3.x, mod_perimeterx is shipped out in Monitor Mode turned on and BlockingScore set to 100.
 For users who wish to set the module to active blocking mode, additonal changes will be required to the module configurations.
 
 Basic example v3.x - Blocking Mode
@@ -143,8 +143,8 @@ Basic example v3.x - Monitor Mode
 ```
 
 #### Custom Block Page upgrade ####
-Upgrading to version 4.x will requrie additional changes if CustomBlockPage is enabled.
-From v4.x, the enforcer will not handle captcah validations, instead all captcha solving requests will be send direactly to the PerimeterX service from the Javascript handler
+Upgrading to version 3.x will requrie additional changes if CustomBlockPage is enabled.
+From v3.x, the enforcer will not handle captcah validations, instead all captcha solving requests will be send direactly to the PerimeterX service from the Javascript handler
 
 Please refer to [Custom Block Page](BLOCK.md) implementaion for more information
 
