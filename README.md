@@ -20,7 +20,7 @@ Table of Contents
 	- [Installation](#installation)
 	- [Basic Usage Example](#basic-usage)
 - [Upgrade](#upgrade)
-	- [Upgrade to v4.x](#upgrade-v4)
+	- [Upgrade to v3.x](#upgrade-v3)
 - [Directives](DIRECTIVES.md)
 - [Custom Block page](BLOCKPAGE.md)
 - [Logging and Troubleshooting](#troubleshoot)
@@ -116,12 +116,12 @@ Loaded Modules:
 ```
 
 ### <a name="upgrade"></a> Upgrade ###
-#### <a name="upgrade-v4"></a> Upgrade to v4.x ####
+#### <a name="upgrade-v3"></a> Upgrade to v3.x ####
 #### Default Configurations ####
 From v4.x, mod_perimeterx is shipped out in Monitor Mode turned on and BlockingScore set to 100.
 For users who wish to set the module to active blocking mode, additonal changes will be required to the module configurations.
 
-Basic example v4.x - Blocking Mode
+Basic example v3.x - Blocking Mode
 ```
         <IfModule mod_perimeterx.c>
             PXEnabled On
@@ -132,7 +132,7 @@ Basic example v4.x - Blocking Mode
         </IfModule>
 ```
 
-Basic example v4.x - Monitor Mode
+Basic example v3.x - Monitor Mode
 ```
         <IfModule mod_perimeterx.c>
             PXEnabled On
