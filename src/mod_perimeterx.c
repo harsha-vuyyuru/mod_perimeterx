@@ -258,6 +258,15 @@ static int px_handle_request(request_rec *r, px_config *conf) {
         return DONE;
     }
 
+    // Redirect Captcha
+    if (conf->captcha_internal_path && strncmp(conf->captcha_internal_path, r->parsed_uri.path, strlen(conf->captcha_internal_path)) == 0) {
+        redirect_res = redirect_captcha(r, conf);
+        r->status = redirect_res->http_code;
+        redirect_copy_headers_out(r, redirect_res);
+        ap_rwrite(redirect_res->content, redirect_res->content_size, r);
+        return DONE;
+    }
+
     if (!px_should_verify_request(r, conf)) {
         return DECLINED;
     }
@@ -918,6 +927,7 @@ static void set_app_id_helper(apr_pool_t *pool, px_config *conf, const char *app
     conf->risk_api_url = apr_pstrcat(pool, conf->base_url, RISK_API, NULL);
     conf->activities_api_url = apr_pstrcat(pool, conf->base_url, ACTIVITIES_API, NULL);
     const char *reverse_prefix =  &app_id[2];
+    conf->captcha_internal_path = apr_psprintf(pool, "/%s/captcha", reverse_prefix);
     conf->xhr_path_prefix = apr_psprintf(pool, "/%s/xhr", reverse_prefix);
     conf->client_path_prefix = apr_psprintf(pool, "/%s/init.js", reverse_prefix);
     conf->client_external_path = apr_psprintf(pool, "//client.perimeterx.net/%s/main.min.js", app_id);

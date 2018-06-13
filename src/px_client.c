@@ -129,3 +129,26 @@ const redirect_response *redirect_xhr(request_rec *r, px_config *conf) {
 
     return redirect_res;
 };
+
+const redirect_response *redirect_captcha(request_rec *r, px_config *conf) {
+    redirect_response *default_res = &DEFAULT_CLIENT_RESPONSE;
+    if (!conf->first_party_enabled) {
+        px_log_debug("first party is disabled");
+        return default_res;
+    }
+
+    redirect_response *redirect_res = apr_pcalloc(r->pool, sizeof(redirect_response));
+    int cut_prefix_size = strlen(conf->captcha_internal_path);
+    const char *captcha_url = &r->unparsed_uri[cut_prefix_size];
+    const char *base_captcha_host = apr_psprintf(r->pool, "https:%s", conf->captcha_external_path);
+    px_log_debug_fmt("forwarding request from %s to %s%s", r->unparsed_uri, base_captcha_host, captcha_url);
+    CURLcode status = forward_to_perimeterx(r, conf, redirect_res, base_captcha_host, captcha_url, NULL);
+    redirect_res->response_content_type = default_res->response_content_type;
+    if (status != CURLE_OK) {
+        px_log_debug_fmt("cURL internal error, CURLcode[%d]", status);
+        default_res->http_code = HTTP_INTERNAL_SERVER_ERROR;
+        return default_res;
+    }
+
+    return redirect_res;
+};

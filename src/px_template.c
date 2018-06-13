@@ -145,21 +145,32 @@ static const char* select_template(const px_config *conf, request_context *ctx) 
         px_log_debug("Enforcing action: challenge page is served");
         return ctx->action_data_body;
     }
+    return block_page_template;
+}
 
-    ctx->captcha_js_src = apr_pstrcat(ctx->r->pool,
-        conf->captcha_external_path,
+int render_template(char **html, request_context *ctx, const px_config *conf, size_t *size) {
+    const char *template = select_template(conf, ctx);
+
+    const char *block_src_host = conf->captcha_external_path;
+    const char *host_url = apr_psprintf(ctx->r->pool, collector_url, conf->app_id, NULL);
+    const char *js_client_src = conf->client_external_path;
+    const char *first_party_value = "false";
+    if (conf->first_party_enabled &&  ctx->token_origin == TOKEN_ORIGIN_COOKIE) {
+        host_url = conf->xhr_path_prefix;
+        js_client_src = conf->client_path_prefix;
+        first_party_value = "true";
+        block_src_host = conf->captcha_internal_path;
+    }
+
+    // consturct path
+    char *captcha_js_src = apr_pstrcat(ctx->r->pool,
+        block_src_host,
         "/", conf->app_id,
         "/captcha.js?a=", ctx->action == ACTION_CAPTCHA ? "c" : "b",
         "&u=", ctx->uuid,
         "&v=", ctx->vid,
         "&m=", ctx->token_origin == TOKEN_ORIGIN_HEADER ? "1" : "0",
         NULL);
-
-    return block_page_template;
-}
-
-int render_template(char **html, request_context *ctx, const px_config *conf, size_t *size) {
-    const char *template = select_template(conf, ctx);
 
     px_props props = {
         .appId = conf->app_id,
@@ -169,12 +180,11 @@ int render_template(char **html, request_context *ctx, const px_config *conf, si
         .customLogo = conf->custom_logo,
         .cssRef = conf->css_ref,
         .jsRef = conf->js_ref,
-        .jsClientSrc = conf->first_party_enabled ? conf->client_path_prefix : conf->client_external_path,
-        .firstPartyEnabled = conf->first_party_enabled ? "true" : "false",
+        .jsClientSrc = js_client_src,
+        .firstPartyEnabled = first_party_value,
         .logoVisibility = conf->custom_logo ? visible : hidden,
-        .captchaType = captcha_type_str(conf->captcha_type),
-        .hostUrl =  apr_psprintf(ctx->r->pool, collector_url, conf->app_id, NULL),
-        .blockScript = ctx->captcha_js_src
+        .hostUrl =  host_url,
+        .blockScript = captcha_js_src
     };
 
     int res = mustach(template, &itf, &props, html, size);

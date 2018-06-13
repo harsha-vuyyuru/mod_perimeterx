@@ -439,14 +439,10 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
     if (status == CURLE_OK) {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
         px_log_debug_fmt("status: %lu, url: %s", status_code, url);
-        if (status_code == HTTP_OK) {
-            if (response_data != NULL) {
-                *response_headers = response.headers;
-                *response_data = apr_pstrmemdup(r->pool, response.data, response.size);
-                *content_size = response.size;
-            }
-        } else {
-            status = CURLE_HTTP_RETURNED_ERROR;
+        if (response_data != NULL) {
+            *response_headers = response.headers;
+            *response_data = apr_pstrmemdup(r->pool, response.data, response.size);
+            *content_size = response.size;
         }
     } else {
         update_and_notify_health_check(conf);
