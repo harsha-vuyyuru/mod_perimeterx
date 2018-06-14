@@ -22,7 +22,6 @@ In order to use the example:
 ```
 
 2. Set the ``BlockPageURL to the location you have just defined (e.g. /block.html).
-3. Set the `CaptchaType` parameter to `funCaptcha`.
-4. Change the `<APP_ID>` placeholder on the block.html page to the Application ID provided on the PerimeterX Portal.
+3. Change the `<APP_ID>` placeholder on the block.html page to the Application ID provided on the PerimeterX Portal.
 
 You are now Blocking requests providing a CAPTCHA to the user for cleanup.

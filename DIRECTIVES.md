@@ -16,7 +16,7 @@ Directives
 | CookieKey  | Key used for cookie signing - Can be found \ generated in PX portal - Policy page. | NULL  |   |   |
 | AuthToken | JWT token used for REST API - Can be found \ generated in PX portal - Application page.  | NULL  | String |
 | BlockingScore | When requests with a score equal to or higher value they will be blocked.  | 100  | 0 - 100  |
-| Captcha | Enable reCaptcha on the blocking page  | On  | On / Off  | When using a custom block page with captcha abilities implementation, this option must be `On`.
+| Captcha | Enable captcha on the blocking page  | On  | On / Off  | When using a custom block page with captcha abilities implementation, this option must be `On`.
 | ReportPageRequest | Boolean flag to enable or disable sending activities and metrics to PerimeterX on each page request. Enabling this feature will provide data that populates the PerimeterX portal with valuable information	  |  On | On / Off  |
 | APITimeoutMS |  REST API timeout in milliseconds | 1000  | Integer  | In case APITimeoutMS and APITimeout (deprecated but supported for backward compatibility) are both set in the module configuration - the one that is set later in the file will be the one that will be used. Any other value set prior of it will be discarded.
 | ConnectTimeoutMS | A timeout in milliseconds to connect to PX Detector | 1000 | Integer |
@@ -34,7 +34,6 @@ Directives
 | EnableJsonResponse | Turn on response json when accept headers are `application/json` | Off | bool | On / Off |
 | PXApplyAccessControlAllowOriginByEnvVar | Take the value of a defined environmental variable and apply it as the value of the response header Access-Control-Allow-Origin on a blocked response. If the value of the environmental variable is not a compliant URI (scheme "://" host [ ":" port ]; <scheme>, <host>, <port> from RFC 3986) then it will not be applied| NULL  | String | Only enabled when a value is provided|
 | EnableAccessControlAllowOriginWildcard | Apply **\*** as the value of the response header Access-Control-Allow-Origin. When set this directive will override **PXApplyAccessControlAllowOriginByEnvVar** if it is also defined. | Off | Bool | On / Off|
-| CaptchaType | Sets the type of which captcha provider to use | reCaptcha  | String | reCaptcha/funCaptcha |
 | EnableTokenViaHeader | Toggles on/off using mobile sdk| On | bool | On / Off |
 | BackgroundActivitySend | Toggles on/off asyncrounus activity reporting | Off | bool | On / Off |
 | BackgroundActivityWorkers | Number of background workers to send activities | 10 | Number | Integer |

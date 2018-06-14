@@ -9,10 +9,6 @@
 #include <apr_thread_rwlock.h>
 
 #include "curl_pool.h"
-typedef enum {
-    CAPTCHA_TYPE_RECAPTCHA,
-    CAPTCHA_TYPE_FUNCAPTCHA
-} captcha_type_t;
 
 typedef struct px_config_t {
     // px module server memory pool
@@ -25,7 +21,6 @@ typedef struct px_config_t {
     const char *base_url;
     bool base_url_is_set;
     const char *risk_api_url;
-    const char *captcha_api_url;
     const char *activities_api_url;
     const char *telemetry_api_url;
     const char *css_ref;
@@ -39,8 +34,6 @@ typedef struct px_config_t {
     bool score_header_enabled;
     const char *score_header_name;
     long api_timeout_ms;
-    bool is_captcha_timeout_set;
-    long captcha_timeout;
     long connect_timeout_ms;
     bool send_page_activities;
     const char *module_version;
@@ -81,14 +74,12 @@ typedef struct px_config_t {
     const char *origin_envvar_name;
     bool json_response_enabled;
     bool cors_headers_enabled;
-    captcha_type_t captcha_type;
     bool monitor_mode;
-    bool captcha_subdomain;
     bool first_party_enabled;
     bool first_party_xhr_enabled;
     const char *client_path_prefix;
     const char *xhr_path_prefix;
-    const char *client_exteral_path;
+    const char *client_external_path;
     const char *collector_base_uri;
     const char *client_base_uri;
     bool remote_config_enabled;
@@ -99,6 +90,8 @@ typedef struct px_config_t {
     int px_debug;
     int log_level_err;
     int log_level_debug;
+    const char *captcha_external_path;
+    const char *captcha_internal_path;
 } px_config;
 
 typedef struct thread_data_t {
@@ -129,7 +122,6 @@ typedef enum call_reason_t {
     CALL_REASON_PAYLOAD_DECRYPTION_FAILED,
     CALL_REASON_PAYLOAD_VALIDATION_FAILED,
     CALL_REASON_SENSITIVE_ROUTE,
-    CALL_REASON_CAPTCHA_FAILED,
     CALL_REASON_MOBILE_SDK_CONNECTION_ERROR,
     CALL_REASON_MOBILE_SDK_PINNING_ERROR
 } call_reason_t;
@@ -140,8 +132,6 @@ typedef enum {
     PASS_REASON_TIMEOUT,
     PASS_REASON_S2S,
     PASS_REASON_S2S_TIMEOUT,
-    PASS_REASON_CAPTCHA,
-    PASS_REASON_CAPTCHA_TIMEOUT,
     PASS_REASON_ERROR,
     PASS_REASON_MONITOR_MODE,
 } pass_reason_t;
@@ -185,13 +175,6 @@ typedef struct risk_response_t {
     const char *action_data_body;
 } risk_response;
 
-typedef struct captcha_response_t {
-    int status;
-    const char *uuid;
-    const char *vid;
-    const char *cid;
-} captcha_response;
-
 typedef struct request_context_t {
     px_config *conf;
     const char *app_id;
@@ -201,7 +184,6 @@ typedef struct request_context_t {
     int px_payload_version;
     const char *px_payload_decrypted;
     const char *px_payload_hmac;
-    const char *px_captcha;
     const char *ip;
     const char *vid;
     const char *uuid;
@@ -225,23 +207,8 @@ typedef struct request_context_t {
     action_t action;
     bool response_application_json;
     const char *action_data_body;
+    const char *captcha_js_src;
 } request_context;
-
-typedef enum {
-    PT_FLAG_WEB = 1 << 0,
-    PT_FLAG_MOBILE = 1 << 1,
-    PT_FLAG_RECAPTCHA = 1 << 2,
-    PT_FLAG_FUNCAPTCHA = 1 << 3,
-} page_template_bit_t;
-
-typedef enum {
-    PAGE_TEMPLATE_BLOCK_WEB = (PT_FLAG_WEB),
-    PAGE_TEMPLATE_RECAPTCHA_WEB = (PT_FLAG_WEB | PT_FLAG_RECAPTCHA),
-    PAGE_TEMPLATE_FUNCAPTCHA_WEB = (PT_FLAG_WEB | PT_FLAG_FUNCAPTCHA),
-    PAGE_TEMPLATE_BLOCK_MOBILE =  (PT_FLAG_MOBILE),
-    PAGE_TEMPLATE_RECAPTCHA_MOBILE =  (PT_FLAG_MOBILE | PT_FLAG_RECAPTCHA),
-    PAGE_TEMPLATE_FUNCAPTCHA_MOBILE =  (PT_FLAG_MOBILE | PT_FLAG_FUNCAPTCHA),
-} page_template_t;
 
 typedef struct redirect_response_t {
     const char *content;
