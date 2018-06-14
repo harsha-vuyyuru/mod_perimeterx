@@ -9,10 +9,6 @@
 #include <apr_thread_rwlock.h>
 
 #include "curl_pool.h"
-typedef enum {
-    CAPTCHA_TYPE_RECAPTCHA,
-    CAPTCHA_TYPE_FUNCAPTCHA
-} captcha_type_t;
 
 typedef struct px_config_t {
     // px module server memory pool
@@ -78,7 +74,6 @@ typedef struct px_config_t {
     const char *origin_envvar_name;
     bool json_response_enabled;
     bool cors_headers_enabled;
-    captcha_type_t captcha_type;
     bool monitor_mode;
     bool first_party_enabled;
     bool first_party_xhr_enabled;

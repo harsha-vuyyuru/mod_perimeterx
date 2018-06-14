@@ -2,7 +2,6 @@
 #define PX_JSON_H
 
 #include "px_types.h"
-const char *captcha_type_str(captcha_type_t captcha_type);
 char *create_activity(const char *activity_type, const request_context *ctx);
 char *create_risk_payload(const request_context *ctx);
 char *create_mobile_response(request_context *ctx, const char *compiled_html);

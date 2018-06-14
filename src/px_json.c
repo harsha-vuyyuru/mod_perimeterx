@@ -53,15 +53,6 @@ static const char *ACTION_STR[] = {
     [ACTION_BLOCK] = "block",
 };
 
-static const char *CAPTCHA_TYPE_STR[] = {
-    [CAPTCHA_TYPE_RECAPTCHA] = "recaptcha",
-    [CAPTCHA_TYPE_FUNCAPTCHA] = "funcaptcha",
-};
-
-const char *captcha_type_str(captcha_type_t captcha_type) {
-    return CAPTCHA_TYPE_STR[captcha_type];
-}
-
 // format json requests
 char *create_activity(const char *activity_type, const request_context *ctx) {
     px_config *conf = ctx->conf;

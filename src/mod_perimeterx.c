@@ -1343,21 +1343,6 @@ static const char *enable_origin_wildcard(cmd_parms *cmd, void *config, int arg)
     return NULL;
 }
 
-static const char* set_captcha_type(cmd_parms *cmd, void *config, const char *captcha_type) {
-    px_config *conf = get_config(cmd, config);
-    if (!conf) {
-        return ERROR_CONFIG_MISSING;
-    }
-
-    if (!strcmp(captcha_type,"funCaptcha")) {
-        conf->captcha_type = CAPTCHA_TYPE_FUNCAPTCHA;
-    } else {
-        conf->captcha_type = CAPTCHA_TYPE_RECAPTCHA;
-    }
-
-    return NULL;
-}
-
 static const char *set_monitor_mode(cmd_parms *cmd, void *config, int arg) {
     px_config *conf = get_config(cmd, config);
     if (!conf) {
@@ -1548,7 +1533,6 @@ static void *create_config(apr_pool_t *p, server_rec *s) {
         conf->json_response_enabled = false;
         conf->origin_envvar_name  = NULL;
         conf->origin_wildcard_enabled = false;
-        conf->captcha_type = CAPTCHA_TYPE_RECAPTCHA;
         conf->monitor_mode = true;
         conf->enable_token_via_header = true;
         conf->first_party_enabled = true;
@@ -1788,11 +1772,6 @@ static const command_rec px_directives[] = {
             NULL,
             OR_ALL,
             "Enable Access-Control-Allow-Origin: * header on blocked responses"),
-    AP_INIT_TAKE1("CaptchaType",
-            set_captcha_type,
-            NULL,
-            OR_ALL,
-            "Set the captcha provider"),
     AP_INIT_FLAG("MonitorMode",
             set_monitor_mode,
             NULL,
