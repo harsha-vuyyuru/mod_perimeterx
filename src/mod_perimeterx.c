@@ -286,11 +286,10 @@ static int px_handle_request(request_rec *r, px_config *conf) {
         px_log_debug("Request context created successfully");
         bool request_valid = px_verify_request(ctx);
 
-        // if request is not valid, and monitor mode is on, toggle request_valid and set pass_reason
+        // if request is not valid, and monitor mode is on, set pass_reason
         if (conf->monitor_mode && !request_valid) {
             px_log_debug("Request marked for simulated block");
             ctx->pass_reason = PASS_REASON_MONITOR_MODE;
-            request_valid = true;
         }
         post_verification(ctx, request_valid);
 #if DEBUG
