@@ -56,9 +56,8 @@ static const char *ACTION_STR[] = {
 // format json requests
 char *create_activity(const char *activity_type, const request_context *ctx) {
     px_config *conf = ctx->conf;
-    json_t *j_details = json_pack("{s:i,s:s,s:s,s:s,s:s}",
+    json_t *j_details = json_pack("{s:i,s:s,s:s,s:s}",
             "block_score", ctx->score,
-            "block_reason", BLOCK_REASON_STR[ctx->block_reason],
             "http_method", ctx->http_method,
             "http_version", ctx->http_version,
             "module_version", conf->module_version,
@@ -69,6 +68,8 @@ char *create_activity(const char *activity_type, const request_context *ctx) {
 
     if (strcmp(activity_type, BLOCKED_ACTIVITY_TYPE) == 0 && ctx->uuid) {
         json_object_set_new(j_details, "block_uuid", json_string(ctx->uuid));
+        // "block_reason" only send on block activities
+        json_object_set_new( j_details, "block_reason", json_string(BLOCK_REASON_STR[ctx->block_reason]));
     } else {
         // adding decrypted payload to page_requested activity
         if (ctx->px_payload) {
