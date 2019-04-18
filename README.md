@@ -93,7 +93,7 @@ Loaded Modules:
     BlockingScore 100
     ReportPageRequest On
     IPHeader X-True-IP
-    MonitorMode Off
+    MonitorMode On
 </IfModule>
 ```
 
@@ -109,7 +109,7 @@ Loaded Modules:
 		AppID [APPID PLACEHOLDER]
 		AuthToken [AUTHTOKEN PLACEHOLDER]
                 BlockingScore 100
-		MonitorMode Off
+		MonitorMode On
                 ReportPageRequest On
         </IfModule>
 </VirtualHost>
