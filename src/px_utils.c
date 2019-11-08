@@ -208,7 +208,7 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, l
     curl_slist_free_all(headers);
     if (status == CURLE_OK) {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
-        if (status_code == HTTP_OK) {
+        if (status_code == HTTP_OK || status_code == 304) {
             if (response_data != NULL) {
                 *response_data = response.data;
             } else {
@@ -439,7 +439,7 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
     if (status == CURLE_OK) {
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
         px_log_debug_fmt("status: %lu, url: %s", status_code, url);
-        if (status_code == HTTP_OK) {
+        if (status_code == HTTP_OK || status_code == 304) {
             if (response_data != NULL) {
                 *response_headers = response.headers;
                 *response_data = apr_pstrmemdup(r->pool, response.data, response.size);
