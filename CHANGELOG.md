@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [3.1.0] - 12-11-2019
 ### Fixed
- * 304 handler for first party calls
+ * Handle no content on first party response
 
 ## [3.0.0] - 06-11-2018
 ### Added 
