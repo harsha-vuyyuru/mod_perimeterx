@@ -179,14 +179,13 @@ const char *get_request_ip(const request_rec *r, const px_config *conf) {
 }
 
 // return true if response could contain a body
-static bool should_receive_body(long status_code)
-{
-    if (status_code >= 100 && status_code < 200) {
+static bool should_receive_body(long status_code) {
+    if (status_code >= HTTP_CONTINUE && status_code < HTTP_OK) {
         return false;
     }
 
     // No Content
-    if (status_code == 204) {
+    if (status_code == HTTP_NO_CONTENT) {
         return false;
     }
 
@@ -221,7 +220,7 @@ CURLcode post_request_helper(CURL* curl, const char *url, const char *payload, l
     CURLcode status = curl_easy_perform(curl);
     curl_slist_free_all(headers);
     if (status == CURLE_OK) {
-        long status_code;
+        long status_code = 0;
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
         px_log_debug_fmt("status: %lu, body: %d, url: %s", status_code, response.size, url);
         if (should_receive_body(status_code) && response.size) {
@@ -451,7 +450,7 @@ CURLcode redirect_helper(CURL* curl, const char *base_url, const char *uri, cons
     curl_slist_free_all(headers);
 
     if (status == CURLE_OK) {
-        long status_code;
+        long status_code = 0;
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status_code);
         px_log_debug_fmt("status: %lu, body: %d, url: %s", status_code, response.size, url);
         if (should_receive_body(status_code) && response.size) {
