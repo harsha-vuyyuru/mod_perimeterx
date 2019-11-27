@@ -32,7 +32,6 @@ http://www.mysite.com/block.html&url=coolpage&uuid=uuid=e8e6efb0-8a59-11e6-815c-
 For custom block implementaitons please refer to the links below:
 
 * [Block page with reCaptcha](examples/Custom Block Page reCAPTCHA Redirect/README.md)
-* [Block page with funCaptcha](examples/Custom Block Page funCAPTCHA Redirect/README.md)
 * [Block page without Captcha](examples/Custom Block Page/README.md)
 
 * [PerimeterX Javascript snippet](https://console.perimeterx.com/#/app/applicationsmgmt).
